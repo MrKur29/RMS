@@ -3099,29 +3099,29 @@ async function doRecordOutput() {
 // ============================================================
 function buildLabelHTML(b) {
   const qrData = encodeURIComponent(b.basket_code);
-  const qrURL  = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${qrData}&format=svg`;
+  const qrURL  = `https://api.qrserver.com/v1/create-qr-code/?size=76x76&data=${qrData}&format=svg`;
   const tglFmt = b.tanggal
     ? new Date(b.tanggal + 'T00:00:00').toLocaleDateString('id-ID', { day:'2-digit', month:'short', year:'numeric' })
     : '—';
 
-  return `<div style="width:216px;height:144px;border:1px solid #374151;border-radius:4px;padding:5px 6px;
-      font-family:monospace;background:white;display:flex;gap:6px;box-sizing:border-box">
+  return `<div style="width:57mm;height:38mm;border:1px solid #374151;border-radius:2px;padding:1.5mm 2mm;
+      font-family:Arial,sans-serif;background:white;display:flex;gap:2mm;box-sizing:border-box">
     <div style="flex:1;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden;min-width:0">
       <div>
-        <div style="font-size:9.5px;font-weight:900;letter-spacing:.5px;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${b.basket_code}</div>
-        <div style="font-size:8.5px;font-weight:700;color:#374151;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${b.produk_name}</div>
-        <div style="font-size:7.5px;color:#6b7280;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">WO: ${b.wo_code}</div>
-        ${b.wo_catatan ? `<div style="font-size:7px;color:#374151;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-style:italic">${b.wo_catatan}</div>` : ''}
+        <div style="font-size:7pt;font-weight:900;letter-spacing:.3px;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${b.basket_code}</div>
+        <div style="font-size:6.5pt;font-weight:700;color:#374151;margin-top:0.5mm;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${b.produk_name}</div>
+        <div style="font-size:5.5pt;color:#6b7280;margin-top:0.5mm;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">WO: ${b.wo_code}</div>
+        ${b.wo_catatan ? `<div style="font-size:5.5pt;color:#374151;margin-top:0.5mm;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-style:italic">${b.wo_catatan}</div>` : ''}
       </div>
       <div>
-        <div style="font-size:8px;color:#374151">Qty: <strong>${fmt(b.qty)} ekor</strong></div>
-        <div style="font-size:8px;color:#374151">Kg: <strong>${fmtKg(b.kg)}</strong></div>
-        <div style="font-size:7.5px;color:#6b7280;margin-top:1px">WS: ${b.ws_kode}</div>
-        <div style="font-size:7.5px;color:#6b7280">Tgl: ${tglFmt}</div>
+        <div style="font-size:6pt;color:#374151">Qty: <strong>${fmt(b.qty)} ekor</strong></div>
+        <div style="font-size:6pt;color:#374151">Kg: <strong>${fmtKg(b.kg)}</strong></div>
+        <div style="font-size:5.5pt;color:#6b7280;margin-top:0.5mm">WS: ${b.ws_kode}</div>
+        <div style="font-size:5.5pt;color:#6b7280">Tgl: ${tglFmt}</div>
       </div>
     </div>
     <div style="display:flex;align-items:center;flex-shrink:0">
-      <img src="${qrURL}" width="78" height="78" style="display:block">
+      <img src="${qrURL}" style="width:20mm;height:20mm;display:block">
     </div>
   </div>`;
 }
@@ -3172,7 +3172,7 @@ function doPrintLabel() {
     </style>
   </head><body>
     <div class="label-wrap">${labelHTML}</div>
-    <script>window.onload=function(){window.print();}<\/script>
+    <script>window.onload=function(){window.print();window.close();}<\/script>
   </body></html>`);
   win.document.close();
 }
