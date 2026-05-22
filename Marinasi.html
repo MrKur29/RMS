@@ -1,0 +1,3671 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Marinasi — Kurnia's Food</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f2f5;color:#111827;font-size:14px}
+button{cursor:pointer;font-family:inherit}
+a{text-decoration:none}
+
+/* ===== LOGIN ===== */
+#login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(135deg,#0f172a 0%,#4a1d96 60%,#2563eb 100%)}
+.login-card{background:white;border-radius:16px;padding:44px 40px;width:400px;box-shadow:0 25px 60px rgba(0,0,0,.4)}
+.login-logo{text-align:center;margin-bottom:36px}
+.login-logo .icon{font-size:48px;display:block;margin-bottom:12px}
+.login-logo h1{font-size:22px;font-weight:800;color:#111827}
+.login-logo p{font-size:13px;color:#6b7280;margin-top:4px}
+.form-group{margin-bottom:20px}
+.form-group label{display:block;font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
+.form-group input,.form-group select,.form-group textarea{width:100%;padding:11px 14px;border:1.5px solid #d1d5db;border-radius:8px;font-size:15px;transition:border-color .2s,box-shadow .2s;color:#111827;background:white;font-family:inherit}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{outline:none;border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+.form-group textarea{resize:vertical;min-height:72px;font-size:14px}
+.btn-login{width:100%;padding:13px;background:#2563eb;color:white;border:none;border-radius:8px;font-size:15px;font-weight:700;transition:background .2s}
+.btn-login:hover{background:#1d4ed8}
+.btn-login:disabled{background:#93c5fd;cursor:not-allowed}
+.login-error{background:#fee2e2;color:#dc2626;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:18px;border:1px solid #fecaca;display:none}
+.login-version{text-align:center;margin-top:20px;font-size:11px;color:#9ca3af}
+
+/* ===== APP LAYOUT ===== */
+#app-screen{display:none;height:100vh;overflow:hidden}
+.app-layout{display:flex;height:100%}
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:90}
+.sidebar-overlay.visible{display:block}
+
+/* ===== SIDEBAR ===== */
+.sidebar{width:230px;flex-shrink:0;background:#0f172a;color:white;display:flex;flex-direction:column;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.1) transparent;transition:transform .28s cubic-bezier(.4,0,.2,1);z-index:100}
+.sidebar-brand{padding:20px 18px 16px;border-bottom:1px solid rgba(255,255,255,.08)}
+.sidebar-brand h2{font-size:15px;font-weight:800;color:#f8fafc;display:flex;align-items:center;gap:8px}
+.sidebar-brand p{font-size:11px;color:rgba(255,255,255,.4);margin-top:3px}
+.sidebar-nav{flex:1;padding:10px 0}
+.nav-section-label{font-size:10px;font-weight:700;color:rgba(255,255,255,.3);text-transform:uppercase;letter-spacing:1px;padding:12px 18px 4px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 18px;font-size:13px;color:rgba(255,255,255,.65);cursor:pointer;transition:all .15s;border-left:3px solid transparent}
+.nav-item:hover:not(.disabled){background:rgba(255,255,255,.07);color:white}
+.nav-item.active{background:rgba(37,99,235,.2);color:#93c5fd;border-left-color:#2563eb}
+.nav-item.disabled{opacity:.3;cursor:not-allowed}
+.nav-icon{font-size:15px;width:22px;text-align:center;flex-shrink:0}
+.nav-label-text{flex:1}
+.nav-tag{font-size:9px;font-weight:700;padding:2px 5px;border-radius:4px;background:rgba(37,99,235,.3);color:#93c5fd}
+.sidebar-footer{padding:14px 18px;border-top:1px solid rgba(255,255,255,.08)}
+.user-card{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.user-avatar{width:34px;height:34px;border-radius:50%;background:#2563eb;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:white;flex-shrink:0}
+.user-info-text .user-name{font-size:13px;font-weight:700;color:#f8fafc}
+.user-info-text .user-role{font-size:11px;color:rgba(255,255,255,.45);margin-top:1px}
+.btn-logout{width:100%;padding:8px 12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.6);border-radius:6px;font-size:12px;font-weight:600;transition:all .15s}
+.btn-logout:hover{background:rgba(220,38,38,.25);border-color:rgba(220,38,38,.5);color:#fca5a5}
+
+/* ===== MAIN AREA ===== */
+.main-area{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.topbar{background:white;height:58px;padding:0 20px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e5e7eb;box-shadow:0 1px 4px rgba(0,0,0,.05);gap:12px}
+.topbar-left{display:flex;align-items:center;gap:12px;min-width:0}
+.topbar-left h1{font-size:17px;font-weight:800;color:#111827;white-space:nowrap}
+.topbar-left p{font-size:12px;color:#9ca3af;margin-top:1px}
+.topbar-left-text{min-width:0}
+.topbar-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.btn-hamburger{display:none;align-items:center;justify-content:center;width:40px;height:40px;border-radius:8px;background:#f3f4f6;border:1.5px solid #e5e7eb;font-size:18px;color:#374151;flex-shrink:0}
+.btn-hamburger:hover{background:#e5e7eb}
+.clock-display{font-size:14px;font-weight:700;color:#374151;background:#f9fafb;padding:6px 10px;border-radius:6px;border:1px solid #e5e7eb;white-space:nowrap}
+
+/* ===== TAB BAR ===== */
+.tab-bar{background:white;border-bottom:2px solid #e5e7eb;padding:0 20px;display:flex;gap:0;flex-shrink:0}
+.tab-btn{padding:12px 20px;font-size:13px;font-weight:700;color:#6b7280;border:none;background:none;border-bottom:3px solid transparent;margin-bottom:-2px;transition:all .15s;white-space:nowrap}
+.tab-btn:hover{color:#2563eb;background:#faf5ff}
+.tab-btn.active{color:#2563eb;border-bottom-color:#2563eb}
+
+/* ===== CONTENT AREA ===== */
+.content-area{flex:1;overflow-y:auto;padding:20px 24px 32px}
+.tab-pane{display:none}
+.tab-pane.active{display:block}
+
+/* ===== SUMMARY CARDS ===== */
+.cards-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;margin-bottom:16px}
+.summary-card{background:white;border-radius:10px;padding:14px;border-left:4px solid #e5e7eb;box-shadow:0 1px 3px rgba(0,0,0,.06);transition:transform .15s,box-shadow .15s}
+.summary-card:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.1)}
+.summary-card.c-blue{border-left-color:#2563eb}
+.summary-card.c-green{border-left-color:#16a34a}
+.summary-card.c-amber{border-left-color:#d97706}
+.summary-card.c-red{border-left-color:#dc2626}
+.summary-card.c-purple{border-left-color:#2563eb}
+.summary-card.c-warn{border-left-color:#dc2626;background:#fff5f5}
+.sc-label{font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.6px}
+.sc-value{font-size:26px;font-weight:900;color:#111827;line-height:1.1;margin:4px 0 2px}
+.sc-value.small{font-size:18px}
+.sc-value.warn{color:#dc2626}
+.sc-sub{font-size:11px;color:#9ca3af}
+
+/* ===== PANEL ===== */
+.panel{background:white;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden;margin-bottom:14px}
+.panel:last-child{margin-bottom:0}
+.panel-head{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:1px solid #f3f4f6;gap:8px;flex-wrap:wrap}
+.panel-title{font-size:14px;font-weight:800;color:#111827}
+.panel-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.panel-pill{font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;background:#f3f4f6;color:#374151}
+.panel-pill.alert{background:#fee2e2;color:#dc2626}
+.panel-pill.ok{background:#d1fae5;color:#065f46}
+.panel-pill.warn{background:#fef3c7;color:#92400e}
+.panel-pill.info{background:#dbeafe;color:#1e40af}
+
+/* ===== SCAN AREA ===== */
+.scan-area{padding:14px 16px;border-bottom:1px solid #f3f4f6;background:#f8f5ff}
+.scan-field-wrap{position:relative;margin-bottom:8px}
+.scan-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:18px;pointer-events:none}
+.scan-input{width:100%;padding:11px 11px 11px 40px;border:2px solid #2563eb;border-radius:8px;font-size:15px;font-weight:700;letter-spacing:1px;color:#111827;background:#faf5ff;font-family:inherit;transition:box-shadow .2s}
+.scan-input:focus{outline:none;box-shadow:0 0 0 3px rgba(37,99,235,.2)}
+.scan-input::placeholder{font-weight:400;letter-spacing:0;color:#9ca3af}
+.scan-hint{font-size:11px;color:#6b7280}
+.scan-result{background:white;border-radius:8px;padding:12px;border:1.5px solid #e5e7eb;margin-top:10px;display:none}
+.scan-result.visible{display:block}
+.scan-result.scan-ok{border-color:#a7f3d0}
+.scan-result.scan-err{border-color:#fecaca;background:#fff5f5}
+.scan-basket-code{font-size:13px;font-weight:800;color:#111827;margin-bottom:4px;font-family:monospace}
+.scan-basket-detail{font-size:12px;color:#374151;line-height:1.7}
+.scan-action-row{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+
+/* ===== TABLE ===== */
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl thead th{text-align:left;padding:9px 14px;font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;background:#f9fafb;border-bottom:1px solid #f0f2f5;white-space:nowrap}
+.tbl tbody td{padding:10px 14px;border-bottom:1px solid #f9fafb;vertical-align:middle}
+.tbl tbody tr:last-child td{border-bottom:none}
+.tbl tbody tr:hover td{background:#fafafa}
+.tbl-sub{font-size:11px;color:#6b7280;margin-top:2px}
+
+/* ===== SECTION TOOLBAR ===== */
+.section-toolbar{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid #f3f4f6;flex-wrap:wrap;background:#fafafa}
+.search-wrap{position:relative;flex:1;min-width:160px}
+.search-wrap .s-icon{position:absolute;left:9px;top:50%;transform:translateY(-50%);font-size:13px;pointer-events:none;color:#9ca3af}
+.search-inp{width:100%;padding:6px 10px 6px 28px;border:1.5px solid #e5e7eb;border-radius:7px;font-size:13px;color:#111827;font-family:inherit;background:white;transition:border-color .2s}
+.search-inp:focus{outline:none;border-color:#2563eb;box-shadow:0 0 0 2px rgba(37,99,235,.1)}
+
+/* ===== GROUPED STOK ===== */
+.grp-row{cursor:pointer;user-select:none}
+.grp-row td{background:#f5f0ff;padding:10px 14px;border-bottom:1px solid #e9d5ff;font-weight:700;font-size:13px}
+.grp-row:hover td{background:#dbeafe}
+.grp-arrow{display:inline-block;width:16px;transition:transform .2s;font-style:normal;font-size:11px}
+.grp-row.expanded .grp-arrow{transform:rotate(90deg)}
+.sub-row td{padding:8px 14px 8px 30px;border-bottom:1px solid #f3f4f6;background:#faf5ff;font-size:12px}
+.sub-row:hover td{background:#dbeafe}
+.sub-row.last-sub td{border-bottom:2px solid #e9d5ff}
+
+/* ===== BADGES ===== */
+.badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:12px;font-size:11px;font-weight:700;white-space:nowrap}
+.b-pending{background:#fef3c7;color:#92400e}
+.b-confirmed{background:#d1fae5;color:#065f46}
+.b-rejected{background:#fee2e2;color:#991b1b}
+.b-aktif{background:#dbeafe;color:#1e40af}
+.b-chiller{background:#dbeafe;color:#1e40af}
+.b-marinasi{background:#fff7ed;color:#9a3412}
+.b-boneless{background:#fce7f3;color:#9d174d}
+.b-karkas{background:#d1fae5;color:#065f46}
+
+/* ===== TWO-PANEL GRID ===== */
+.two-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;align-items:start}
+
+/* ===== BUTTONS ===== */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 12px;border-radius:6px;border:none;font-size:12px;font-weight:700;transition:all .15s;min-height:34px;touch-action:manipulation;white-space:nowrap}
+.btn-primary{background:#2563eb;color:white}
+.btn-primary:hover{background:#1d4ed8}
+.btn-green{background:#16a34a;color:white}
+.btn-green:hover{background:#15803d}
+.btn-amber{background:#d97706;color:white}
+.btn-amber:hover{background:#b45309}
+.btn-red{background:#dc2626;color:white}
+.btn-red:hover{background:#b91c1c}
+.btn-ghost{background:#f3f4f6;color:#374151}
+.btn-ghost:hover{background:#e5e7eb}
+.btn-outline{background:white;color:#374151;border:1.5px solid #d1d5db}
+.btn-outline:hover{background:#f9fafb}
+.btn-sm{padding:5px 9px;font-size:11px;min-height:28px}
+.btn:disabled{opacity:.45;cursor:not-allowed;pointer-events:none}
+
+/* ===== MODAL ===== */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;align-items:flex-start;justify-content:center;padding:32px 16px;overflow-y:auto}
+.modal-overlay.open{display:flex}
+.modal-box{background:white;border-radius:14px;padding:28px;width:480px;max-width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);animation:modal-in .2s ease;margin:auto}
+.modal-box.modal-sm{width:400px}
+@keyframes modal-in{from{transform:scale(.92);opacity:0}to{transform:scale(1);opacity:1}}
+.modal-title{font-size:16px;font-weight:800;margin-bottom:4px;color:#111827}
+.modal-desc{font-size:13px;color:#6b7280;margin-bottom:20px}
+.modal-info-box{background:#f9fafb;border-radius:8px;padding:14px;border:1px solid #e5e7eb;margin-bottom:16px}
+.modal-info-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #f0f2f5;font-size:13px;gap:8px}
+.modal-info-row:last-child{border-bottom:none}
+.modal-info-label{color:#6b7280}
+.modal-info-val{font-weight:700;color:#111827;text-align:right}
+.modal-footer{display:flex;justify-content:flex-end;gap:10px;margin-top:22px;padding-top:18px;border-top:1px solid #f0f2f5;flex-wrap:wrap}
+
+/* ===== PIN INPUT ===== */
+.pin-input{width:100%;padding:14px;border:2px solid #d1d5db;border-radius:8px;font-size:22px;font-weight:800;letter-spacing:6px;text-align:center;color:#111827;font-family:monospace;transition:border-color .2s}
+.pin-input:focus{outline:none;border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.15)}
+.pin-error{color:#dc2626;font-size:12px;font-weight:700;margin-top:6px;display:none}
+
+/* ===== EMPTY ===== */
+.empty{text-align:center;padding:28px 16px;color:#9ca3af;font-size:13px}
+.empty .e-icon{font-size:28px;margin-bottom:8px}
+
+/* ===== PAGINATION ===== */
+.pagination{display:flex;align-items:center;justify-content:space-between;padding:9px 14px;border-top:1px solid #f3f4f6;font-size:12px;color:#6b7280;flex-wrap:wrap;gap:8px;background:#fafafa}
+.pag-info{font-weight:600}
+.pag-btns{display:flex;gap:4px}
+.btn-pag{padding:4px 12px;border:1.5px solid #e5e7eb;border-radius:6px;background:white;font-size:12px;font-weight:700;color:#374151;cursor:pointer;transition:all .15s}
+.btn-pag:hover:not(:disabled){background:#f3f4f6}
+.btn-pag:disabled{opacity:.35;cursor:not-allowed}
+
+/* ===== TOAST ===== */
+#toast{position:fixed;bottom:28px;right:28px;padding:13px 20px;border-radius:10px;font-size:13px;font-weight:700;box-shadow:0 8px 24px rgba(0,0,0,.2);display:none;z-index:999;animation:toast-in .25s ease}
+#toast.show{display:block}
+#toast.success{background:#065f46;color:white}
+#toast.error{background:#991b1b;color:white}
+#toast.warning{background:#92400e;color:white}
+@keyframes toast-in{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+
+/* ===== PINDAH KELUAR DEST GRID ===== */
+.dest-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px}
+.btn-dest{padding:12px 6px;border:2px solid transparent;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;transition:all .15s;text-align:center;line-height:1.5;background:#f9fafb}
+.btn-dest-boneless{background:#fce7f3;color:#9d174d;border-color:#fbcfe8}
+.btn-dest-boneless:hover,.btn-dest-boneless.selected{background:#db2777;color:white;border-color:#db2777}
+.btn-dest-chiller{background:#dbeafe;color:#1e40af;border-color:#bfdbfe}
+.btn-dest-chiller:hover,.btn-dest-chiller.selected{background:#2563eb;color:white;border-color:#2563eb}
+.btn-dest-blasting{background:#ccfbf1;color:#065f46;border-color:#99f6e4}
+.btn-dest-blasting:hover,.btn-dest-blasting.selected{background:#0d9488;color:white;border-color:#0d9488}
+
+/* ===== BASKET SELECT LIST ===== */
+.basket-select-list{max-height:200px;overflow-y:auto;border:1.5px solid #e5e7eb;border-radius:8px;margin-top:6px}
+.basket-select-item{padding:9px 12px;border-bottom:1px solid #f3f4f6;cursor:pointer;transition:background .12s}
+.basket-select-item:last-child{border-bottom:none}
+.basket-select-item:hover{background:#f5f0ff}
+.basket-select-item.selected{background:#dbeafe;border-left:3px solid #2563eb}
+
+/* ===== ASSIGNED INPUTS TABLE ===== */
+.inp-tbl{width:100%;border-collapse:collapse;font-size:12px}
+.inp-tbl th{text-align:left;padding:6px 10px;font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;background:#f9fafb;border-bottom:1px solid #e5e7eb}
+.inp-tbl td{padding:7px 10px;border-bottom:1px solid #f3f4f6}
+.inp-tbl tr:last-child td{border-bottom:none}
+
+/* ===== MODAL LG ===== */
+.modal-box.modal-lg{width:640px}
+
+/* ===== REFRESH BUTTON ===== */
+.btn-refresh{display:flex;align-items:center;gap:5px;padding:7px 14px;background:#f3f4f6;border:1.5px solid #e5e7eb;border-radius:7px;font-size:12px;font-weight:700;color:#374151;transition:all .15s}
+.btn-refresh:hover{background:#e5e7eb}
+
+/* ===== RESPONSIVE ===== */
+@media(max-width:1023px){
+  .sidebar{position:fixed;top:0;left:0;height:100vh;transform:translateX(-100%)}
+  .sidebar.open{transform:translateX(0)}
+  .btn-hamburger{display:flex}
+  .two-grid{grid-template-columns:1fr}
+  .cards-row{grid-template-columns:repeat(auto-fill,minmax(130px,1fr))}
+}
+@media(max-width:600px){
+  .content-area{padding:14px 14px 24px}
+  .topbar{padding:0 14px}
+  .modal-box{padding:20px}
+  .dest-grid{grid-template-columns:1fr}
+  .tab-btn{padding:10px 12px;font-size:12px}
+}
+</style>
+</head>
+<body>
+
+<!-- ==================== LOGIN ==================== -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <span class="icon">🌶️</span>
+      <h1>RPA Management System</h1>
+      <p>Marinasi — Login</p>
+    </div>
+    <div class="login-error" id="login-error"></div>
+    <div class="form-group">
+      <label>Username</label>
+      <input type="text" id="inp-username" placeholder="Masukkan username" autocomplete="username"
+             onkeydown="if(event.key==='Enter')document.getElementById('inp-password').focus()">
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input type="password" id="inp-password" placeholder="Masukkan password" autocomplete="current-password"
+             onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button class="btn-login" id="btn-login" onclick="doLogin()">Masuk →</button>
+    <p class="login-version">v1.0 — RPA System</p>
+  </div>
+</div>
+
+<!-- ==================== APP ==================== -->
+<div id="app-screen">
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+<div class="app-layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <div style="display:flex;align-items:center;gap:10px;"><img src="logo.png" style="height:36px;width:auto;object-fit:contain;"><span style="font-size:15px;font-weight:800;color:#f8fafc;">Kurnia's Food</span></div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section-label">Utama</div>
+      <div class="nav-item" onclick="navTo('Dashboard.html')">
+        <span class="nav-icon">🏠</span><span class="nav-label-text">Dashboard</span>
+      </div>
+      <div class="nav-section-label">Produksi</div>
+      <div class="nav-item" onclick="navTo('BatchAyamHidup.html')">
+        <span class="nav-icon">🐔</span><span class="nav-label-text">Batch Ayam Hidup</span>
+      </div>
+      <div class="nav-item" onclick="navTo('ProduksiKarkas.html')"><span class="nav-icon">⚙️</span><span class="nav-label-text">Produksi Karkas</span></div>
+      <div class="nav-item" onclick="navTo('Thawing.html')"><span class="nav-icon">🧊</span><span class="nav-label-text">Thawing</span></div>
+      <div class="nav-item" onclick="navTo('Chiller.html')">
+        <span class="nav-icon">❄️</span><span class="nav-label-text">Chiller</span>
+      </div>
+      <div class="nav-item" onclick="navTo('WorkOrder.html')">
+        <span class="nav-icon">📋</span><span class="nav-label-text">Work Order</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Parting.html')">
+        <span class="nav-icon">✂️</span><span class="nav-label-text">Parting</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Boneless.html')">
+        <span class="nav-icon">🥩</span><span class="nav-label-text">Boneless</span>
+      </div>
+      <div class="nav-item active">
+        <span class="nav-icon">🌶️</span><span class="nav-label-text">Marinasi</span>
+        <span class="nav-tag">Aktif</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Blasting.html')"><span class="nav-icon">🧊</span><span class="nav-label-text">Blasting</span></div>
+      <div class="nav-item" onclick="navTo('ByProductKarkas.html')"><span class="nav-icon">📦</span><span class="nav-label-text">By-product Karkas</span></div>
+      <div class="nav-section-label">Penjualan</div>
+      <div class="nav-item disabled"><span class="nav-icon">🛒</span><span class="nav-label-text">Penjualan</span></div>
+      <div class="nav-section-label">Manajemen</div>
+      <div class="nav-item disabled"><span class="nav-icon">✅</span><span class="nav-label-text">Koreksi &amp; Approval</span></div>
+      <div class="nav-item disabled"><span class="nav-icon">📊</span><span class="nav-label-text">Traceability</span></div>
+      <div class="nav-item" onclick="navTo('MasterData.html')"><span class="nav-icon">🗂️</span><span class="nav-label-text">Master Data</span></div>
+      <div class="nav-item" id="nav-user-mgmt" style="display:none" onclick="navTo('UserManagement.html')"><span class="nav-icon">👥</span><span class="nav-label-text">Manajemen User</span></div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-card">
+        <div class="user-avatar" id="user-avatar">?</div>
+        <div class="user-info-text">
+          <div class="user-name" id="sidebar-name">—</div>
+          <div class="user-role" id="sidebar-role">—</div>
+        </div>
+      </div>
+      <button class="btn-logout" onclick="doLogout()">⬅ Keluar</button>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="main-area">
+    <div class="topbar">
+      <div class="topbar-left">
+        <button class="btn-hamburger" id="btn-hamburger" onclick="toggleSidebar()">☰</button>
+        <div class="topbar-left-text">
+          <h1>🌶️ Marinasi</h1>
+          <p id="topbar-date">—</p>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <button class="btn-refresh" onclick="loadAll()">🔄 Refresh</button>
+        <div class="clock-display" id="clock">—</div>
+      </div>
+    </div>
+
+    <!-- TAB BAR -->
+    <div class="tab-bar">
+      <button class="tab-btn active" id="tab-btn-masuk"   onclick="switchTab('masuk')">📥 Masuk &amp; Stok</button>
+      <button class="tab-btn"        id="tab-btn-wo"      onclick="switchTab('wo')">📋 Work Order</button>
+      <button class="tab-btn"        id="tab-btn-ws"      onclick="switchTab('ws')">🔨 Workstation</button>
+    </div>
+
+    <div class="content-area" id="content-area">
+
+      <!-- SUMMARY CARDS (selalu tampil) -->
+      <div class="cards-row">
+        <div class="summary-card c-amber">
+          <div class="sc-label">Pending Masuk</div>
+          <div class="sc-value" id="sc-pending">—</div>
+          <div class="sc-sub">keranjang antri</div>
+        </div>
+        <div class="summary-card c-purple">
+          <div class="sc-label">Stok Lantai</div>
+          <div class="sc-value" id="sc-stok">—</div>
+          <div class="sc-sub">keranjang aktif</div>
+        </div>
+        <div class="summary-card c-blue">
+          <div class="sc-label">WO Aktif</div>
+          <div class="sc-value" id="sc-wo-aktif">—</div>
+          <div class="sc-sub">in progress</div>
+        </div>
+        <div class="summary-card c-green">
+          <div class="sc-label">Output Hari Ini</div>
+          <div class="sc-value small" id="sc-output-kg">—</div>
+          <div class="sc-sub">kg diproduksi</div>
+        </div>
+        <div class="summary-card c-warn" id="sc-card-approv" style="display:none">
+          <div class="sc-label">⚠️ Perlu Approval</div>
+          <div class="sc-value warn" id="sc-approv">0</div>
+          <div class="sc-sub">WO pending supervisor</div>
+        </div>
+      </div>
+
+      <!-- ======================================================== -->
+      <!-- TAB 1: MASUK & STOK                                       -->
+      <!-- ======================================================== -->
+      <div class="tab-pane active" id="tab-masuk">
+
+        <div class="two-grid">
+
+          <!-- SCAN KONFIRMASI MASUK -->
+          <div class="panel">
+            <div class="panel-head">
+              <div class="panel-title">📥 Konfirmasi Masuk</div>
+              <div class="panel-actions">
+                <span class="panel-pill" id="pill-pending-count">— pending</span>
+              </div>
+            </div>
+            <div class="scan-area">
+              <div class="scan-field-wrap">
+                <span class="scan-icon">📷</span>
+                <input type="text" class="scan-input" id="scan-masuk-input"
+                       placeholder="Scan QR / ketik kode keranjang…"
+                       autocomplete="off"
+                       onkeydown="if(event.key==='Enter')doScanMasuk()"
+                       oninput="clearScanMasukResult()">
+              </div>
+              <div class="scan-hint">Arahkan barcode reader ke QR label keranjang, tekan Enter</div>
+              <div class="scan-result" id="scan-masuk-result">
+                <div class="scan-basket-code" id="smr-code">—</div>
+                <div class="scan-basket-detail" id="smr-detail">—</div>
+                <div class="scan-action-row" id="smr-actions"></div>
+              </div>
+            </div>
+            <!-- LIST PENDING -->
+            <div class="section-toolbar">
+              <span style="font-size:12px;font-weight:700;color:#374151">Antrian Masuk ke Marinasi</span>
+              <div style="flex:1"></div>
+              <button class="btn btn-green btn-sm" id="btn-konfirm-semua" onclick="openKonfirmSemua()" style="display:none">✅ Konfirmasi Semua</button>
+            </div>
+            <div class="tbl-wrap">
+              <table class="tbl">
+                <thead>
+                  <tr>
+                    <th>Kode Keranjang</th>
+                    <th>Produk</th>
+                    <th>Qty / Kg</th>
+                    <th>Dari</th>
+                    <th>Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="pending-tbody">
+                  <tr><td colspan="5"><div class="empty"><div class="e-icon">📭</div>Memuat…</div></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- STOK LANTAI MARINASI -->
+          <div class="panel">
+            <div class="panel-head">
+              <div class="panel-title">📦 Stok Lantai Marinasi</div>
+              <div class="panel-actions">
+                <span class="panel-pill" id="pill-stok-count">— item</span>
+              </div>
+            </div>
+            <div class="section-toolbar">
+              <div class="search-wrap">
+                <span class="s-icon">🔍</span>
+                <input type="text" class="search-inp" id="stok-search"
+                       placeholder="Cari kode / produk…" oninput="renderStok()">
+              </div>
+            </div>
+            <div class="tbl-wrap">
+              <table class="tbl" id="stok-tbl">
+                <thead>
+                  <tr>
+                    <th>Produk</th>
+                    <th>Qty / Kg</th>
+                    <th>Keranjang</th>
+                    <th>Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="stok-tbody">
+                  <tr><td colspan="4"><div class="empty"><div class="e-icon">📦</div>Memuat…</div></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div><!-- /two-grid -->
+      </div><!-- /tab-masuk -->
+
+      <!-- ======================================================== -->
+      <!-- TAB 2: WORK ORDER                                         -->
+      <!-- ======================================================== -->
+      <div class="tab-pane" id="tab-wo">
+
+        <div class="panel">
+          <div class="panel-head">
+            <div class="panel-title">📋 Work Order Aktif — Marinasi</div>
+            <div class="panel-actions">
+              <span class="panel-pill info" id="pill-wo-count">— WO</span>
+            </div>
+          </div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>Kode WO</th>
+                  <th>Produk Target</th>
+                  <th>Target</th>
+                  <th>Progress Output</th>
+                  <th>Status</th>
+                  <th>Workstation</th>
+                  <th>Tgl Dibuat</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="wo-tab-tbody">
+                <tr><td colspan="8"><div class="empty"><div class="e-icon">📋</div>Memuat…</div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- WO DETAIL PANEL (2-level: rekap WS → rincian basket) -->
+        <div class="panel" id="wo-detail-panel" style="display:none;border:2px solid #3b82f6;margin-top:14px">
+          <div class="panel-head" style="background:#eff6ff">
+            <div>
+              <div class="panel-title" id="wo-detail-title">📋 Detail WO</div>
+              <div id="wo-detail-subtitle" style="font-size:11px;color:#6b7280;margin-top:2px"></div>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="closeWODetail()">✕ Tutup</button>
+          </div>
+          <div id="wo-detail-body" style="padding-bottom:4px"></div>
+        </div>
+
+        <!-- CLOSED WO PANEL -->
+        <div class="panel" style="margin-top:14px">
+          <div class="panel-head">
+            <div class="panel-title">🔒 Riwayat Work Order Selesai</div>
+            <div class="panel-actions" style="gap:8px;flex-wrap:wrap">
+              <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:#6b7280">
+                <span>Dari</span>
+                <input type="date" id="closed-wo-from" onchange="loadAndRenderClosedWOs()"
+                  style="padding:4px 8px;border:1.5px solid #d1d5db;border-radius:6px;font-size:12px">
+                <span>s/d</span>
+                <input type="date" id="closed-wo-to" onchange="loadAndRenderClosedWOs()"
+                  style="padding:4px 8px;border:1.5px solid #d1d5db;border-radius:6px;font-size:12px">
+              </div>
+              <span class="panel-pill" style="background:#f3f4f6;color:#374151" id="pill-closed-wo-count">— WO</span>
+            </div>
+          </div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>Kode WO</th>
+                  <th>Produk Target</th>
+                  <th>Target</th>
+                  <th>Actual Output</th>
+                  <th>Status</th>
+                  <th>Workstation</th>
+                  <th>Tanggal</th>
+                  <th>Detail</th>
+                </tr>
+              </thead>
+              <tbody id="closed-wo-tbody">
+                <tr><td colspan="8"><div class="empty"><div class="e-icon">🔒</div>Memuat…</div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ======================================================== -->
+      <!-- TAB 3: WORKSTATION                                        -->
+      <!-- ======================================================== -->
+      <div class="tab-pane" id="tab-ws">
+
+        <!-- Shift & WS Selector Bar -->
+        <div class="panel" style="margin-bottom:14px">
+          <div class="panel-head">
+            <div class="panel-title">🔨 Pilih Shift &amp; Workstation</div>
+          </div>
+          <div style="padding:14px 16px;display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end">
+            <div>
+              <div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Shift Kerja</div>
+              <select id="shift-selector" onchange="selectShift(parseInt(this.value))"
+                style="padding:9px 12px;border:1.5px solid #d1d5db;border-radius:7px;font-size:13px;font-family:inherit;background:white;color:#111827;min-width:80px">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+              </select>
+            </div>
+            <div style="flex:1;min-width:200px">
+              <div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Workstation</div>
+              <select id="ws-selector" onchange="onWSChange()"
+                style="width:100%;padding:9px 12px;border:1.5px solid #d1d5db;border-radius:7px;font-size:13px;font-family:inherit;background:white;color:#111827">
+                <option value="">— Pilih Workstation —</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- WO list for selected WS -->
+        <div class="panel" style="margin-bottom:14px">
+          <div class="panel-head">
+            <div class="panel-title">📋 WO Aktif di Workstation Ini</div>
+            <span class="panel-pill info" id="ws-wo-pill">—</span>
+          </div>
+          <div id="ws-wo-body">
+            <div class="empty" style="padding:32px">
+              <div class="e-icon">🔨</div>Pilih workstation untuk melihat WO yang aktif.
+            </div>
+          </div>
+        </div>
+
+        <!-- WO Detail Panel (expandable per WO) -->
+        <div class="panel" id="ws-wo-detail" style="margin-bottom:14px;display:none;border:2px solid #2563eb">
+          <div class="panel-head" style="background:#faf5ff">
+            <div>
+              <div class="panel-title" id="ws-detail-title">📋 Detail WO</div>
+              <div id="ws-detail-subtitle" style="font-size:11px;color:#6b7280;margin-top:2px"></div>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="closeWSDetail()">✕ Tutup</button>
+          </div>
+          <div id="ws-wo-detail-body" style="padding-bottom:4px"></div>
+        </div>
+
+        <!-- Output hari ini for selected WS -->
+        <div class="panel">
+          <div class="panel-head">
+            <div class="panel-title">📦 Output Hari Ini — Workstation Ini</div>
+            <span class="panel-pill ok" id="ws-output-pill">—</span>
+          </div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>Kode Keranjang</th>
+                  <th>Produk</th>
+                  <th>WO</th>
+                  <th>Qty / Kg</th>
+                  <th>Tipe</th>
+                  <th>Pekerja</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="ws-output-tbody">
+                <tr><td colspan="7"><div class="empty"><div class="e-icon">📦</div>Pilih workstation.</div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+    </div><!-- /content-area -->
+  </div><!-- /main-area -->
+</div><!-- /app-layout -->
+</div><!-- /app-screen -->
+
+
+<!-- ==================== MODAL: KONFIRMASI MASUK ==================== -->
+<div class="modal-overlay" id="modal-konfirm">
+  <div class="modal-box modal-sm">
+    <div class="modal-title">✅ Konfirmasi Masuk Marinasi</div>
+
+    <!-- Step 1: konfirmasi -->
+    <div id="mk-step1">
+      <div class="modal-desc">Keranjang akan dikonfirmasi masuk ke Lantai Marinasi.</div>
+      <div class="modal-info-box">
+        <div class="modal-info-row"><span class="modal-info-label">Kode Keranjang</span><span class="modal-info-val" style="font-family:monospace" id="mk-code">—</span></div>
+        <div class="modal-info-row"><span class="modal-info-label">Produk</span><span class="modal-info-val" id="mk-produk">—</span></div>
+        <div class="modal-info-row"><span class="modal-info-label">Qty / Kg</span><span class="modal-info-val" id="mk-qty-kg">—</span></div>
+        <div class="modal-info-row"><span class="modal-info-label">Dari Lokasi</span><span class="modal-info-val" id="mk-dari">—</span></div>
+      </div>
+      <div id="mk-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-bottom:10px;display:none"></div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('modal-konfirm')">Batal</button>
+        <button class="btn btn-red btn-sm" onclick="openTolakFromKonfirm()">✗ Tolak</button>
+        <button class="btn btn-green" id="mk-btn-ok" onclick="doKonfirmasi()">✅ Konfirmasi Masuk</button>
+      </div>
+    </div>
+
+    <!-- Step 2: post-confirm → alokasi ke WS -->
+    <div id="mk-step2" style="display:none">
+      <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:#166534;font-weight:700">
+        ✅ Berhasil masuk ke Lantai Marinasi!
+      </div>
+      <div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:8px">Langsung alokasi bahan baku ke Work Station?</div>
+      <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;font-size:12px;color:#6b7280">
+        Keranjang: <strong style="font-family:monospace;color:#374151" id="mk-post-code">—</strong><br>
+        Sisa: <strong style="color:#111827" id="mk-post-sisa">—</strong>
+      </div>
+      <div class="modal-footer" style="margin-top:16px">
+        <button class="btn btn-ghost" onclick="closeModal('modal-konfirm')">Lewati</button>
+        <button class="btn btn-primary" onclick="alokasiDariKonfirm()">🔨 Alokasi ke WS →</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+
+<!-- ==================== MODAL: TOLAK ==================== -->
+<div class="modal-overlay" id="modal-tolak">
+  <div class="modal-box modal-sm">
+    <div class="modal-title">✗ Tolak Keranjang</div>
+    <div class="modal-desc">Keranjang <strong id="mt-code">—</strong> akan dikembalikan.</div>
+    <div class="form-group" style="margin-bottom:0">
+      <label>Alasan Penolakan <span style="color:#dc2626">*</span></label>
+      <textarea id="mt-alasan" placeholder="Contoh: Produk tidak sesuai, kondisi buruk…" rows="3"></textarea>
+    </div>
+    <div id="mt-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-top:8px;display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-tolak')">Batal</button>
+      <button class="btn btn-red" id="mt-btn-ok" onclick="doTolak()">✗ Tolak Keranjang</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ==================== MODAL: KONFIRMASI SEMUA ==================== -->
+<div class="modal-overlay" id="modal-konfirm-semua">
+  <div class="modal-box modal-sm">
+    <div class="modal-title">✅ Konfirmasi Semua Keranjang</div>
+    <div class="modal-desc" id="mks-desc">Semua keranjang pending akan dikonfirmasi masuk ke Lantai Marinasi.</div>
+    <div style="background:#fef3c7;border:1.5px solid #fde68a;border-radius:8px;padding:12px;font-size:13px;color:#92400e;margin-bottom:16px">
+      <strong>⚠️ Perhatian:</strong> Pastikan semua keranjang sudah benar-benar berada di area Marinasi sebelum konfirmasi.
+    </div>
+    <div id="mks-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-bottom:10px;display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-konfirm-semua')">Batal</button>
+      <button class="btn btn-green" id="mks-btn-ok" onclick="doKonfirmasiSemua()">✅ Ya, Konfirmasi Semua</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ==================== MODAL: PINDAH KELUAR ==================== -->
+<div class="modal-overlay" id="modal-pindah">
+  <div class="modal-box">
+    <div class="modal-title">📤 Pindah Keluar dari Marinasi</div>
+    <!-- Banner sukses alokasi lagi (tersembunyi default) -->
+    <div id="mp-alloc-success" style="display:none;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:12px;color:#166534;font-weight:700"></div>
+    <div class="modal-desc">Movement akan berstatus PENDING sampai penerima mengkonfirmasi.</div>
+    <div class="modal-info-box">
+      <div class="modal-info-row"><span class="modal-info-label">Kode Keranjang</span><span class="modal-info-val" style="font-family:monospace" id="mp-code">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Produk</span><span class="modal-info-val" id="mp-produk">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Qty / Kg Tersisa</span><span class="modal-info-val" id="mp-qty-kg">—</span></div>
+    </div>
+    <div style="font-size:13px;font-weight:700;color:#374151;margin-bottom:8px">Pilih Tujuan <span style="color:#dc2626">*</span></div>
+    <div class="dest-grid">
+      <button class="btn-dest btn-dest-chiller"    id="dest-chiller"     onclick="selectDest('CHILLER')">❄️<br>Chiller</button>
+      <button class="btn-dest btn-dest-blasting"   id="dest-blasting"    onclick="selectDest('BLASTING')">🧊<br>Blasting</button>
+      <button class="btn-dest" id="dest-workstation" style="border-color:#2563eb;color:#2563eb" onclick="selectDest('WORKSTATION')">🔨<br>Work Station</button>
+    </div>
+    <!-- Panel WO + WS: muncul saat pilih Work Station -->
+    <div id="mp-ws-panel" style="display:none;margin-top:12px">
+
+      <!-- Step 1: Pilih WO -->
+      <div style="font-size:11px;font-weight:700;color:#2563eb;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">① Pilih Work Order</div>
+      <select id="mp-wo-select" style="width:100%;padding:8px 10px;border:1.5px solid #d1d5db;border-radius:6px;font-size:13px;margin-bottom:8px" onchange="onWOSelectChange()">
+        <option value="">— Pilih Work Order —</option>
+      </select>
+      <!-- Info box WO yang dipilih -->
+      <div id="mp-wo-info" style="display:none;background:#faf5ff;border:1px solid #e9d5ff;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <span style="font-weight:800;font-family:monospace;color:#2563eb" id="mp-wo-info-code">—</span>
+          <span id="mp-wo-info-status" style="font-size:10px;padding:2px 7px;border-radius:10px;background:#f3f4f6;color:#374151"></span>
+        </div>
+        <div style="color:#374151;margin-bottom:4px">🎯 <span id="mp-wo-info-produk">—</span></div>
+        <div style="display:flex;gap:16px;color:#6b7280">
+          <span>Target: <strong id="mp-wo-info-target">—</strong></span>
+          <span>Teralokasi: <strong id="mp-wo-info-alloc">—</strong></span>
+        </div>
+        <div id="mp-wo-info-memo" style="margin-top:6px;color:#6b7280;font-style:italic;font-size:11px"></div>
+      </div>
+
+      <!-- Step 2: Pilih WS -->
+      <div style="font-size:11px;font-weight:700;color:#2563eb;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">② Pilih Workstation</div>
+      <div id="mp-ws-cards" style="display:flex;flex-direction:column;gap:6px">
+        <div style="text-align:center;padding:12px;color:#9ca3af;font-size:12px">Pilih Work Order dulu.</div>
+      </div>
+
+    </div>
+    <!-- Jumlah yang dipindahkan -->
+    <div style="display:flex;gap:10px;margin-top:14px">
+      <div class="form-group" style="flex:1;margin-bottom:0">
+        <label>Jumlah Ekor <span style="color:#dc2626">*</span></label>
+        <input type="number" id="mp-qty" min="1" step="1" placeholder="0">
+      </div>
+      <div class="form-group" style="flex:1;margin-bottom:0">
+        <label>Berat (kg) <span style="color:#dc2626">*</span></label>
+        <input type="number" id="mp-kg" min="0.1" step="0.1" placeholder="0.0">
+      </div>
+    </div>
+    <div class="form-group" style="margin-top:10px;margin-bottom:0">
+      <label>Catatan (Opsional)</label>
+      <input type="text" id="mp-catatan" placeholder="Catatan tambahan…">
+    </div>
+    <div id="mp-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-top:8px;display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-pindah')">Batal</button>
+      <button class="btn btn-primary" id="mp-btn-ok" onclick="doPindahKeluar()">📤 Pindah Keluar</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ==================== MODAL: ASSIGN INPUT ==================== -->
+<div class="modal-overlay" id="modal-input">
+  <div class="modal-box modal-lg">
+    <div class="modal-title">📥 Assign Input Keranjang ke WO</div>
+    <div class="modal-desc">Pilih keranjang sumber dari lantai Marinasi dan assign ke workstation.</div>
+    <div class="modal-info-box">
+      <div class="modal-info-row"><span class="modal-info-label">Kode WO</span><span class="modal-info-val" id="ai-wo-code">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Produk Target</span><span class="modal-info-val" id="ai-produk">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Target</span><span class="modal-info-val" id="ai-target">—</span></div>
+    </div>
+
+    <!-- Input yang sudah di-assign -->
+    <div style="font-size:12px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Input Sudah Di-assign</div>
+    <div style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;margin-bottom:16px">
+      <table class="inp-tbl">
+        <thead><tr><th>Keranjang</th><th>WS</th><th>Kg Diambil</th><th></th></tr></thead>
+        <tbody id="ai-assigned-tbody">
+          <tr><td colspan="4" style="text-align:center;padding:8px;color:#9ca3af;font-size:12px">—</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Form tambah input baru -->
+    <div style="font-size:12px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Tambah Input Baru</div>
+    <div class="form-group">
+      <label>Workstation <span style="color:#dc2626">*</span></label>
+      <select id="ai-ws">
+        <option value="">— Pilih Workstation —</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Cari Keranjang dari Lantai Marinasi</label>
+      <input type="text" id="ai-basket-search" placeholder="Ketik kode / nama produk…"
+             oninput="renderBasketList(this.value)" autocomplete="off">
+      <div class="basket-select-list" id="ai-basket-list">
+        <div style="padding:10px;text-align:center;color:#9ca3af;font-size:12px">Ketik untuk mencari keranjang…</div>
+      </div>
+    </div>
+    <!-- Info keranjang terpilih -->
+    <div id="ai-selected-basket" style="display:none;background:#f5f0ff;border:1.5px solid #93c5fd;border-radius:8px;padding:12px;margin-bottom:12px">
+      <div style="font-size:12px;font-weight:800;color:#1e40af;margin-bottom:6px">Keranjang Dipilih:</div>
+      <div style="font-family:monospace;font-weight:700;font-size:13px" id="ai-sel-code">—</div>
+      <div style="font-size:12px;color:#374151;margin-top:2px" id="ai-sel-produk">—</div>
+      <div style="font-size:11px;color:#6b7280;margin-top:2px" id="ai-sel-max">—</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+        <div class="form-group" style="margin-bottom:0">
+          <label>Qty Ekor <span style="color:#dc2626">*</span></label>
+          <input type="number" id="ai-qty-input" placeholder="ekor" min="1" max="9999">
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label>Kg Diambil <span style="color:#dc2626">*</span></label>
+          <input type="number" id="ai-kg-diambil" placeholder="kg" min="0.1" step="0.1" max="9999">
+        </div>
+      </div>
+    </div>
+    <div id="ai-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-top:4px;display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-input')">Tutup</button>
+      <button class="btn btn-primary" id="ai-btn-ok" onclick="doAssignInput()">💾 Assign Input</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ==================== MODAL: CLOSE WO ==================== -->
+<div class="modal-overlay" id="modal-close-wo">
+  <div class="modal-box modal-sm">
+    <div class="modal-title">🔒 Tutup Work Order</div>
+    <div class="modal-desc">Periksa hasil sebelum menutup WO.</div>
+    <div class="modal-info-box">
+      <div class="modal-info-row"><span class="modal-info-label">Kode WO</span><span class="modal-info-val" id="cwo-code">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Produk</span><span class="modal-info-val" id="cwo-produk">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Target</span><span class="modal-info-val" id="cwo-target">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Actual Output</span><span class="modal-info-val" id="cwo-actual">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Selisih dari Target</span><span class="modal-info-val" id="cwo-selisih">—</span></div>
+    </div>
+    <div id="cwo-warn-box" style="display:none;background:#fef3c7;border:1.5px solid #fde68a;border-radius:8px;padding:10px 12px;font-size:12px;color:#92400e;margin-bottom:14px">
+      ⚠️ Selisih melebihi ±10%. Diperlukan PIN Supervisor untuk menutup WO ini.
+    </div>
+    <div id="cwo-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-bottom:8px;display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-close-wo')">Batal</button>
+      <button class="btn btn-green" id="cwo-btn-ok" onclick="doCloseWO()">✅ Tutup & Approve</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ==================== MODAL: APPROVE CLOSE (PIN) ==================== -->
+<div class="modal-overlay" id="modal-approve-close">
+  <div class="modal-box modal-sm">
+    <div class="modal-title">✅ Approve Penutupan WO</div>
+    <div class="modal-desc">WO <strong id="apc-code">—</strong> melebihi threshold ±10%. Masukkan PIN Supervisor untuk menyetujui.</div>
+    <div style="background:#fef3c7;border:1.5px solid #fde68a;border-radius:8px;padding:10px 12px;font-size:12px;color:#92400e;margin-bottom:16px">
+      ⚠️ Hasil berbeda lebih dari 10% dari target. Diperlukan persetujuan Supervisor.
+    </div>
+    <div class="form-group" style="margin-bottom:0">
+      <label>PIN Supervisor <span style="color:#dc2626">*</span></label>
+      <input type="password" class="pin-input" id="apc-pin" placeholder="••••••" maxlength="6"
+             onkeydown="if(event.key==='Enter')doApproveClose()">
+      <div class="pin-error" id="apc-pin-err">PIN salah atau bukan Supervisor.</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-approve-close')">Batal</button>
+      <button class="btn btn-green" id="apc-btn-ok" onclick="doApproveClose()">✅ Approve</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ==================== MODAL: SELESAI DI WS (PIN) ==================== -->
+<div class="modal-overlay" id="modal-selesai-ws">
+  <div class="modal-box modal-sm">
+    <div class="modal-title">✅ Selesai di WS Ini</div>
+    <div class="modal-desc">WO <strong id="sws-wo-code">—</strong> akan ditandai selesai di workstation <strong id="sws-ws-name">—</strong>.<br>
+      <span style="font-size:12px;color:#6b7280">WO tetap berjalan di workstation lain. Ini hanya menandai bahwa WS ini sudah tidak memproses WO tersebut.</span></div>
+    <div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:8px;padding:10px 12px;font-size:12px;color:#166534;margin-bottom:16px">
+      ℹ️ Masukkan PIN Supervisor untuk konfirmasi.
+    </div>
+    <div class="form-group" style="margin-bottom:0">
+      <label>PIN Supervisor <span style="color:#dc2626">*</span></label>
+      <input type="password" class="pin-input" id="sws-pin" placeholder="••••••" maxlength="6"
+             onkeydown="if(event.key==='Enter')doSelesaiDiWS()">
+      <div class="pin-error" id="sws-pin-err">PIN salah atau bukan Supervisor.</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-selesai-ws')">Batal</button>
+      <button class="btn btn-green" id="sws-btn-ok" onclick="doSelesaiDiWS()">✅ Konfirmasi Selesai</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== MODAL: RECORD OUTPUT ==================== -->
+<div class="modal-overlay" id="modal-record-output">
+  <div class="modal-box">
+    <div class="modal-title">📦 Catat Output Keranjang</div>
+    <div class="modal-desc">Catat hasil produksi untuk Work Order ini. Keranjang baru akan otomatis dibuat.</div>
+    <div class="modal-info-box">
+      <div class="modal-info-row"><span class="modal-info-label">WO</span><span class="modal-info-val" id="ro-wo-code">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Workstation</span><span class="modal-info-val" id="ro-ws-name">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Produk Target</span><span class="modal-info-val" id="ro-wo-produk">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Target</span><span class="modal-info-val" id="ro-wo-target">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Progress Saat Ini</span><span class="modal-info-val" id="ro-progress">—</span></div>
+    </div>
+    <div class="form-group">
+      <label>Produk Output <span style="color:#dc2626">*</span></label>
+      <select id="ro-produk" onchange="updateROKgHint()">
+        <option value="">— Pilih Produk —</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Tipe Output <span style="color:#dc2626">*</span></label>
+      <div style="display:flex;gap:8px">
+        <button type="button" id="ro-type-primary"   onclick="selectOutputType('PRIMARY')"   style="flex:1" class="btn btn-outline">🏆 PRIMARY</button>
+        <button type="button" id="ro-type-byproduct" onclick="selectOutputType('BYPRODUCT')" style="flex:1" class="btn btn-outline">📦 BYPRODUCT</button>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="form-group" style="margin-bottom:0">
+        <label>Qty Ekor <span style="color:#dc2626">*</span></label>
+        <input type="number" id="ro-qty" placeholder="ekor" min="1" max="9999" step="1" oninput="updateROKgHint()">
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label>Kg Aktual <span style="color:#dc2626">*</span></label>
+        <input type="number" id="ro-kg" placeholder="kg" min="0.1" max="9999" step="0.1">
+      </div>
+    </div>
+    <div id="ro-kg-hint" style="font-size:11px;color:#6b7280;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:6px 10px;margin-top:6px;display:none"></div>
+    <div class="form-group" style="margin-top:12px;margin-bottom:0">
+      <label>Tanggal Produksi <span style="color:#dc2626">*</span></label>
+      <input type="date" id="ro-tanggal">
+    </div>
+    <div id="ro-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-top:8px;display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-record-output')">Batal</button>
+      <button class="btn btn-primary" id="ro-btn-ok" onclick="doRecordOutput()">💾 Simpan &amp; Generate Keranjang</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ==================== MODAL: EDIT INPUT ==================== -->
+<div class="modal-overlay" id="modal-edit-input">
+  <div class="modal-box modal-sm">
+    <div class="modal-title">✏️ Edit Input Bahan Baku</div>
+    <div class="modal-desc">Revisi data input keranjang bahan baku ke WO ini.</div>
+    <div class="modal-info-box">
+      <div class="modal-info-row"><span class="modal-info-label">Kode Keranjang</span><span class="modal-info-val" style="font-family:monospace" id="ei-code">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Produk</span><span class="modal-info-val" id="ei-produk">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">WO</span><span class="modal-info-val" id="ei-wo">—</span></div>
+    </div>
+    <div id="ei-kaitan" style="display:none;margin-bottom:10px;padding:8px 10px;border-radius:6px;font-size:12px;font-weight:700"></div>
+    <div class="form-group">
+      <label>Kg Diambil (Baru) <span style="color:#dc2626">*</span></label>
+      <input type="number" id="ei-kg" placeholder="kg" min="0.1" step="0.1">
+      <div id="ei-kg-hint" style="font-size:11px;color:#6b7280;margin-top:4px"></div>
+    </div>
+    <div class="form-group" style="margin-bottom:0">
+      <label>Qty Input (ekor) — opsional</label>
+      <input type="number" id="ei-qty" placeholder="ekor" min="0" step="1">
+    </div>
+    <div id="ei-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-top:8px;display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-edit-input')">Batal</button>
+      <button class="btn btn-primary" id="ei-btn-ok" onclick="doEditInput()">💾 Simpan Revisi</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== MODAL: EDIT OUTPUT ==================== -->
+<div class="modal-overlay" id="modal-edit-output">
+  <div class="modal-box modal-sm">
+    <div class="modal-title">✏️ Edit Output Keranjang</div>
+    <div class="modal-desc">Revisi data output produksi. Keranjang akan ikut diupdate.</div>
+    <div class="modal-info-box">
+      <div class="modal-info-row"><span class="modal-info-label">Kode Keranjang</span><span class="modal-info-val" style="font-family:monospace" id="eo-code">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Produk</span><span class="modal-info-val" id="eo-produk">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">WO</span><span class="modal-info-val" id="eo-wo">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Tipe Output</span><span class="modal-info-val" id="eo-type">—</span></div>
+    </div>
+    <div id="eo-kaitan" style="display:none;margin-bottom:10px;padding:8px 10px;border-radius:6px;font-size:12px;font-weight:700"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="form-group" style="margin-bottom:0">
+        <label>Qty Ekor (Baru) <span style="color:#dc2626">*</span></label>
+        <input type="number" id="eo-qty" placeholder="ekor" min="1" step="1" oninput="updateEOKgHint()">
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label>Kg Aktual (Baru) <span style="color:#dc2626">*</span></label>
+        <input type="number" id="eo-kg" placeholder="kg" min="0.1" step="0.1">
+      </div>
+    </div>
+    <div id="eo-kg-hint" style="font-size:11px;color:#6b7280;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:6px 10px;margin-top:6px;display:none"></div>
+    <div id="eo-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-top:8px;display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-edit-output')">Batal</button>
+      <button class="btn btn-primary" id="eo-btn-ok" onclick="doEditOutput()">💾 Simpan Revisi</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== MODAL: PRINT QR LABEL ==================== -->
+<div class="modal-overlay" id="modal-print-label">
+  <div class="modal-box modal-sm">
+    <div class="modal-title">🖨️ Label QR Keranjang</div>
+    <div class="modal-desc">Label siap cetak. Ukuran: 57 × 38 mm.</div>
+    <div id="qr-label-container" style="display:flex;justify-content:center;padding:8px 0 16px">
+      <!-- label rendered dynamically -->
+    </div>
+    <div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:8px;padding:10px 12px;font-size:12px;color:#166534;margin-bottom:4px">
+      ✅ Keranjang output berhasil dibuat. Cetak label untuk ditempel ke keranjang.
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-print-label')">Tutup</button>
+      <button class="btn btn-primary" onclick="doPrintLabel()">🖨️ Cetak Label</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ==================== TOAST ==================== -->
+<div id="toast"></div>
+
+
+<!-- ==================== SCRIPT ==================== -->
+<script>
+const SUPABASE_URL = 'https://dxixqyokuqrdprupsvic.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR4aXhxeW9rdXFyZHBydXBzdmljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5NjM3ODcsImV4cCI6MjA5MjUzOTc4N30.D_yaPwNbe4FFg_hmDeJ9cuxzbNvXZT8l1_TyZuq1t1M';
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ============================================================
+// STATE
+// ============================================================
+let currentUser      = null;
+let pendingMovements = [];   // ke MARINASI, status PENDING
+let marinasiStock     = [];   // baskets lokasi=MARINASI, status=AKTIF
+let activeWOs        = [];   // processing_orders tipe=MARINASI, IN_PROGRESS/OPEN
+let closedWOs        = [];   // processing_orders tipe=MARINASI, COMPLETED/CANCELLED
+let selectedWsId          = null; // workstation dipilih di modal pindah → workstation
+let lastConfirmedBasketId = null; // basket_id dari movement yang baru dikonfirmasi
+let allWorkstations  = [];   // MARINASI type workstations
+let allProducts      = [];   // product_master
+
+// Modal state (Tab 1)
+let activeMovementId = null;
+let activePindahId   = null;
+let selectedDest     = null;
+let expandedGroups   = new Set();
+
+// ============================================================
+// UTILITY
+// ============================================================
+async function sha256(str) {
+  const buf  = new TextEncoder().encode(str);
+  const hash = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+function fmt(n,d=0){if(n==null||n==='')return'—';return Number(n).toLocaleString('id-ID',{minimumFractionDigits:d,maximumFractionDigits:d})}
+function fmtKg(n){if(n==null)return'—';return Number(n).toLocaleString('id-ID',{minimumFractionDigits:1,maximumFractionDigits:1})+' kg'}
+function fmtDT(s){if(!s)return'—';return new Date(s).toLocaleString('id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}
+function fmtDate(s){if(!s)return'—';return new Date(s).toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'})}
+function todayISO(){return new Date().toLocaleString('sv-SE',{timeZone:'Asia/Jakarta'}).split(' ')[0]}
+function showToast(msg,type='success'){const t=document.getElementById('toast');t.textContent=msg;t.className=`show ${type}`;setTimeout(()=>{t.className=''},3500)}
+function setEl(id,val){const e=document.getElementById(id);if(e)e.textContent=val}
+function navTo(url) {
+  closeSidebar();
+  if (currentUser) {
+        localStorage.setItem('rpa_user', JSON.stringify(currentUser));
+        sessionStorage.setItem('rpa_user', JSON.stringify(currentUser));
+    }
+  window.location.href = url;
+}
+function openModal(id){document.getElementById(id).classList.add('open')}
+function closeModal(id){document.getElementById(id).classList.remove('open')}
+function showErr(id,msg){const e=document.getElementById(id);if(e){e.textContent=msg;e.style.display=msg?'block':'none'}}
+function lokasiLabel(l){const m={CHILLER:'Chiller',BONELESS:'Boneless',MARINASI:'Marinasi',BLASTING:'Blasting',SOLD:'Sold',BYPRODUCT_DIRECT:'By-product',LANTAI:'Lantai Produksi'};return m[l]||l||'—'}
+
+// ============================================================
+// TAB NAVIGATION
+// ============================================================
+function switchTab(tab) {
+  ['masuk','wo','ws'].forEach(t => {
+    document.getElementById(`tab-pane-${t}`)?.classList.remove('active');
+    document.getElementById(`tab-btn-${t}`)?.classList.remove('active');
+    document.getElementById(`tab-${t}`)?.classList.remove('active');
+  });
+  document.getElementById(`tab-${tab}`)?.classList.add('active');
+  document.getElementById(`tab-btn-${tab}`)?.classList.add('active');
+}
+
+// ============================================================
+// AUTH
+// ============================================================
+async function doLogin() {
+  const username = document.getElementById('inp-username').value.trim();
+  const password = document.getElementById('inp-password').value;
+  const errEl    = document.getElementById('login-error');
+  errEl.style.display = 'none';
+  if (!username || !password) { showLoginErr('Username dan password wajib diisi.'); return; }
+  const btn = document.getElementById('btn-login');
+  btn.disabled = true; btn.textContent = 'Memproses…';
+  try {
+    const hash = await sha256(password);
+    const { data, error } = await db.from('users')
+      .select('id, nama, username, role, aktif, pin, is_system_admin')
+      .eq('username', username).eq('password_hash', hash).eq('aktif', true).maybeSingle();
+    if (error) throw error;
+    if (!data) { showLoginErr('Username atau password salah.'); return; }
+    currentUser = data;
+    localStorage.setItem('rpa_user', JSON.stringify(data));
+    startApp();
+  } catch(e) {
+    console.error(e);
+    showLoginErr('Gagal terhubung ke server. Periksa koneksi internet.');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Masuk →';
+  }
+}
+function showLoginErr(msg){const e=document.getElementById('login-error');e.textContent=msg;e.style.display='block'}
+function doLogout(){localStorage.removeItem('rpa_user');currentUser=null;document.getElementById('app-screen').style.display='none';document.getElementById('login-screen').style.display='flex'}
+
+// ============================================================
+// APP START
+// ============================================================
+function startApp() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app-screen').style.display   = 'block';
+  const av = document.getElementById('user-avatar');
+  if (av) av.textContent = (currentUser.nama||'?')[0].toUpperCase();
+  setEl('sidebar-name', currentUser.nama);
+  setEl('sidebar-role', currentUser.role + (currentUser.is_system_admin?' (Admin)':''));
+  if (currentUser.is_system_admin) {
+    const umEl = document.getElementById('nav-user-mgmt');
+    if (umEl) umEl.style.display = 'flex';
+  }
+  startClock();
+  loadAll();
+}
+function startClock() {
+  function tick() {
+    const now = new Date();
+    setEl('clock', now.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit'}));
+    setEl('topbar-date', now.toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'}));
+  }
+  tick(); setInterval(tick,1000);
+}
+
+// ============================================================
+// DATA LOADING
+// ============================================================
+async function loadAll() {
+  await Promise.all([
+    loadPendingMovements(),
+    loadMarinasiStock(),
+    loadActiveWOs(),
+    loadClosedWOs(),
+    loadWorkstations(),
+    loadProducts(),
+    loadWSWorkers(),
+    loadWSOutputsToday()
+  ]);
+  renderSummaryCards();
+  renderPendingList();
+  renderStok();
+  if (typeof renderWOTab === 'function') renderWOTab();
+  if (typeof renderWSTab === 'function') renderWSTab();
+  renderClosedWOs();
+}
+
+async function loadPendingMovements() {
+  const { data, error } = await db
+    .from('basket_movements')
+    .select(`
+      id, basket_id, qty_pindah, kg_pindah, dari_lokasi, created_at,
+      baskets (
+        basket_code, qty_sisa, kg_sisa, lokasi,
+        product_master ( nama_produk, product_code, kategori )
+      )
+    `)
+    .eq('ke_lokasi', 'MARINASI')
+    .eq('status', 'PENDING')
+    .order('created_at');
+  if (!error) pendingMovements = data || [];
+}
+
+async function loadMarinasiStock() {
+  const { data, error } = await db
+    .from('baskets')
+    .select(`
+      id, basket_code, basket_type, qty_sisa, kg_sisa, lokasi, status, batch_id, product_id, created_at, updated_at,
+      product_master ( id, nama_produk, product_code, kategori, kg_min, kg_max )
+    `)
+    .eq('lokasi', 'MARINASI')
+    .eq('status', 'AKTIF')
+    .order('updated_at', { ascending: false });
+  if (!error) marinasiStock = data || [];
+}
+
+async function loadActiveWOs() {
+  const { data, error } = await db
+    .from('processing_orders')
+    .select(`
+      id, order_code, status, target_kg, target_qty_ekor, catatan, tanggal, created_at,
+      product_master ( nama_produk, product_code ),
+      wo_workstations (
+        workstation_id, target_kg, target_qty_ekor, selesai_at, selesai_by,
+        workstations ( id, kode, nama ),
+        users!selesai_by ( nama )
+      ),
+      processing_inputs ( id, basket_id, workstation_id, kg_diambil, qty_input ),
+      processing_outputs ( id, output_type, kg_output, qty_output, worker_id, workstation_id, tanggal_produksi )
+    `)
+    .eq('tipe', 'MARINASI')
+    .in('status', ['OPEN','IN_PROGRESS'])
+    .order('created_at');
+  if (!error) activeWOs = data || [];
+}
+
+async function loadClosedWOs() {
+  const fromEl = document.getElementById('closed-wo-from');
+  const toEl   = document.getElementById('closed-wo-to');
+
+  // Set defaults if empty: from = 30 days ago, to = today
+  if (fromEl && !fromEl.value) {
+    const d = new Date(); d.setDate(d.getDate() - 30);
+    fromEl.value = d.toISOString().split('T')[0];
+  }
+  if (toEl && !toEl.value) {
+    toEl.value = new Date().toISOString().split('T')[0];
+  }
+
+  let q = db.from('processing_orders')
+    .select(`
+      id, order_code, status, target_kg, target_qty_ekor, tanggal, updated_at,
+      product_master ( nama_produk, product_code ),
+      wo_workstations ( workstation_id, selesai_at, workstations ( kode ) ),
+      processing_outputs ( id, output_type, kg_output, qty_output )
+    `)
+    .eq('tipe', 'MARINASI')
+    .in('status', ['COMPLETED','CANCELLED'])
+    .order('updated_at', { ascending: false });
+
+  if (fromEl?.value) q = q.gte('updated_at', fromEl.value + 'T00:00:00');
+  if (toEl?.value)   q = q.lte('updated_at', toEl.value   + 'T23:59:59');
+
+  const { data, error } = await q;
+  if (!error) closedWOs = data || [];
+}
+
+async function loadAndRenderClosedWOs() {
+  await loadClosedWOs();
+  renderClosedWOs();
+}
+
+function renderClosedWOs() {
+  const tbody = document.getElementById('closed-wo-tbody');
+  const pill  = document.getElementById('pill-closed-wo-count');
+  if (!tbody) return;
+  if (pill) pill.textContent = closedWOs.length + ' WO';
+  if (!closedWOs.length) {
+    tbody.innerHTML = '<tr><td colspan="8"><div class="empty"><div class="e-icon">🔒</div>Tidak ada WO selesai dalam periode ini.</div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = closedWOs.map(wo => {
+    const pm       = wo.product_master || {};
+    const wwsList  = wo.wo_workstations || [];
+    const wsStr    = wwsList.map(w => w.workstations?.kode || '').filter(Boolean).join(', ') || '—';
+    const outKg    = (wo.processing_outputs || [])
+      .filter(o => o.output_type === 'PRIMARY')
+      .reduce((s, o) => s + (Number(o.kg_output) || 0), 0);
+    const outQty   = (wo.processing_outputs || [])
+      .filter(o => o.output_type === 'PRIMARY')
+      .reduce((s, o) => s + (Number(o.qty_output) || 0), 0);
+    const pct      = wo.target_kg > 0 ? Math.round(outKg / wo.target_kg * 100) : null;
+    const pctColor = pct === null ? '' : (pct >= 90 ? 'color:#166534' : (pct >= 70 ? 'color:#92400e' : 'color:#991b1b'));
+    const statusColor = {
+      COMPLETED: 'b-aktif', APPROVED: 'b-aktif', CANCELLED: 'background:#fee2e2;color:#991b1b'
+    }[wo.status] || '';
+    return '<tr>' +
+      '<td style="font-family:monospace;font-weight:800;font-size:12px">' + wo.order_code + '</td>' +
+      '<td>' + (pm.nama_produk || '—') + '<div class="tbl-sub">' + (pm.product_code || '') + '</div></td>' +
+      '<td>' + fmtKg(wo.target_kg) + '<div class="tbl-sub">' + fmt(wo.target_qty_ekor) + ' ekor</div></td>' +
+      '<td><strong>' + fmt(outQty) + ' ekor</strong><div class="tbl-sub" style="' + pctColor + '">' +
+        fmtKg(outKg) + (pct !== null ? ' · ' + pct + '%' : '') + '</div></td>' +
+      '<td><span class="badge ' + statusColor + '">' + wo.status + '</span></td>' +
+      '<td style="font-size:12px">' + wsStr + '</td>' +
+      '<td style="font-size:12px">' + fmtDate(wo.tanggal || wo.updated_at) + '</td>' +
+      '<td><button class="btn btn-ghost btn-sm" onclick="toggleClosedWODetail(\'' + wo.id + '\')">▼ Detail</button></td>' +
+    '</tr>' +
+    '<tr id="cwo-detail-' + wo.id + '" style="display:none"><td colspan="8" style="padding:0;background:#f8faff">' +
+      '<div id="cwo-body-' + wo.id + '" style="padding:12px 16px;font-size:12px;color:#6b7280">⏳ Memuat…</div>' +
+    '</td></tr>';
+  }).join('');
+}
+
+async function toggleClosedWODetail(woId) {
+  const row  = document.getElementById('cwo-detail-' + woId);
+  const body = document.getElementById('cwo-body-' + woId);
+  const btn  = row?.previousElementSibling?.querySelector('button');
+  if (!row) return;
+  const isOpen = row.style.display !== 'none';
+  if (isOpen) {
+    row.style.display = 'none';
+    if (btn) btn.textContent = '▼ Detail';
+    return;
+  }
+  row.style.display = '';
+  if (btn) btn.textContent = '▲ Tutup';
+  if (!body) return;
+  body.innerHTML = '⏳ Memuat…';
+  try {
+    const { data: inputs } = await db.from('processing_inputs')
+      .select('workstation_id, kg_diambil, qty_input, baskets(basket_code), product_master(nama_produk)')
+      .eq('order_id', woId);
+    const { data: outputs } = await db.from('processing_outputs')
+      .select('workstation_id, kg_output, qty_output, output_type, baskets(basket_code), product_master(nama_produk), users!worker_id(nama)')
+      .eq('order_id', woId).order('created_at', { ascending: false });
+
+    const iList  = inputs  || [];
+    const oList  = outputs || [];
+    const totalInKg  = iList.reduce((s, i) => s + (Number(i.kg_diambil) || 0), 0);
+    const totalOutKg = oList.filter(o => o.output_type === 'PRIMARY').reduce((s, o) => s + (Number(o.kg_output) || 0), 0);
+    const totalByKg  = oList.filter(o => o.output_type === 'BYPRODUCT').reduce((s, o) => s + (Number(o.kg_output) || 0), 0);
+
+    let html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">';
+
+    // Input side
+    html += '<div><div style="font-size:11px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">📥 Input (' + iList.length + ' keranjang · ' + fmtKg(totalInKg) + ')</div>';
+    if (iList.length) {
+      html += '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Keranjang</th><th>Produk</th><th>Kg</th></tr></thead><tbody>' +
+        iList.map(i => '<tr><td style="font-family:monospace;font-size:11px">' + (i.baskets?.basket_code || '—') + '</td>' +
+          '<td>' + (i.product_master?.nama_produk || '—') + '</td>' +
+          '<td>' + fmtKg(i.kg_diambil) + '<div class="tbl-sub">' + fmt(i.qty_input) + ' ekor</div></td></tr>').join('') +
+        '</tbody></table></div>';
+    } else { html += '<div style="color:#9ca3af;padding:8px 0">Tidak ada data input.</div>'; }
+    html += '</div>';
+
+    // Output side
+    html += '<div><div style="font-size:11px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">📦 Output (Primary ' + fmtKg(totalOutKg) + ' · Byproduct ' + fmtKg(totalByKg) + ')</div>';
+    if (oList.length) {
+      html += '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Keranjang</th><th>Produk</th><th>Qty / Kg</th><th>Tipe</th></tr></thead><tbody>' +
+        oList.map(o => {
+          const badge = o.output_type === 'PRIMARY'
+            ? '<span class="badge b-aktif">Primary</span>'
+            : '<span class="badge" style="background:#fce7f3;color:#9d174d">Byproduct</span>';
+          return '<tr><td style="font-family:monospace;font-size:11px">' + (o.baskets?.basket_code || '—') + '</td>' +
+            '<td>' + (o.product_master?.nama_produk || '—') + '</td>' +
+            '<td>' + fmt(o.qty_output) + ' ekor<div class="tbl-sub">' + fmtKg(o.kg_output) + '</div></td>' +
+            '<td>' + badge + '</td></tr>';
+        }).join('') +
+        '</tbody></table></div>';
+    } else { html += '<div style="color:#9ca3af;padding:8px 0">Tidak ada data output.</div>'; }
+    html += '</div></div>';
+
+    body.innerHTML = html;
+  } catch(e) {
+    body.innerHTML = '<div style="color:#dc2626">⚠ Gagal memuat: ' + e.message + '</div>';
+  }
+}
+
+async function loadWorkstations() {
+  const { data } = await db.from('workstations').select('*').eq('tipe','MARINASI').eq('aktif',true).order('kode');
+  allWorkstations = data || [];
+}
+
+async function loadProducts() {
+  const { data } = await db.from('product_master').select('id, product_code, nama_produk, kategori, kg_min, kg_max').eq('aktif',true).order('nama_produk');
+  allProducts = data || [];
+}
+
+// ============================================================
+// SUMMARY CARDS
+// ============================================================
+function renderSummaryCards() {
+  setEl('sc-pending',  pendingMovements.length);
+  setEl('sc-stok',     marinasiStock.length);
+  setEl('sc-wo-aktif', activeWOs.filter(w=>w.status==='IN_PROGRESS').length);
+
+  // Output hari ini (kg primary)
+  const todayStr = todayISO();
+  const todayOutputKg = activeWOs.reduce((sum, wo) => {
+    return sum + (wo.processing_outputs||[])
+      .filter(o => o.output_type==='PRIMARY' && (o.tanggal_produksi||'').startsWith(todayStr))
+      .reduce((s,o) => s + (Number(o.kg_output)||0), 0);
+  }, 0);
+  setEl('sc-output-kg', fmtKg(todayOutputKg));
+
+  setEl('sc-approv', activeWOs.filter(w=>w.status==='IN_PROGRESS').length);
+}
+
+// ============================================================
+// TAB 1 — RENDER PENDING LIST
+// ============================================================
+function renderPendingList() {
+  const tbody  = document.getElementById('pending-tbody');
+  const pill   = document.getElementById('pill-pending-count');
+  const btnAll = document.getElementById('btn-konfirm-semua');
+  if (pill)   pill.textContent = `${pendingMovements.length} pending`;
+  if (btnAll) btnAll.style.display = pendingMovements.length > 1 ? '' : 'none';
+
+  if (!pendingMovements.length) {
+    tbody.innerHTML = `<tr><td colspan="5"><div class="empty"><div class="e-icon">📭</div>Tidak ada keranjang pending masuk.</div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = pendingMovements.map(mv => {
+    const b   = mv.baskets || {};
+    const pm  = b.product_master || {};
+    return `<tr>
+      <td style="font-family:monospace;font-weight:700">${b.basket_code||'—'}</td>
+      <td>${pm.nama_produk||'—'}<div class="tbl-sub">${pm.product_code||''}</div></td>
+      <td>${fmt(mv.qty_pindah)} ekor<div class="tbl-sub">${fmtKg(mv.kg_pindah)}</div></td>
+      <td><span class="badge b-chiller">${lokasiLabel(mv.dari_lokasi)}</span></td>
+      <td>
+        <div style="display:flex;gap:4px">
+          <button class="btn btn-green btn-sm" onclick="openKonfirmasi('${mv.id}')">✅ Konfirm</button>
+          <button class="btn btn-red btn-sm"   onclick="openTolak('${mv.id}','${b.basket_code||''}')">✗</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ============================================================
+// TAB 1 — SCAN MASUK
+// ============================================================
+function clearScanMasukResult() {
+  const r = document.getElementById('scan-masuk-result');
+  if (r) { r.className = 'scan-result'; r.style.display = 'none'; }
+}
+
+async function doScanMasuk() {
+  const input = document.getElementById('scan-masuk-input');
+  const code  = input.value.trim();
+  if (!code) return;
+  const r = document.getElementById('scan-masuk-result');
+
+  // Cari movement PENDING dengan basket_code tsb
+  const mv = pendingMovements.find(m => (m.baskets?.basket_code||'').toLowerCase() === code.toLowerCase());
+  if (!mv) {
+    r.className = 'scan-result visible scan-err';
+    document.getElementById('smr-code').textContent = code;
+    document.getElementById('smr-detail').textContent = 'Keranjang tidak ditemukan dalam antrian masuk Marinasi.';
+    document.getElementById('smr-actions').innerHTML = '';
+    return;
+  }
+  const b  = mv.baskets || {};
+  const pm = b.product_master || {};
+  r.className = 'scan-result visible scan-ok';
+  document.getElementById('smr-code').textContent   = b.basket_code||code;
+  document.getElementById('smr-detail').innerHTML   = `
+    <strong>${pm.nama_produk||'—'}</strong> (${pm.product_code||''})<br>
+    ${fmt(mv.qty_pindah)} ekor &nbsp;·&nbsp; ${fmtKg(mv.kg_pindah)}<br>
+    Dari: ${lokasiLabel(mv.dari_lokasi)}`;
+  document.getElementById('smr-actions').innerHTML  = `
+    <button class="btn btn-green btn-sm" onclick="openKonfirmasi('${mv.id}')">✅ Konfirmasi Masuk</button>
+    <button class="btn btn-red btn-sm"   onclick="openTolak('${mv.id}','${b.basket_code||''}')">✗ Tolak</button>`;
+  input.value = '';
+}
+
+// ============================================================
+// TAB 1 — KONFIRMASI MASUK
+// ============================================================
+function openKonfirmasi(mvId) {
+  activeMovementId = mvId;
+  // Reset ke step 1
+  document.getElementById('mk-step1').style.display = '';
+  document.getElementById('mk-step2').style.display = 'none';
+  const mv = pendingMovements.find(m => m.id === mvId);
+  if (!mv) return;
+  const b  = mv.baskets || {};
+  const pm = b.product_master || {};
+  setEl('mk-code',   b.basket_code||'—');
+  setEl('mk-produk', pm.nama_produk||'—');
+  setEl('mk-qty-kg', `${fmt(mv.qty_pindah)} ekor / ${fmtKg(mv.kg_pindah)}`);
+  setEl('mk-dari',   lokasiLabel(mv.dari_lokasi));
+  showErr('mk-err', '');
+  openModal('modal-konfirm');
+}
+
+async function doKonfirmasi() {
+  if (!activeMovementId) return;
+  const btn = document.getElementById('mk-btn-ok');
+  btn.disabled = true; btn.textContent = 'Memproses…';
+  try {
+    // Simpan basket_id sebelum loadAll (movement akan hilang dari list)
+    const mv = pendingMovements.find(m => m.id === activeMovementId);
+    lastConfirmedBasketId = mv?.basket_id || null;
+    const mvCode = mv?.baskets?.basket_code || '—';
+    const mvQtyKg = mv ? `${fmt(mv.qty_pindah)} ekor / ${fmtKg(mv.kg_pindah)}` : '—';
+
+    const { data, error } = await db.rpc('konfirmasi_movement', {
+      p_movement_id: activeMovementId,
+      p_user_id:     currentUser.id
+    });
+    if (error) throw error;
+    const r = typeof data === 'string' ? JSON.parse(data) : data;
+    if (!(r.ok ?? r.success)) throw new Error(r.error || 'Konfirmasi gagal');
+
+    clearScanMasukResult();
+    await loadAll();
+
+    // Switch ke step 2 — tawaran alokasi ke WS
+    document.getElementById('mk-step1').style.display = 'none';
+    document.getElementById('mk-step2').style.display = '';
+    setEl('mk-post-code', mvCode);
+    setEl('mk-post-sisa', mvQtyKg);
+  } catch(e) {
+    console.error(e);
+    showErr('mk-err', 'Gagal konfirmasi: ' + (e.message||''));
+  } finally {
+    btn.disabled = false; btn.textContent = '✅ Konfirmasi Masuk';
+  }
+}
+
+function openTolakFromKonfirm() {
+  closeModal('modal-konfirm');
+  const mv = pendingMovements.find(m => m.id === activeMovementId);
+  openTolak(activeMovementId, mv?.baskets?.basket_code||'—');
+}
+
+function alokasiDariKonfirm() {
+  closeModal('modal-konfirm');
+  if (!lastConfirmedBasketId) return;
+  // Cari basket yang baru masuk di marinasiStock
+  const basket = marinasiStock.find(b => b.id === lastConfirmedBasketId);
+  if (!basket) { showToast('Keranjang tidak ditemukan di stok Marinasi.', 'error'); return; }
+  // Buka modal pindah dan langsung pilih WORKSTATION
+  openPindahKeluar(basket.id);
+  // Tunda sedikit agar modal render dulu, lalu trigger selectDest
+  setTimeout(() => selectDest('WORKSTATION'), 80);
+}
+
+function openTolak(mvId, basketCode) {
+  activeMovementId = mvId;
+  setEl('mt-code', basketCode);
+  document.getElementById('mt-alasan').value = '';
+  showErr('mt-err', '');
+  openModal('modal-tolak');
+}
+
+async function doTolak() {
+  const alasan = document.getElementById('mt-alasan').value.trim();
+  showErr('mt-err', '');
+  if (!alasan) { showErr('mt-err', 'Alasan penolakan wajib diisi.'); return; }
+  const btn = document.getElementById('mt-btn-ok');
+  btn.disabled = true; btn.textContent = 'Memproses…';
+  try {
+    const { error } = await db.rpc('tolak_movement', {
+      p_movement_id:  activeMovementId,
+      p_user_id:      currentUser.id,
+      p_alasan:       alasan
+    });
+    if (error) throw error;
+    showToast('Keranjang berhasil ditolak.', 'warning');
+    closeModal('modal-tolak');
+    clearScanMasukResult();
+    await loadAll();
+  } catch(e) {
+    console.error(e);
+    showErr('mt-err', 'Gagal menolak: ' + (e.message||''));
+  } finally {
+    btn.disabled = false; btn.textContent = '✗ Tolak Keranjang';
+  }
+}
+
+// ============================================================
+// TAB 1 — KONFIRMASI SEMUA
+// ============================================================
+function openKonfirmSemua() {
+  const desc = document.getElementById('mks-desc');
+  if (desc) desc.textContent = `${pendingMovements.length} keranjang pending akan dikonfirmasi masuk ke Lantai Marinasi.`;
+  showErr('mks-err', '');
+  openModal('modal-konfirm-semua');
+}
+
+async function doKonfirmasiSemua() {
+  const btn = document.getElementById('mks-btn-ok');
+  btn.disabled = true; btn.textContent = 'Memproses…';
+  let ok = 0, fail = 0;
+  for (const mv of pendingMovements) {
+    try {
+      const { data, error } = await db.rpc('konfirmasi_movement', {
+        p_movement_id: mv.id,
+        p_user_id:     currentUser.id
+      });
+      if (error) { console.error(error); fail++; continue; }
+      const r = typeof data === 'string' ? JSON.parse(data) : data;
+      if (r.ok ?? r.success) ok++; else { console.error(r.error); fail++; }
+    } catch { fail++; }
+  }
+  btn.disabled = false; btn.textContent = '✅ Ya, Konfirmasi Semua';
+  closeModal('modal-konfirm-semua');
+  showToast(`${ok} keranjang dikonfirmasi${fail?`, ${fail} gagal`:''}!`, fail?'warning':'success');
+  await loadAll();
+}
+
+// ============================================================
+// TAB 1 — RENDER STOK LANTAI (grouped by produk)
+// ============================================================
+function renderStok() {
+  const pill = document.getElementById('pill-stok-count');
+  if (pill) pill.textContent = `${marinasiStock.length} item`;
+
+  const f = (document.getElementById('stok-search')?.value||'').trim().toLowerCase();
+  let list = marinasiStock;
+  if (f) {
+    list = list.filter(b => {
+      const code = (b.basket_code||'').toLowerCase();
+      const prod = (b.product_master?.nama_produk||'').toLowerCase();
+      return code.includes(f) || prod.includes(f);
+    });
+  }
+
+  // Group by product
+  const groups = {};
+  list.forEach(b => {
+    const pm  = b.product_master || {};
+    const key = pm.product_code || 'UNKNOWN';
+    if (!groups[key]) groups[key] = { key, nama: pm.nama_produk||'—', code: key, baskets: [], totalQty: 0, totalKg: 0 };
+    groups[key].baskets.push(b);
+    groups[key].totalQty += Number(b.qty_sisa)||0;
+    groups[key].totalKg  += Number(b.kg_sisa)||0;
+  });
+
+  const tbody = document.getElementById('stok-tbody');
+  if (!Object.keys(groups).length) {
+    tbody.innerHTML = `<tr><td colspan="4"><div class="empty"><div class="e-icon">📦</div>Tidak ada stok di lantai Marinasi.</div></td></tr>`;
+    return;
+  }
+
+  let html = '';
+  Object.values(groups).forEach(g => {
+    const isExp  = expandedGroups.has(g.key);
+    const lastIdx = g.baskets.length - 1;
+    html += `<tr class="grp-row${isExp?' expanded':''}" onclick="toggleGroup('${g.key}')">
+      <td colspan="2">
+        <i class="grp-arrow">▶</i> <strong>${g.nama}</strong>
+        <span style="font-size:11px;font-weight:400;color:#4b5563;margin-left:6px">${g.code}</span>
+      </td>
+      <td><strong>${fmt(g.totalQty)}</strong> ekor &nbsp;·&nbsp; <strong>${fmtKg(g.totalKg)}</strong></td>
+      <td><strong>${g.baskets.length}</strong> keranjang</td>
+    </tr>`;
+    if (isExp) {
+      g.baskets.forEach((b, i) => {
+        html += `<tr class="sub-row${i===lastIdx?' last-sub':''}">
+          <td colspan="2" style="font-family:monospace;font-weight:700">${b.basket_code}</td>
+          <td>${fmt(b.qty_sisa)} ekor &nbsp;·&nbsp; ${fmtKg(b.kg_sisa)}</td>
+          <td>
+            <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openPindahKeluar('${b.id}')">📤 Pindah</button>
+          </td>
+        </tr>`;
+      });
+    }
+  });
+  tbody.innerHTML = html;
+}
+
+function toggleGroup(key) {
+  if (expandedGroups.has(key)) expandedGroups.delete(key);
+  else expandedGroups.add(key);
+  renderStok();
+}
+
+// ============================================================
+// TAB 1 — PINDAH KELUAR
+// ============================================================
+function openPindahKeluar(basketId) {
+  activePindahId = basketId;
+  selectedDest   = null;
+  selectedWsId   = null;
+  const b  = marinasiStock.find(x => x.id === basketId);
+  if (!b) return;
+  const pm = b.product_master || {};
+  setEl('mp-code',   b.basket_code);
+  setEl('mp-produk', pm.nama_produk||'—');
+  setEl('mp-qty-kg', `${fmt(b.qty_sisa)} ekor / ${fmtKg(b.kg_sisa)}`);
+  document.getElementById('mp-catatan').value = '';
+  document.getElementById('mp-qty').value = b.qty_sisa || '';
+  document.getElementById('mp-kg').value  = b.kg_sisa  || '';
+  // Reset semua dest button + sembunyikan panel WS
+  ['chiller','blasting','workstation'].forEach(d =>
+    document.getElementById(`dest-${d}`)?.classList.remove('selected'));
+  document.getElementById('mp-ws-panel').style.display    = 'none';
+  document.getElementById('mp-wo-info').style.display     = 'none';
+  document.getElementById('mp-wo-select').value           = '';
+  document.getElementById('mp-ws-cards').innerHTML =
+    '<div style="text-align:center;padding:12px;color:#9ca3af;font-size:12px">Pilih Work Order dulu.</div>';
+  document.getElementById('mp-alloc-success').style.display = 'none';
+  showErr('mp-err', '');
+  openModal('modal-pindah');
+}
+
+function selectDest(dest) {
+  selectedDest = dest;
+  selectedWsId = null;
+  showErr('mp-err', '');
+  ['chiller','blasting','workstation'].forEach(d =>
+    document.getElementById(`dest-${d}`)?.classList.remove('selected'));
+  document.getElementById(`dest-${dest.toLowerCase()}`)?.classList.add('selected');
+
+  const panel = document.getElementById('mp-ws-panel');
+  if (dest === 'WORKSTATION') {
+    panel.style.display = 'block';
+    // Populate WO dropdown: WO OPEN/IN_PROGRESS
+    const woSel = document.getElementById('mp-wo-select');
+    woSel.innerHTML = '<option value="">— Pilih Work Order —</option>';
+    (activeWOs||[]).filter(wo => ['OPEN','IN_PROGRESS'].includes(wo.status)).forEach(wo => {
+      const pm  = wo.product_master || {};
+      const opt = document.createElement('option');
+      opt.value = wo.id;
+      opt.textContent = `${wo.order_code} — ${pm.nama_produk || ''} (${fmt(wo.target_qty_ekor)} ek / ${fmtKg(wo.target_kg)})`;
+      woSel.appendChild(opt);
+    });
+    // Reset info + cards
+    document.getElementById('mp-wo-info').style.display = 'none';
+    document.getElementById('mp-ws-cards').innerHTML =
+      '<div style="text-align:center;padding:12px;color:#9ca3af;font-size:12px">Pilih Work Order dulu.</div>';
+  } else {
+    panel.style.display = 'none';
+  }
+}
+
+async function onWOSelectChange() {
+  const woId = document.getElementById('mp-wo-select').value;
+  selectedWsId = null;
+  const infoEl  = document.getElementById('mp-wo-info');
+  const cardsEl = document.getElementById('mp-ws-cards');
+  infoEl.style.display = 'none';
+  cardsEl.innerHTML = '<div style="text-align:center;padding:12px;color:#9ca3af;font-size:12px">Pilih Work Order dulu.</div>';
+  if (!woId) return;
+
+  const wo = (activeWOs||[]).find(w => w.id === woId);
+  if (!wo) return;
+  const pm = wo.product_master || {};
+
+  // ── Isi info box WO ──
+  document.getElementById('mp-wo-info-code').textContent = wo.order_code;
+  const statusMap = { OPEN:'#16a34a', IN_PROGRESS:'#2563eb', COMPLETED:'#16a34a' };
+  const statusEl  = document.getElementById('mp-wo-info-status');
+  statusEl.textContent = wo.status.replace('_',' ');
+  statusEl.style.background = (statusMap[wo.status]||'#6b7280') + '22';
+  statusEl.style.color      = statusMap[wo.status] || '#6b7280';
+  document.getElementById('mp-wo-info-produk').textContent = pm.nama_produk || '—';
+  document.getElementById('mp-wo-info-target').textContent = `${fmt(wo.target_qty_ekor)} ekor / ${fmtKg(wo.target_kg)} kg`;
+  const memoEl = document.getElementById('mp-wo-info-memo');
+  if (wo.catatan) { memoEl.textContent = '📝 ' + wo.catatan; memoEl.style.display = ''; }
+  else            { memoEl.style.display = 'none'; }
+  infoEl.style.display = '';
+
+  // ── Ambil alokasi existing dari DB ──
+  cardsEl.innerHTML = '<div style="text-align:center;padding:12px;color:#9ca3af;font-size:12px">Memuat data workstation…</div>';
+  const { data: inputs } = await db.from('processing_inputs')
+    .select('workstation_id, kg_diambil, qty_input').eq('order_id', woId);
+
+  const allocMap = {};
+  (inputs||[]).forEach(inp => {
+    if (!allocMap[inp.workstation_id]) allocMap[inp.workstation_id] = { kg: 0, qty: 0 };
+    allocMap[inp.workstation_id].kg  += Number(inp.kg_diambil)||0;
+    allocMap[inp.workstation_id].qty += Number(inp.qty_input) ||0;
+  });
+
+  // Update total teralokasi di info box
+  const totKg  = Object.values(allocMap).reduce((s,a) => s + a.kg,  0);
+  const totQty = Object.values(allocMap).reduce((s,a) => s + a.qty, 0);
+  document.getElementById('mp-wo-info-alloc').textContent = `${fmt(totQty)} ekor / ${fmtKg(totKg)} kg`;
+
+  // ── Render kartu WS ──
+  const wsList = (wo.wo_workstations||[]).map(wws => ({
+    id:            wws.workstations?.id,
+    kode:          wws.workstations?.kode,
+    nama:          wws.workstations?.nama,
+    ws_target_kg:  wws.target_kg,
+    ws_target_ekor:wws.target_qty_ekor
+  })).filter(ws => ws.id);
+
+  if (!wsList.length) {
+    cardsEl.innerHTML = '<div style="text-align:center;padding:12px;color:#dc2626;font-size:12px">⚠️ Tidak ada WS yang di-assign ke WO ini.</div>';
+    return;
+  }
+
+  cardsEl.innerHTML = wsList.map(ws => {
+    const alloc      = allocMap[ws.id] || { kg: 0, qty: 0 };
+    const targetKg   = Number(ws.ws_target_kg)   || 0;
+    const targetEkor = Number(ws.ws_target_ekor) || 0;
+    const sisaKg     = Math.max(0, targetKg   - alloc.kg);
+    const sisaEkor   = Math.max(0, targetEkor - alloc.qty);
+    const pctKg      = targetKg > 0 ? Math.min(100, Math.round(alloc.kg / targetKg * 100)) : 0;
+    const full       = targetKg > 0 && alloc.kg >= targetKg;
+    const sisaColor  = sisaKg > 0 ? '#16a34a' : '#dc2626';
+    return `
+      <div class="ws-alloc-card" data-wsid="${ws.id}"
+           onclick="selectWsCard('${ws.id}', this)"
+           style="border:1.5px solid #d1d5db;border-radius:8px;padding:10px 12px;
+                  cursor:${full?'not-allowed':'pointer'};background:${full?'#f9fafb':'white'};
+                  opacity:${full?0.55:1};transition:border-color .15s,background .15s">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+          <span style="font-weight:800;color:#374151;font-size:13px">${ws.kode} — ${ws.nama}</span>
+          ${full ? '<span style="font-size:10px;background:#e5e7eb;color:#6b7280;padding:2px 6px;border-radius:10px">PENUH</span>' : ''}
+        </div>
+        <div style="font-size:11px;color:#6b7280;display:flex;gap:14px;flex-wrap:wrap">
+          <span>Target: <strong style="color:#374151">${fmt(targetEkor)} ek / ${fmtKg(targetKg)}</strong></span>
+          <span>BB Terkirim: <strong style="color:#2563eb">${fmt(alloc.qty)} ek / ${fmtKg(alloc.kg)}</strong></span>
+          <span>Sisa: <strong style="color:${sisaColor}">${fmt(sisaEkor)} ek / ${fmtKg(sisaKg)}</strong></span>
+        </div>
+        <div style="margin-top:6px;background:#f3f4f6;border-radius:4px;height:4px;overflow:hidden">
+          <div style="height:100%;width:${pctKg}%;background:${pctKg>=100?'#dc2626':'#2563eb'};transition:width .3s"></div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function selectWsCard(wsId, el) {
+  if (el.style.cursor === 'not-allowed') return; // penuh, tidak bisa dipilih
+  selectedWsId = wsId;
+  document.querySelectorAll('.ws-alloc-card').forEach(c => {
+    const isSelected = c.dataset.wsid === wsId;
+    c.style.borderColor = isSelected ? '#2563eb' : '#d1d5db';
+    c.style.background  = isSelected ? '#faf5ff' : 'white';
+  });
+}
+
+async function doPindahKeluar() {
+  if (!activePindahId) { showErr('mp-err','Pilih keranjang terlebih dahulu.'); return; }
+  if (!selectedDest)   { showErr('mp-err','Pilih tujuan terlebih dahulu.'); return; }
+  const b = marinasiStock.find(x => x.id === activePindahId);
+  if (!b) return;
+
+  // ── Baca & validasi qty / kg yang dipindahkan ──
+  const qtyPindah = parseInt(document.getElementById('mp-qty').value)   || 0;
+  const kgPindah  = parseFloat(document.getElementById('mp-kg').value)  || 0;
+  if (qtyPindah <= 0)          { showErr('mp-err','Jumlah ekor harus diisi.'); return; }
+  if (kgPindah  <= 0)          { showErr('mp-err','Berat (kg) harus diisi.'); return; }
+  if (qtyPindah > b.qty_sisa)  { showErr('mp-err',`Ekor melebihi sisa keranjang (${fmt(b.qty_sisa)} ekor).`); return; }
+  if (kgPindah  > b.kg_sisa + 0.05) { showErr('mp-err',`Kg melebihi sisa keranjang (${fmtKg(b.kg_sisa)}).`); return; }
+
+  const catatan = document.getElementById('mp-catatan').value.trim();
+  const btn = document.getElementById('mp-btn-ok');
+  btn.disabled = true; btn.textContent = 'Memproses…';
+
+  // Helper update basket setelah transaksi
+  async function kurangiBasket() {
+    const newQty = Math.max(0, b.qty_sisa - qtyPindah);
+    const newKg  = Math.max(0, Math.round((b.kg_sisa - kgPindah) * 10) / 10);
+    await db.from('baskets').update({
+      qty_sisa: newQty,
+      kg_sisa:  newKg,
+      status:   newQty <= 0 ? 'HABIS' : 'AKTIF'
+    }).eq('id', activePindahId);
+  }
+
+  try {
+    // ── CASE: Alokasi langsung ke Work Station ──
+    if (selectedDest === 'WORKSTATION') {
+      const woId = document.getElementById('mp-wo-select').value;
+      const wsId = selectedWsId;
+      if (!woId) { showErr('mp-err','Pilih Work Order terlebih dahulu.'); return; }
+      if (!wsId) { showErr('mp-err','Pilih Workstation terlebih dahulu.'); return; }
+
+      const { error: inpErr } = await db.from('processing_inputs').insert({
+        order_id:       woId,
+        basket_id:      activePindahId,
+        batch_id:       b.batch_id || null,
+        product_id:     b.product_id,
+        qty_input:      qtyPindah,
+        kg_input:       kgPindah,
+        kg_diambil:     kgPindah,
+        workstation_id: wsId,
+        created_by:     currentUser.id
+      });
+      if (inpErr) throw inpErr;
+
+      // Update WO ke IN_PROGRESS bila masih OPEN
+      const wo = (activeWOs||[]).find(w => w.id === woId);
+      if (wo?.status === 'OPEN') {
+        await db.from('processing_orders').update({ status: 'IN_PROGRESS' }).eq('id', woId);
+      }
+
+      await kurangiBasket();
+      await loadAll();
+
+      const newQty = Math.max(0, b.qty_sisa - qtyPindah);
+      const newKg  = Math.max(0, Math.round((b.kg_sisa - kgPindah) * 10) / 10);
+
+      if (newQty > 0) {
+        // Masih ada sisa → tawaran alokasi lagi
+        const banner = document.getElementById('mp-alloc-success');
+        banner.textContent = `✅ Teralokasi ${fmt(qtyPindah)} ek / ${fmtKg(kgPindah)}. Sisa: ${fmt(newQty)} ek / ${fmtKg(newKg)}`;
+        banner.style.display = '';
+        // Update input default ke sisa baru
+        document.getElementById('mp-qty').value = newQty;
+        document.getElementById('mp-kg').value  = newKg;
+        // Update label sisa di info box
+        setEl('mp-qty-kg', `${fmt(newQty)} ekor / ${fmtKg(newKg)}`);
+        // Reset pilihan WS dan refresh cards
+        selectedWsId = null;
+        await onWOSelectChange();
+        showErr('mp-err', '');
+      } else {
+        showToast('Keranjang berhasil dialokasikan ke Work Station!', 'success');
+        closeModal('modal-pindah');
+      }
+      return;
+    }
+
+    // ── CASE: Pindah keluar ke lokasi lain (PENDING movement) ──
+    const { error: mvErr } = await db.from('basket_movements').insert({
+      basket_id:    activePindahId,
+      batch_id:     null,
+      dari_lokasi:  'MARINASI',
+      ke_lokasi:    selectedDest,
+      qty_pindah:   qtyPindah,
+      kg_pindah:    kgPindah,
+      status:       'PENDING',
+      catatan:      catatan || null,
+      submitted_by: currentUser.id
+    });
+    if (mvErr) throw mvErr;
+
+    await kurangiBasket();
+    showToast(`Keranjang dikirim ke ${lokasiLabel(selectedDest)} (PENDING konfirmasi penerima)`, 'success');
+    closeModal('modal-pindah');
+    await loadAll();
+  } catch(e) {
+    console.error(e);
+    showErr('mp-err', 'Gagal: ' + (e.message||''));
+  } finally {
+    btn.disabled = false; btn.textContent = '📤 Pindah Keluar';
+  }
+}
+
+// ============================================================
+// TAB 2 — HELPER: compute actual output from WO data
+// ============================================================
+function getActualKg(wo) {
+  return (wo.processing_outputs||[]).filter(o=>o.output_type==='PRIMARY').reduce((s,o)=>s+(Number(o.kg_output)||0),0);
+}
+function getActualQty(wo) {
+  return (wo.processing_outputs||[]).filter(o=>o.output_type==='PRIMARY').reduce((s,o)=>s+(Number(o.qty_output)||0),0);
+}
+function getSelisihPct(wo) {
+  const actual = getActualKg(wo);
+  const target = Number(wo.target_kg);
+  if (!target) return null;
+  return (Math.abs(actual - target) / target) * 100;
+}
+function progressBar(wo) {
+  const actual = getActualKg(wo);
+  const target = Number(wo.target_kg)||0;
+  if (!target) return '<span style="font-size:11px;color:#9ca3af">—</span>';
+  const pct  = Math.min((actual/target)*100, 100);
+  const sel  = getSelisihPct(wo);
+  const col  = wo.status==='COMPLETED' ? '#16a34a'
+              : pct>=100 ? '#d97706' : '#2563eb';
+  return `<div style="min-width:110px">
+    <div style="height:7px;background:#e5e7eb;border-radius:4px;overflow:hidden;margin-bottom:3px">
+      <div style="height:100%;width:${pct}%;border-radius:4px;background:${col}"></div>
+    </div>
+    <div style="font-size:11px;color:#6b7280">${fmtKg(actual)} / ${fmtKg(target)}${sel!=null?' ('+sel.toFixed(1)+'%)':''}</div>
+  </div>`;
+}
+function statusBadge(s) {
+  const m = {
+    'OPEN':            '<span class="badge" style="background:#f3f4f6;color:#374151">Open</span>',
+    'IN_PROGRESS':     '<span class="badge" style="background:#dbeafe;color:#1e40af">In Progress</span>',
+    'COMPLETED':       '<span class="badge" style="background:#d1fae5;color:#065f46">✅ Selesai</span>',
+    'CANCELLED':       '<span class="badge" style="background:#fee2e2;color:#991b1b">✗ Cancelled</span>'
+  };
+  return m[s]||`<span class="badge">${s}</span>`;
+}
+
+// ============================================================
+// TAB 2 — RENDER WO TABLE
+// ============================================================
+function renderWOTab() {
+  const tbody = document.getElementById('wo-tab-tbody');
+  const pill  = document.getElementById('pill-wo-count');
+  if (!tbody) return;
+  if (pill) pill.textContent = `${activeWOs.length} WO`;
+  if (!activeWOs.length) {
+    tbody.innerHTML = '<tr><td colspan="8"><div class="empty"><div class="e-icon">📋</div>Tidak ada WO aktif. Buat WO baru di modul Work Order.</div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = activeWOs.map(wo => {
+    const pm        = wo.product_master||{};
+    const wwsList   = wo.wo_workstations || [];
+    const totalWS   = wwsList.filter(w => w.workstations).length;
+    const selesaiWS = wwsList.filter(w => w.selesai_at).length;
+    const wsListStr = wwsList.length
+      ? wwsList.map(w => {
+          const kode = w.workstations?.kode || '';
+          return kode ? (w.selesai_at ? '<span style="color:#166534;font-weight:700" title="Selesai ' + fmtDT(w.selesai_at) + '">✅' + kode + '</span>' : kode) : '';
+        }).filter(Boolean).join(', ')
+      : '<span style="color:#9ca3af;font-size:11px">Belum assign</span>';
+    const allSelesai    = totalWS > 0 && selesaiWS === totalWS;
+    const selesaiInfo   = totalWS > 0
+      ? (allSelesai
+          ? '<div class="tbl-sub" style="color:#166534;font-weight:700">✅ Semua WS selesai</div>'
+          : (selesaiWS > 0 ? '<div class="tbl-sub" style="color:#92400e">' + selesaiWS + '/' + totalWS + ' WS selesai</div>' : ''))
+      : '';
+    const canClose   = wo.status === 'IN_PROGRESS';
+    const isExpanded = woDetailId === wo.id;
+    const bgRow      = isExpanded ? 'background:#eff6ff' : (allSelesai ? 'background:#f0fdf4' : '');
+    return '<tr style="' + bgRow + '">' +
+      '<td style="font-family:monospace;font-weight:800;font-size:12px">' + wo.order_code +
+        (wo.catatan ? '<div class="tbl-sub" style="font-style:italic;white-space:normal">' + wo.catatan + '</div>' : '') + '</td>' +
+      '<td>' + (pm.nama_produk||'—') + '<div class="tbl-sub">' + (pm.product_code||'') + '</div></td>' +
+      '<td>' + fmtKg(wo.target_kg) + '<div class="tbl-sub">' + fmt(wo.target_qty_ekor) + ' ekor</div></td>' +
+      '<td>' + progressBar(wo) + '</td>' +
+      '<td>' + statusBadge(wo.status) + '</td>' +
+      '<td style="font-size:12px">' + wsListStr + selesaiInfo + '</td>' +
+      '<td style="font-size:12px;white-space:nowrap">' + fmtDate(wo.tanggal) +
+        (wo.created_at ? '<div class="tbl-sub">' + fmtDT(wo.created_at) + '</div>' : '') + '</td>' +
+      '<td><div style="display:flex;gap:4px;flex-wrap:wrap">' +
+        (canClose ? '<button class="btn btn-amber btn-sm" onclick="openCloseWO(\'' + wo.id + '\')">' + (allSelesai ? '🔒 Tutup WO' : '🔒 Tutup') + '</button>' : '') +
+        '<button class="btn btn-outline btn-sm" onclick="toggleWODetail(\'' + wo.id + '\')"' +
+          ' style="' + (isExpanded ? 'background:#dbeafe;border-color:#3b82f6;color:#1d4ed8' : '') + '">' +
+          (isExpanded ? '▲ Tutup' : '▼ Detail') +
+        '</button>' +
+      '</div></td>' +
+    '</tr>';
+  }).join('');
+}
+
+// ============================================================
+// TAB 2 — WO DETAIL PANEL (2-level: rekap WS → rincian basket)
+// ============================================================
+let woDetailId    = null;   // WO yang sedang dibuka detail-nya
+let woDetailWSId  = null;   // WS yang sedang dibuka rincian-nya (level 2)
+
+function toggleWODetail(woId) {
+  if (woDetailId === woId) { closeWODetail(); }
+  else { openWODetail(woId); }
+}
+
+function closeWODetail() {
+  woDetailId   = null;
+  woDetailWSId = null;
+  const panel  = document.getElementById('wo-detail-panel');
+  if (panel) panel.style.display = 'none';
+  renderWOTab();
+}
+
+async function openWODetail(woId) {
+  woDetailId   = woId;
+  woDetailWSId = null;
+  const panel  = document.getElementById('wo-detail-panel');
+  const body   = document.getElementById('wo-detail-body');
+  const title  = document.getElementById('wo-detail-title');
+  const sub    = document.getElementById('wo-detail-subtitle');
+  const wo     = activeWOs.find(w => w.id === woId);
+  if (!wo || !panel) return;
+  const pm = wo.product_master || {};
+  if (title) title.textContent = '📋 Detail: ' + wo.order_code;
+  if (sub)   sub.textContent   = (pm.nama_produk || '—') + ' · Target ' + fmtKg(wo.target_kg) + ' / ' + fmt(wo.target_qty_ekor) + ' ekor · ' + wo.status;
+  panel.style.display = '';
+  if (body) body.innerHTML = '<div style="padding:24px;text-align:center;color:#6b7280;font-size:13px">⏳ Memuat…</div>';
+  renderWOTab();
+  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  await renderWODetailContent(woId);
+}
+
+async function renderWODetailContent(woId) {
+  const body = document.getElementById('wo-detail-body');
+  if (!body) return;
+  const wo     = activeWOs.find(w => w.id === woId);
+  if (!wo) return;
+  const wwsList = wo.wo_workstations || [];
+
+  // Fetch fresh inputs + outputs untuk summary per WS
+  const { data: inputs  } = await db.from('processing_inputs')
+    .select('id, workstation_id, kg_diambil, qty_input')
+    .eq('order_id', woId);
+  const { data: outputs } = await db.from('processing_outputs')
+    .select('id, workstation_id, kg_output, qty_output, output_type')
+    .eq('order_id', woId);
+
+  const iList = inputs  || [];
+  const oList = outputs || [];
+
+  // Per-WS summary
+  const wsRows = wwsList.map(wws => {
+    const ws      = wws.workstations || {};
+    const wsId    = wws.workstation_id;
+    const wsIn    = iList.filter(i => i.workstation_id === wsId);
+    const wsOut   = oList.filter(o => o.workstation_id === wsId);
+    const inKg    = wsIn.reduce((s, i) => s + (Number(i.kg_diambil) || 0), 0);
+    const outKg   = wsOut.filter(o => o.output_type === 'PRIMARY').reduce((s, o) => s + (Number(o.kg_output) || 0), 0);
+    const byKg    = wsOut.filter(o => o.output_type === 'BYPRODUCT').reduce((s, o) => s + (Number(o.kg_output) || 0), 0);
+    const outQty  = wsOut.filter(o => o.output_type === 'PRIMARY').reduce((s, o) => s + (Number(o.qty_output) || 0), 0);
+    const isOpen  = woDetailWSId === wsId;
+    return { ws, wsId, wws, wsIn, wsOut, inKg, outKg, byKg, outQty, isOpen };
+  });
+
+  // All inputs not tied to a WS
+  const noWSIn  = iList.filter(i => !i.workstation_id);
+  const noWSOut = oList.filter(o => !o.workstation_id);
+
+  let html = '<div style="padding:12px 16px 0">' +
+    '<div class="tbl-wrap"><table class="tbl"><thead><tr>' +
+      '<th>Workstation</th>' +
+      '<th>Input Bahan Baku</th>' +
+      '<th>Output Primary</th>' +
+      '<th>Output Byproduct</th>' +
+      '<th>Status WS</th>' +
+      '<th>Rincian</th>' +
+    '</tr></thead><tbody>';
+
+  if (!wsRows.length) {
+    html += '<tr><td colspan="6" style="text-align:center;padding:16px;color:#9ca3af;font-size:12px">Belum ada workstation yang di-assign ke WO ini.</td></tr>';
+  } else {
+    for (const r of wsRows) {
+      const selesaiBadge = r.wws.selesai_at
+        ? '<span class="badge b-aktif" title="' + fmtDT(r.wws.selesai_at) + '">✅ Selesai</span>'
+        : '<span class="badge" style="background:#f3f4f6;color:#6b7280">🔄 Proses</span>';
+      html +=
+        '<tr style="' + (r.isOpen ? 'background:#eff6ff' : '') + '">' +
+          '<td style="font-weight:700">' + (r.ws.kode || '—') +
+            '<div class="tbl-sub">' + (r.ws.nama || '') + '</div></td>' +
+          '<td>' + r.wsIn.length + ' keranjang<div class="tbl-sub">' + fmtKg(r.inKg) + '</div></td>' +
+          '<td><strong>' + fmt(r.outQty) + ' ekor</strong><div class="tbl-sub">' + fmtKg(r.outKg) + '</div></td>' +
+          '<td>' + (r.byKg > 0 ? fmtKg(r.byKg) : '<span style="color:#9ca3af">—</span>') + '</td>' +
+          '<td>' + selesaiBadge + '</td>' +
+          '<td><button class="btn btn-outline btn-sm" onclick="toggleWSRincian(\'' + woId + '\',\'' + r.wsId + '\')"' +
+            ' style="' + (r.isOpen ? 'background:#dbeafe;border-color:#3b82f6;color:#1d4ed8' : '') + '">' +
+            (r.isOpen ? '▲ Tutup' : '▼ Rincian') +
+          '</button></td>' +
+        '</tr>';
+      if (r.isOpen) {
+        html += '<tr><td colspan="6" style="padding:0;background:#f8faff">' +
+          '<div id="ws-rincian-body-' + r.wsId + '" style="padding:12px 16px">' +
+            '<div style="text-align:center;color:#6b7280;font-size:12px;padding:16px">⏳ Memuat rincian…</div>' +
+          '</div></td></tr>';
+      }
+    }
+  }
+
+  // Baris unassigned jika ada
+  if (noWSIn.length || noWSOut.length) {
+    const uInKg  = noWSIn.reduce((s, i) => s + (Number(i.kg_diambil) || 0), 0);
+    const uOutKg = noWSOut.filter(o => o.output_type === 'PRIMARY').reduce((s, o) => s + (Number(o.kg_output) || 0), 0);
+    html += '<tr style="background:#fefce8">' +
+      '<td style="color:#92400e;font-weight:700">⚠ Tidak ada WS<div class="tbl-sub">Belum di-assign ke WS</div></td>' +
+      '<td>' + noWSIn.length + ' keranjang<div class="tbl-sub">' + fmtKg(uInKg) + '</div></td>' +
+      '<td>' + fmtKg(uOutKg) + '</td><td>—</td><td>—</td><td>—</td>' +
+    '</tr>';
+  }
+
+  html += '</tbody></table></div></div>';
+  body.innerHTML = html;
+
+  // Jika ada WS yang terbuka, render rincian-nya
+  if (woDetailWSId) {
+    await renderWSRincianContent(woId, woDetailWSId);
+  }
+}
+
+async function toggleWSRincian(woId, wsId) {
+  if (woDetailWSId === wsId) {
+    woDetailWSId = null;
+    await renderWODetailContent(woId);
+  } else {
+    woDetailWSId = wsId;
+    await renderWODetailContent(woId);
+    await renderWSRincianContent(woId, wsId);
+  }
+}
+
+async function renderWSRincianContent(woId, wsId) {
+  const containerId = 'ws-rincian-body-' + wsId;
+  const container   = document.getElementById(containerId);
+  if (!container) return;
+
+  try {
+    // Fetch inputs untuk WS ini dalam WO ini
+    const { data: inputs } = await db.from('processing_inputs')
+      .select('id, kg_diambil, qty_input, baskets(basket_code, qty_sisa, kg_sisa, lokasi, status), product_master(nama_produk, product_code)')
+      .eq('order_id', woId)
+      .eq('workstation_id', wsId);
+
+    // Fetch outputs untuk WS ini
+    const { data: outputs } = await db.from('processing_outputs')
+      .select('id, qty_output, kg_output, output_type, baskets(basket_code, qty_sisa, kg_sisa, lokasi, status), product_master(nama_produk, product_code), users!worker_id(nama)')
+      .eq('order_id', woId)
+      .eq('workstation_id', wsId)
+      .order('created_at', { ascending: false });
+
+    const iList = inputs  || [];
+    const oList = outputs || [];
+
+    let html = '';
+
+    // INPUT TABLE
+    html += '<div style="margin-bottom:12px">' +
+      '<div style="font-size:11px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">📥 Input Bahan Baku (' + iList.length + ' keranjang)</div>';
+    if (iList.length) {
+      html += '<div class="tbl-wrap"><table class="tbl"><thead><tr>' +
+        '<th>Kode Keranjang</th><th>Produk</th><th>Kg Diambil</th><th>Sisa Keranjang</th>' +
+        '</tr></thead><tbody>' +
+        iList.map(inp => {
+          const bsk = inp.baskets || {};
+          const pm2 = inp.product_master || {};
+          return '<tr>' +
+            '<td style="font-family:monospace;font-size:12px;font-weight:700">' + (bsk.basket_code || '—') + '</td>' +
+            '<td>' + (pm2.nama_produk || '—') + '</td>' +
+            '<td><strong>' + fmtKg(inp.kg_diambil) + '</strong><div class="tbl-sub">' + fmt(inp.qty_input) + ' ekor</div></td>' +
+            '<td>' + fmtKg(bsk.kg_sisa) + '<div class="tbl-sub">' + (bsk.lokasi || '—') + ' · ' + (bsk.status || '—') + '</div></td>' +
+          '</tr>';
+        }).join('') +
+        '</tbody></table></div>';
+    } else {
+      html += '<div style="color:#9ca3af;font-size:12px;padding:8px 0">Belum ada input untuk WS ini.</div>';
+    }
+    html += '</div>';
+
+    // OUTPUT TABLE
+    html += '<div>' +
+      '<div style="font-size:11px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">📦 Output Produksi (' + oList.length + ' keranjang)</div>';
+    if (oList.length) {
+      html += '<div class="tbl-wrap"><table class="tbl"><thead><tr>' +
+        '<th>Kode Keranjang</th><th>Produk</th><th>Qty / Kg</th><th>Tipe</th><th>Pekerja</th>' +
+        '</tr></thead><tbody>' +
+        oList.map(out => {
+          const bsk = out.baskets || {};
+          const pm2 = out.product_master || {};
+          const typeBadge = out.output_type === 'PRIMARY'
+            ? '<span class="badge b-aktif">Primary</span>'
+            : '<span class="badge" style="background:#fce7f3;color:#9d174d">Byproduct</span>';
+          return '<tr>' +
+            '<td style="font-family:monospace;font-size:12px;font-weight:700">' + (bsk.basket_code || '—') +
+              (bsk.lokasi && bsk.lokasi !== 'MARINASI' ? '<div class="tbl-sub" style="color:#dc2626">Lokasi: ' + bsk.lokasi + '</div>' : '') + '</td>' +
+            '<td>' + (pm2.nama_produk || '—') + '<div class="tbl-sub">' + (pm2.product_code || '') + '</div></td>' +
+            '<td><strong>' + fmt(out.qty_output) + ' ekor</strong><div class="tbl-sub">' + fmtKg(out.kg_output) + '</div></td>' +
+            '<td>' + typeBadge + '</td>' +
+            '<td style="font-size:12px">' + (out.users ? out.users.nama : '—') + '</td>' +
+          '</tr>';
+        }).join('') +
+        '</tbody></table></div>';
+    } else {
+      html += '<div style="color:#9ca3af;font-size:12px;padding:8px 0">Belum ada output untuk WS ini.</div>';
+    }
+    html += '</div>';
+
+    container.innerHTML = html;
+  } catch(e) {
+    container.innerHTML = '<div style="color:#dc2626;font-size:12px;padding:8px">⚠ Gagal memuat: ' + e.message + '</div>';
+  }
+}
+
+// ============================================================
+// TAB 2 — ASSIGN INPUT BASKET
+// ============================================================
+let currentInputWOId      = null;
+let selectedInputBasketId = null;
+
+function openAssignInput(woId) {
+  currentInputWOId      = woId;
+  selectedInputBasketId = null;
+  const wo = activeWOs.find(w=>w.id===woId);
+  if (!wo) return;
+  const pm = wo.product_master||{};
+  setEl('ai-wo-code', wo.order_code);
+  setEl('ai-produk',  pm.nama_produk||'—');
+  setEl('ai-target',  `${fmtKg(wo.target_kg)} / ${fmt(wo.target_qty_ekor)} ekor`);
+  // WS dropdown (only WSs assigned to this WO)
+  const wsList = (wo.wo_workstations||[]).map(w=>w.workstations).filter(Boolean);
+  const wsSelect = document.getElementById('ai-ws');
+  wsSelect.innerHTML = '<option value="">— Pilih Workstation —</option>'
+    + wsList.map(ws=>`<option value="${ws.id}">${ws.kode} — ${ws.nama}</option>`).join('');
+  // Render assigned inputs & basket list
+  renderAssignedInputs(wo);
+  document.getElementById('ai-basket-search').value = '';
+  document.getElementById('ai-kg-diambil').value    = '';
+  document.getElementById('ai-qty-input').value     = '';
+  document.getElementById('ai-selected-basket').style.display = 'none';
+  renderBasketList('');
+  showErr('ai-err','');
+  openModal('modal-input');
+}
+
+function renderAssignedInputs(wo) {
+  const inputs = wo.processing_inputs||[];
+  const tbody  = document.getElementById('ai-assigned-tbody');
+  if (!tbody) return;
+  if (!inputs.length) {
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:8px;color:#9ca3af;font-size:12px">Belum ada input yang di-assign.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = inputs.map(inp => {
+    const b  = marinasiStock.find(x=>x.id===inp.basket_id);
+    const bCode = b?.basket_code || '(dipakai)';
+    const ws    = allWorkstations.find(w=>w.id===inp.workstation_id);
+    return `<tr>
+      <td style="font-family:monospace;font-size:11px">${bCode}</td>
+      <td>${ws?.kode||'—'}</td>
+      <td>${fmtKg(inp.kg_diambil)}</td>
+      <td><button class="btn btn-red btn-sm" style="font-size:10px;padding:3px 7px" onclick="removeInput('${inp.id}')">✗</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function renderBasketList(filter) {
+  const f   = (filter||'').trim().toLowerCase();
+  // Input boleh dari KARKAS, PARTING, atau BONELESS (bahan baku marinasi) — MARINASI output tidak boleh
+  let list  = marinasiStock.filter(b => !b.basket_type || b.basket_type === 'KARKAS' || b.basket_type === 'PARTING');
+  if (f) list = list.filter(b =>
+    (b.basket_code||'').toLowerCase().includes(f) ||
+    (b.product_master?.nama_produk||'').toLowerCase().includes(f)
+  );
+  const container = document.getElementById('ai-basket-list');
+  if (!container) return;
+  if (!list.length) {
+    container.innerHTML = `<div style="padding:10px;text-align:center;color:#9ca3af;font-size:12px">Tidak ada keranjang tersedia di lantai Marinasi.</div>`;
+    return;
+  }
+  container.innerHTML = list.slice(0,20).map(b => {
+    const pm = b.product_master||{};
+    return `<div class="basket-select-item" id="bitem-${b.id}" onclick="selectInputBasket('${b.id}')">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-family:monospace;font-weight:700;font-size:12px">${b.basket_code}</span>
+        <span style="font-size:11px;color:#6b7280">${fmtKg(b.kg_sisa)}</span>
+      </div>
+      <div style="font-size:11px;color:#374151;margin-top:2px">${pm.nama_produk||'—'}</div>
+    </div>`;
+  }).join('');
+}
+
+function selectInputBasket(basketId) {
+  selectedInputBasketId = basketId;
+  const b = marinasiStock.find(x=>x.id===basketId);
+  if (!b) return;
+  const pm = b.product_master||{};
+  document.querySelectorAll('.basket-select-item').forEach(el=>el.classList.remove('selected'));
+  document.getElementById(`bitem-${basketId}`)?.classList.add('selected');
+  const info = document.getElementById('ai-selected-basket');
+  if (info) info.style.display = 'block';
+  setEl('ai-sel-code',   b.basket_code);
+  setEl('ai-sel-produk', pm.nama_produk||'—');
+  const qtyInp  = document.getElementById('ai-qty-input');
+  const kgInp   = document.getElementById('ai-kg-diambil');
+  qtyInp.max    = b.qty_sisa;
+  qtyInp.value  = b.qty_sisa;
+  kgInp.max     = Number(b.kg_sisa).toFixed(1);
+  kgInp.value   = Number(b.kg_sisa).toFixed(1);
+  // Tampilkan hint range kg per ekor
+  let hintText = `Maks: ${fmt(b.qty_sisa)} ekor / ${fmtKg(b.kg_sisa)}`;
+  if (pm.kg_min && pm.kg_max) {
+    const expMin = Number((b.qty_sisa * pm.kg_min).toFixed(1));
+    const expMax = Number((b.qty_sisa * pm.kg_max).toFixed(1));
+    hintText += ` · Expected: ${fmtKg(expMin)} – ${fmtKg(expMax)} (${pm.kg_min}–${pm.kg_max} kg/ekor)`;
+  }
+  setEl('ai-sel-max', hintText);
+}
+
+async function doAssignInput() {
+  const wsId   = document.getElementById('ai-ws').value;
+  const kg     = parseFloat(document.getElementById('ai-kg-diambil').value);
+  const qty    = parseInt(document.getElementById('ai-qty-input').value);
+  showErr('ai-err','');
+  if (!wsId)                { showErr('ai-err','Pilih workstation.'); return; }
+  if (!selectedInputBasketId){ showErr('ai-err','Pilih keranjang sumber.'); return; }
+  if (!qty||qty<=0)         { showErr('ai-err','Qty ekor harus lebih dari 0.'); return; }
+  if (!kg||kg<=0)           { showErr('ai-err','Kg harus lebih dari 0.'); return; }
+  const b = marinasiStock.find(x=>x.id===selectedInputBasketId);
+  if (!b) return;
+  if (qty > Number(b.qty_sisa))    { showErr('ai-err',`Qty melebihi sisa keranjang (${fmt(b.qty_sisa)} ekor).`); return; }
+  if (kg > Number(b.kg_sisa)+0.05) { showErr('ai-err',`Kg melebihi sisa keranjang (${fmtKg(b.kg_sisa)}).`); return; }
+  // Validasi kg_min / kg_max per ekor dari produk
+  const pmB = b.product_master || {};
+  if (pmB.kg_min && pmB.kg_max) {
+    const expMin = Number((qty * pmB.kg_min).toFixed(1));
+    const expMax = Number((qty * pmB.kg_max).toFixed(1));
+    if (kg < expMin - 0.05 || kg > expMax + 0.05) {
+      showErr('ai-err', `Kg tidak sesuai produk. ${qty} ekor ${pmB.nama_produk} seharusnya ${fmtKg(expMin)} – ${fmtKg(expMax)} (standar ${pmB.kg_min}–${pmB.kg_max} kg/ekor).`);
+      return;
+    }
+  }
+  const btn = document.getElementById('ai-btn-ok');
+  btn.disabled=true; btn.textContent='Menyimpan…';
+  try {
+    const { error: inpErr } = await db.from('processing_inputs').insert({
+      order_id:       currentInputWOId,
+      basket_id:      selectedInputBasketId,
+      product_id:     b.product_master?.id||null,
+      workstation_id: wsId,
+      qty_input:      qty,
+      kg_input:       kg,
+      kg_diambil:     kg,
+      created_by:     currentUser.id
+    });
+    if (inpErr) throw inpErr;
+    // Kurangi sisa keranjang
+    const newKg  = Math.max(0, Number(b.kg_sisa)-kg);
+    const newQty = Math.max(0, Number(b.qty_sisa)-qty);
+    await db.from('baskets').update({
+      kg_sisa:  Number(newKg.toFixed(1)),
+      qty_sisa: newQty,
+      status:   newKg<=0.01?'HABIS':'AKTIF'
+    }).eq('id', selectedInputBasketId);
+    // Update WO status ke IN_PROGRESS bila masih OPEN
+    const wo = activeWOs.find(w=>w.id===currentInputWOId);
+    if (wo?.status==='OPEN') {
+      await db.from('processing_orders').update({status:'IN_PROGRESS'}).eq('id',currentInputWOId);
+    }
+    showToast('Input berhasil di-assign!','success');
+    selectedInputBasketId = null;
+    document.getElementById('ai-selected-basket').style.display='none';
+    document.getElementById('ai-kg-diambil').value='';
+    document.getElementById('ai-qty-input').value='';
+    await loadAll();
+    const updWO = activeWOs.find(w=>w.id===currentInputWOId);
+    if (updWO) { renderAssignedInputs(updWO); renderBasketList(''); }
+  } catch(e) {
+    console.error(e); showErr('ai-err','Gagal: '+(e.message||''));
+  } finally {
+    btn.disabled=false; btn.textContent='💾 Assign Input';
+  }
+}
+
+async function removeInput(inputId) {
+  if (!confirm('Hapus input ini? Kg keranjang sumber akan dikembalikan.')) return;
+  try {
+    const { data: inp } = await db.from('processing_inputs').select('basket_id,kg_diambil,qty_input').eq('id',inputId).maybeSingle();
+    await db.from('processing_inputs').delete().eq('id',inputId);
+    if (inp?.basket_id) {
+      const { data: bsk } = await db.from('baskets').select('kg_sisa,qty_sisa').eq('id',inp.basket_id).maybeSingle();
+      if (bsk) {
+        await db.from('baskets').update({
+          kg_sisa:  Number((Number(bsk.kg_sisa)+Number(inp.kg_diambil||0)).toFixed(1)),
+          qty_sisa: Number(bsk.qty_sisa)+Number(inp.qty_input||0),
+          status:   'AKTIF'
+        }).eq('id',inp.basket_id);
+      }
+    }
+    showToast('Input dihapus.','warning');
+    await loadAll();
+    const updWO = activeWOs.find(w=>w.id===currentInputWOId);
+    if (updWO) renderAssignedInputs(updWO);
+  } catch(e) {
+    console.error(e); showToast('Gagal hapus: '+(e.message||''),'error');
+  }
+}
+
+// ============================================================
+// TAB 2 — CLOSE WO
+// ============================================================
+let currentCloseWOId = null;
+
+function openCloseWO(woId) {
+  currentCloseWOId = woId;
+  const wo      = activeWOs.find(w=>w.id===woId);
+  if (!wo) return;
+  const actualKg  = getActualKg(wo);
+  const actualQty = getActualQty(wo);
+  const selPct    = getSelisihPct(wo);
+  const exceed    = selPct!==null && selPct>10;
+  const pm        = wo.product_master||{};
+  setEl('cwo-code',   wo.order_code);
+  setEl('cwo-produk', pm.nama_produk||'—');
+  setEl('cwo-target', `${fmtKg(wo.target_kg)} / ${fmt(wo.target_qty_ekor)} ekor`);
+  setEl('cwo-actual', `${fmtKg(actualKg)} / ${fmt(actualQty)} ekor`);
+  const selEl = document.getElementById('cwo-selisih');
+  if (selEl) {
+    selEl.textContent = selPct!=null ? `${selPct.toFixed(1)}% ${actualKg>Number(wo.target_kg)?'(kelebihan)':'(kekurangan)'}` : '—';
+    selEl.style.color = exceed?'#dc2626':'#16a34a';
+  }
+  const warnBox  = document.getElementById('cwo-warn-box');
+  const btnClose = document.getElementById('cwo-btn-ok');
+  if (warnBox)  warnBox.style.display = exceed?'':'none';
+  if (btnClose) btnClose.textContent  = exceed?'⚠️ Tutup & Minta Approval':'✅ Tutup & Approve';
+  showErr('cwo-err','');
+  openModal('modal-close-wo');
+}
+
+async function doCloseWO() {
+  if (!currentCloseWOId) return;
+  const wo     = activeWOs.find(w=>w.id===currentCloseWOId);
+  const selPct = getSelisihPct(wo);
+  const exceed = selPct!==null && selPct>10;
+  const btn    = document.getElementById('cwo-btn-ok');
+  btn.disabled=true; btn.textContent='Memproses…';
+  try {
+    if (!exceed) {
+      const { error } = await db.from('processing_orders').update({
+        status:          'COMPLETED',
+        approved_by:     currentUser.id,
+        approved_at:     new Date().toISOString(),
+        total_output_kg: getActualKg(wo)
+      }).eq('id', currentCloseWOId);
+      if (error) throw error;
+      showToast(`WO ${wo.order_code} berhasil ditutup!`,'success');
+      closeModal('modal-close-wo');
+      await loadAll();
+    } else {
+      // Selisih >10% — langsung minta PIN Supervisor, tidak update DB dulu
+      closeModal('modal-close-wo');
+      setEl('apc-code', wo.order_code);
+      document.getElementById('apc-pin').value='';
+      document.getElementById('apc-pin-err').style.display='none';
+      openModal('modal-approve-close');
+    }
+  } catch(e) {
+    console.error(e); showErr('cwo-err','Gagal: '+(e.message||''));
+  } finally {
+    btn.disabled=false;
+    const w2   = activeWOs.find(w=>w.id===currentCloseWOId);
+    const sel2 = getSelisihPct(w2);
+    if (btn) btn.textContent = sel2&&sel2>10?'⚠️ Tutup & Minta Approval':'✅ Tutup & Approve';
+  }
+}
+
+async function doApproveClose() {
+  const pin    = document.getElementById('apc-pin').value.trim();
+  const pinErr = document.getElementById('apc-pin-err');
+  pinErr.style.display='none';
+  if (!pin||pin.length<4){ pinErr.textContent='PIN minimal 4 digit.'; pinErr.style.display='block'; return; }
+  const btn = document.getElementById('apc-btn-ok');
+  btn.disabled=true; btn.textContent='Memverifikasi…';
+  try {
+    const { data: sup } = await db.from('users')
+      .select('id,nama').eq('pin',pin).eq('aktif',true)
+      .or('role.eq.SUPERVISOR,is_system_admin.eq.true').maybeSingle();
+    if (!sup){ pinErr.textContent='PIN salah atau bukan Supervisor.'; pinErr.style.display='block'; return; }
+    const wo = activeWOs.find(w=>w.id===currentCloseWOId);
+    const { error } = await db.from('processing_orders').update({
+      status:          'COMPLETED',
+      approved_by:     sup.id,
+      approved_at:     new Date().toISOString(),
+      total_output_kg: getActualKg(wo)
+    }).eq('id', currentCloseWOId);
+    if (error) throw error;
+    showToast(`WO ${wo?.order_code} disetujui oleh ${sup.nama}!`,'success');
+    closeModal('modal-approve-close');
+    await loadAll();
+  } catch(e) {
+    console.error(e); pinErr.textContent='Kesalahan: '+(e.message||''); pinErr.style.display='block';
+  } finally {
+    btn.disabled=false; btn.textContent='✅ Approve';
+  }
+}
+
+// ============================================================
+// TAB 3 — SELESAI DI WS
+// ============================================================
+function openSelesaiDiWS(woId) {
+  selesaiWOId = woId;
+  const wo  = activeWOs.find(w => w.id === woId);
+  const wws = (wo?.wo_workstations || []).find(w => w.workstation_id === selectedWSId);
+  const ws  = allWorkstations.find(w => w.id === selectedWSId);
+  setEl('sws-wo-code', wo?.order_code || '—');
+  setEl('sws-ws-name', ws ? (ws.kode + ' — ' + ws.nama) : '—');
+  document.getElementById('sws-pin').value = '';
+  document.getElementById('sws-pin-err').style.display = 'none';
+  openModal('modal-selesai-ws');
+}
+
+async function doSelesaiDiWS() {
+  const pin    = document.getElementById('sws-pin').value.trim();
+  const pinErr = document.getElementById('sws-pin-err');
+  pinErr.style.display = 'none';
+  if (!pin || pin.length < 4) {
+    pinErr.textContent = 'PIN minimal 4 digit.';
+    pinErr.style.display = 'block';
+    return;
+  }
+  const btn = document.getElementById('sws-btn-ok');
+  btn.disabled = true; btn.textContent = 'Memverifikasi…';
+  try {
+    // Verify PIN Supervisor
+    const { data: sup } = await db.from('users')
+      .select('id, nama')
+      .eq('pin', pin).eq('aktif', true)
+      .or('role.eq.SUPERVISOR,is_system_admin.eq.true')
+      .maybeSingle();
+    if (!sup) {
+      pinErr.textContent = 'PIN salah atau bukan Supervisor.';
+      pinErr.style.display = 'block';
+      return;
+    }
+
+    const wo = activeWOs.find(w => w.id === selesaiWOId);
+    if (!wo) throw new Error('WO tidak ditemukan.');
+
+    // Find wo_workstations row for this WS
+    const { data: wwsRow, error: wwsErr } = await db
+      .from('wo_workstations')
+      .select('id')
+      .eq('order_id', selesaiWOId)
+      .eq('workstation_id', selectedWSId)
+      .maybeSingle();
+    if (wwsErr || !wwsRow) throw new Error('Data workstation-WO tidak ditemukan.');
+
+    const now = new Date().toISOString();
+    const { error } = await db.from('wo_workstations')
+      .update({ selesai_at: now, selesai_by: sup.id })
+      .eq('id', wwsRow.id);
+    if (error) throw error;
+
+    const ws = allWorkstations.find(w => w.id === selectedWSId);
+    showToast('WO ' + wo.order_code + ' ditandai selesai di ' + (ws?.kode || 'WS ini') + ' oleh ' + sup.nama, 'success');
+    closeModal('modal-selesai-ws');
+    await loadAll();
+  } catch(e) {
+    console.error(e);
+    pinErr.textContent = 'Kesalahan: ' + (e.message || '');
+    pinErr.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = '✅ Konfirmasi Selesai';
+  }
+}
+
+// ============================================================
+// TAB 3 — STATE
+// ============================================================
+let selectedShift      = 1;        // 1=Pagi 2=Siang 3=Malam
+let selectedWSId       = null;
+let wsWorkers          = [];       // workstation_workers for currentUser today
+let wsOutputsToday     = [];       // processing_outputs for selectedWSId today
+let wsDetailWOId       = null;    // WO currently expanded in detail panel
+let editInputData      = null;    // data untuk modal edit-input
+let editOutputData     = null;    // data untuk modal edit-output
+let selesaiWOId        = null;    // WO yang sedang dikonfirmasi "Selesai di WS Ini"
+let currentOutputWOId  = null;
+let selectedOutputType = 'PRIMARY';
+let lastPrintBasket    = null;     // data for print modal
+
+// ============================================================
+// TAB 3 — DATA LOADERS
+// ============================================================
+async function loadWSWorkers() {
+  if (!currentUser) return;
+  const todayStr = todayISO();
+  const { data } = await db
+    .from('workstation_workers')
+    .select('id, workstation_id, shift, workstations(id, kode, nama)')
+    .eq('user_id', currentUser.id)
+    .eq('tanggal', todayStr)
+    .eq('aktif', true);
+  wsWorkers = data || [];
+}
+
+async function loadWSOutputsToday() {
+  if (!selectedWSId) { wsOutputsToday = []; return; }
+  const todayStr = todayISO();
+  const { data } = await db
+    .from('processing_outputs')
+    .select(`
+      id, order_id, qty_output, kg_output, output_type, tanggal_produksi, basket_id, created_at,
+      processing_orders ( order_code ),
+      product_master ( id, nama_produk, product_code, kg_min, kg_max ),
+      users!worker_id ( nama ),
+      baskets ( id, basket_code, qty_sisa, kg_sisa, lokasi, status )
+    `)
+    .eq('workstation_id', selectedWSId)
+    .eq('tanggal_produksi', todayStr)
+    .order('created_at', { ascending: false });
+  wsOutputsToday = data || [];
+}
+
+// ============================================================
+// TAB 3 — RENDER
+// ============================================================
+function renderWSTab() {
+  const sel = document.getElementById('ws-selector');
+  if (!sel) return;
+
+  // Determine which WSs to show
+  const isSup = currentUser?.role === 'SUPERVISOR' || currentUser?.is_system_admin;
+  let wsList;
+  if (isSup) {
+    wsList = allWorkstations;
+  } else {
+    const seen = new Set();
+    wsList = (wsWorkers || [])
+      .map(w => w.workstations)
+      .filter(ws => ws && !seen.has(ws.id) && seen.add(ws.id));
+    if (!wsList.length) wsList = allWorkstations; // fallback
+  }
+
+  // Rebuild dropdown, restore previous selection
+  sel.innerHTML = '<option value="">— Pilih Workstation —</option>'
+    + wsList.map(ws => `<option value="${ws.id}">${ws.kode} — ${ws.nama}</option>`).join('');
+  if (selectedWSId) sel.value = selectedWSId;
+
+  // Auto-select if only one available
+  if (!selectedWSId && wsList.length === 1) {
+    selectedWSId = wsList[0].id;
+    sel.value = selectedWSId;
+  }
+
+  updateShiftButtons();
+  renderWSWOList();
+  renderWSOutputsToday();
+}
+
+function selectShift(s) {
+  selectedShift = s;
+  const sel = document.getElementById('shift-selector');
+  if (sel) sel.value = s;
+}
+
+function updateShiftButtons() {
+  const sel = document.getElementById('shift-selector');
+  if (sel) sel.value = selectedShift;
+}
+
+async function onWSChange() {
+  const sel = document.getElementById('ws-selector');
+  selectedWSId = sel?.value || null;
+  await loadWSOutputsToday();
+  renderWSWOList();
+  renderWSOutputsToday();
+}
+
+function renderWSWOList() {
+  const body = document.getElementById('ws-wo-body');
+  const pill = document.getElementById('ws-wo-pill');
+  if (!body) return;
+
+  if (!selectedWSId) {
+    body.innerHTML = `<div class="empty" style="padding:32px"><div class="e-icon">🔨</div>Pilih workstation untuk melihat WO yang aktif.</div>`;
+    if (pill) pill.textContent = '—';
+    return;
+  }
+
+  const wsWOs = activeWOs.filter(wo =>
+    (wo.wo_workstations || []).some(w => w.workstation_id === selectedWSId)
+  );
+
+  if (pill) pill.textContent = `${wsWOs.length} WO`;
+
+  if (!wsWOs.length) {
+    body.innerHTML = `<div class="empty" style="padding:28px"><div class="e-icon">📋</div>Tidak ada WO aktif untuk workstation ini.<br><span style="font-size:11px">Assign WO ke workstation ini terlebih dahulu di Tab Work Order.</span></div>`;
+    return;
+  }
+
+  body.innerHTML = `<div class="tbl-wrap"><table class="tbl">
+    <thead><tr>
+      <th>Kode WO</th>
+      <th>Produk Target</th>
+      <th>Target</th>
+      <th>Progress Input</th>
+      <th>Progress Output</th>
+      <th>Status</th>
+      <th>Aksi</th>
+    </tr></thead>
+    <tbody>
+    ${wsWOs.map(wo => {
+      const pm        = wo.product_master || {};
+      const canRecord = ['OPEN', 'IN_PROGRESS'].includes(wo.status);
+      // Input progress: semua input WO ini (filter ke WS ini)
+      const wsInputs  = (wo.processing_inputs || []).filter(i => !i.workstation_id || i.workstation_id === selectedWSId);
+      const inputKg   = wsInputs.reduce((s, i) => s + (Number(i.kg_diambil) || 0), 0);
+      const inputCount= wsInputs.length;
+      // Target per WS (dari wo_workstations) atau fallback WO target
+      const wws       = (wo.wo_workstations || []).find(w => w.workstation_id === selectedWSId);
+      const wsTargetKg= Number(wws?.target_kg || wo.target_kg || 0);
+      const inputPct  = wsTargetKg > 0 ? Math.min(100, Math.round(inputKg / wsTargetKg * 100)) : null;
+      const isExpanded= wsDetailWOId === wo.id;
+      // Selesai di WS state
+      const sudahSelesai = !!(wws?.selesai_at);
+      const selesaiLabel = sudahSelesai
+        ? ('<span class="badge b-aktif" title="Selesai ' + fmtDT(wws.selesai_at) + ' oleh ' + (wws['users!selesai_by']?.nama || '—') + '">✅ Selesai</span>')
+        : '';
+      const bgRow = isExpanded ? 'background:#faf5ff' : (sudahSelesai ? 'background:#f0fdf4;opacity:0.85' : '');
+      return '<tr style="' + bgRow + '">' +
+        '<td style="font-family:monospace;font-weight:800;font-size:12px">' + wo.order_code +
+          (wo.catatan ? '<div class="tbl-sub" style="font-family:sans-serif;font-style:italic;color:#6b7280;font-weight:400;white-space:normal">' + wo.catatan + '</div>' : '') +
+          (sudahSelesai ? '<div class="tbl-sub" style="color:#166534;font-size:10px">Selesai di WS ini · ' + fmtDT(wws.selesai_at) + '</div>' : '') +
+        '</td>' +
+        '<td>' + (pm.nama_produk || '—') + '<div class="tbl-sub">' + (pm.product_code || '') + '</div></td>' +
+        '<td>' + fmtKg(wo.target_kg) + '<div class="tbl-sub">' + fmt(wo.target_qty_ekor) + ' ekor</div></td>' +
+        '<td>' +
+          '<div style="font-size:12px;font-weight:700;color:#374151">' + fmtKg(inputKg) + '</div>' +
+          '<div class="tbl-sub">' + inputCount + ' keranjang' + (inputPct !== null ? ' · ' + inputPct + '%' : '') + '</div>' +
+        '</td>' +
+        '<td>' + progressBar(wo) + '</td>' +
+        '<td>' + statusBadge(wo.status) + '</td>' +
+        '<td><div style="display:flex;gap:4px;flex-wrap:wrap">' +
+          (canRecord && !sudahSelesai ? '<button class="btn btn-primary btn-sm" onclick="openRecordOutput(\'' + wo.id + '\')">📦 Catat</button>' : '') +
+          (!sudahSelesai && canRecord
+            ? '<button class="btn btn-green btn-sm" onclick="openSelesaiDiWS(\'' + wo.id + '\')">✅ Selesai</button>'
+            : selesaiLabel) +
+          '<button class="btn btn-outline btn-sm" onclick="toggleWSDetail(\'' + wo.id + '\')"' +
+            ' style="' + (isExpanded ? 'background:#dbeafe;border-color:#2563eb;color:#2563eb' : '') + '">' +
+            (isExpanded ? '▲ Tutup' : '▼ Detail') +
+          '</button>' +
+        '</div></td>' +
+      '</tr>';
+    }).join('')}
+    </tbody>
+  </table></div>`;
+}
+
+function renderWSOutputsToday() {
+  const tbody = document.getElementById('ws-output-tbody');
+  const pill  = document.getElementById('ws-output-pill');
+  if (!tbody) return;
+
+  if (!selectedWSId) {
+    tbody.innerHTML = `<tr><td colspan="7"><div class="empty"><div class="e-icon">📦</div>Pilih workstation.</div></td></tr>`;
+    if (pill) pill.textContent = '—';
+    return;
+  }
+
+  const totalKg = wsOutputsToday
+    .filter(o => o.output_type === 'PRIMARY')
+    .reduce((s, o) => s + (Number(o.kg_output) || 0), 0);
+  if (pill) pill.textContent = `${wsOutputsToday.length} output · ${fmtKg(totalKg)}`;
+
+  if (!wsOutputsToday.length) {
+    tbody.innerHTML = `<tr><td colspan="7"><div class="empty"><div class="e-icon">📦</div>Belum ada output hari ini untuk workstation ini.</div></td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = wsOutputsToday.map(o => {
+    const bsk      = o.baskets || {};
+    const bCode    = bsk.basket_code || '—';
+    const pm       = o.product_master || {};
+    const wo       = o.processing_orders || {};
+    const isOut    = bsk.lokasi && bsk.lokasi !== 'MARINASI';
+    const typeBadge = o.output_type === 'PRIMARY'
+      ? '<span class="badge b-aktif">Primary</span>'
+      : '<span class="badge" style="background:#fce7f3;color:#9d174d">Byproduct</span>';
+    return `<tr>
+      <td style="font-family:monospace;font-weight:700;font-size:12px">${bCode}
+        ${isOut ? `<div class="tbl-sub" style="color:#dc2626">Sudah keluar: ${bsk.lokasi}</div>` : ''}</td>
+      <td>${pm.nama_produk || '—'}<div class="tbl-sub">${pm.product_code || ''}</div></td>
+      <td style="font-family:monospace;font-size:11px">${wo.order_code || '—'}</td>
+      <td>${fmt(o.qty_output)} ekor<div class="tbl-sub">${fmtKg(o.kg_output)}</div></td>
+      <td>${typeBadge}</td>
+      <td style="font-size:12px">${o.users?.nama || '—'}</td>
+      <td>
+        <button class="btn btn-outline btn-sm" onclick="openEditOutputFromToday('${o.id}')" title="Edit output">✏️</button>
+        <button class="btn btn-ghost btn-sm" onclick="reprintLabel('${o.id}')" title="Cetak ulang label">🖨️</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ============================================================
+// TAB 3 — LIVE KG HINT (produk × qty → expected range)
+// ============================================================
+function updateROKgHint() {
+  const produkId = document.getElementById('ro-produk')?.value;
+  const qty      = parseInt(document.getElementById('ro-qty')?.value);
+  const hint     = document.getElementById('ro-kg-hint');
+  if (!hint) return;
+  const produk = allProducts.find(p => p.id === produkId);
+  if (!produk?.kg_min || !produk?.kg_max || !qty || qty <= 0) {
+    hint.style.display = 'none';
+    return;
+  }
+  const expMin = (qty * produk.kg_min).toFixed(1);
+  const expMax = (qty * produk.kg_max).toFixed(1);
+  hint.innerHTML = `📏 <strong>${qty} ekor ${produk.nama_produk}</strong> → expected <strong>${expMin} – ${expMax} kg</strong> (standar ${produk.kg_min}–${produk.kg_max} kg/ekor)`;
+  hint.style.display = 'block';
+}
+
+// ============================================================
+// TAB 3 — OPEN RECORD OUTPUT MODAL
+// ============================================================
+function openRecordOutput(woId) {
+  currentOutputWOId  = woId;
+  selectedOutputType = 'PRIMARY';
+
+  const wo = activeWOs.find(w => w.id === woId);
+  if (!wo) return;
+  const pm = wo.product_master || {};
+
+  setEl('ro-wo-code', wo.order_code);
+  const ws = allWorkstations.find(w => w.id === selectedWSId);
+  setEl('ro-ws-name', ws ? `${ws.kode} — ${ws.nama}` : '—');
+  setEl('ro-wo-produk', pm.nama_produk ? `${pm.nama_produk} (${pm.product_code || ''})` : '—');
+  setEl('ro-wo-target', wo.target_qty_ekor != null && wo.target_kg != null
+    ? `${wo.target_qty_ekor} ekor / ${fmtKg(wo.target_kg)}`
+    : fmtKg(wo.target_kg));
+
+  const actualKg = getActualKg(wo);
+  const pct      = wo.target_kg
+    ? ((actualKg / Number(wo.target_kg)) * 100).toFixed(1)
+    : '—';
+  setEl('ro-progress', `${fmtKg(actualKg)} / ${fmtKg(wo.target_kg)} (${pct}%)`);
+
+  // Produk dropdown — CU, EXT, MARINASI
+  const prodList = allProducts.filter(p =>
+    ['CU', 'EXT', 'MARINASI'].includes(p.kategori)
+  );
+  const prodSel = document.getElementById('ro-produk');
+  prodSel.innerHTML = '<option value="">— Pilih Produk —</option>'
+    + prodList.map(p => `<option value="${p.id}">${p.nama_produk} (${p.product_code})</option>`).join('');
+
+  // Pre-select WO's target product
+  const targetProdId = wo.produk_id || pm.id;
+  if (targetProdId) prodSel.value = targetProdId;
+
+  // Reset fields
+  document.getElementById('ro-tanggal').value = todayISO();
+  document.getElementById('ro-qty').value     = '';
+  document.getElementById('ro-kg').value      = '';
+  showErr('ro-err', '');
+  selectOutputType('PRIMARY');
+  openModal('modal-record-output');
+}
+
+function selectOutputType(type) {
+  selectedOutputType = type;
+  const btnP = document.getElementById('ro-type-primary');
+  const btnB = document.getElementById('ro-type-byproduct');
+  if (btnP) { btnP.className = (type === 'PRIMARY')   ? 'btn btn-primary' : 'btn btn-outline'; btnP.style.flex='1'; }
+  if (btnB) { btnB.className = (type === 'BYPRODUCT') ? 'btn btn-primary' : 'btn btn-outline'; btnB.style.flex='1'; }
+}
+
+// ============================================================
+// TAB 3 — GENERATE BASKET CODE
+// ============================================================
+async function generatePRTBasketCode() {
+  // Format baru: BL-YYMMDD-XXXX via DB function (WIB)
+  const { data, error } = await db.rpc('generate_basket_code', { p_prefix: 'BL' });
+  if (error) throw error;
+  return data;
+}
+
+// ============================================================
+// TAB 3 — SAVE OUTPUT
+// ============================================================
+async function doRecordOutput() {
+  const produkId = document.getElementById('ro-produk').value;
+  const qty      = parseInt(document.getElementById('ro-qty').value);
+  const kg       = parseFloat(document.getElementById('ro-kg').value);
+  const tanggal  = document.getElementById('ro-tanggal').value;
+  showErr('ro-err', '');
+
+  if (!produkId)        { showErr('ro-err', 'Pilih produk output.');            return; }
+  if (!qty || qty <= 0) { showErr('ro-err', 'Qty ekor harus lebih dari 0.');    return; }
+  if (!kg  || kg  <= 0) { showErr('ro-err', 'Kg aktual harus lebih dari 0.');   return; }
+  if (!tanggal)         { showErr('ro-err', 'Tanggal produksi wajib diisi.');   return; }
+  if (!selectedWSId)    { showErr('ro-err', 'Pilih workstation terlebih dahulu.'); return; }
+  // Validasi kg_min / kg_max per ekor dari produk
+  const produkVal = allProducts.find(p => p.id === produkId);
+  if (produkVal?.kg_min && produkVal?.kg_max) {
+    const expMin = Number((qty * produkVal.kg_min).toFixed(1));
+    const expMax = Number((qty * produkVal.kg_max).toFixed(1));
+    if (kg < expMin - 0.05 || kg > expMax + 0.05) {
+      showErr('ro-err', `Kg tidak sesuai standar produk. ${qty} ekor ${produkVal.nama_produk} seharusnya ${fmtKg(expMin)} – ${fmtKg(expMax)} (standar ${produkVal.kg_min}–${produkVal.kg_max} kg/ekor).`);
+      return;
+    }
+  }
+
+  const btn = document.getElementById('ro-btn-ok');
+  btn.disabled = true; btn.textContent = 'Menyimpan…';
+
+  try {
+    // 1. Generate basket code
+    const basketCode = await generatePRTBasketCode();
+
+    // 2. Get product info for label
+    const produk = allProducts.find(p => p.id === produkId) || {};
+
+    // 3. Insert basket baru (lokasi MARINASI, status AKTIF)
+    const { data: newBasket, error: bErr } = await db
+      .from('baskets')
+      .insert({
+        basket_code: basketCode,
+        basket_type: 'MARINASI',
+        product_id:  produkId,
+        batch_id:    null,
+        lokasi:      'MARINASI',
+        status:      'AKTIF',
+        qty_awal:    qty,
+        qty_sisa:    qty,
+        kg_awal:     Number(kg.toFixed(1)),
+        kg_sisa:     Number(kg.toFixed(1)),
+        created_by:  currentUser.id
+      })
+      .select('id')
+      .single();
+    if (bErr) throw bErr;
+
+    // 4. Insert processing_output
+    const { error: outErr } = await db
+      .from('processing_outputs')
+      .insert({
+        order_id:         currentOutputWOId,
+        product_id:       produkId,
+        basket_id:        newBasket.id,
+        worker_id:        currentUser.id,
+        workstation_id:   selectedWSId,
+        qty_output:       qty,
+        kg_output:        Number(kg.toFixed(1)),
+        output_type:      selectedOutputType,
+        tanggal_produksi: tanggal,
+        tujuan_lokasi:    'MARINASI',
+        created_by:       currentUser.id
+      });
+    if (outErr) throw outErr;
+
+    // 5. Auto-set WO to IN_PROGRESS if still OPEN
+    const wo = activeWOs.find(w => w.id === currentOutputWOId);
+    if (wo?.status === 'OPEN') {
+      await db.from('processing_orders')
+        .update({ status: 'IN_PROGRESS' })
+        .eq('id', currentOutputWOId);
+    }
+
+    // 6. Prepare print data
+    const ws = allWorkstations.find(w => w.id === selectedWSId);
+    lastPrintBasket = {
+      basket_code:  basketCode,
+      produk_name:  produk.nama_produk || '—',
+      produk_code:  produk.product_code || '—',
+      qty,
+      kg:           Number(kg.toFixed(1)),
+      wo_code:      wo?.order_code || '—',
+      wo_catatan:   wo?.catatan || '',
+      ws_kode:      ws?.kode || '—',
+      tanggal,
+      output_type:  selectedOutputType,
+      worker_name:  currentUser.nama
+    };
+
+    showToast(`Keranjang ${basketCode} berhasil dicatat!`, 'success');
+    closeModal('modal-record-output');
+
+    // 7. Reload data, then open print modal
+    await loadAll();
+    showPrintModal(lastPrintBasket);
+
+  } catch(e) {
+    console.error(e);
+    showErr('ro-err', 'Gagal: ' + (e.message || ''));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '💾 Simpan & Generate Keranjang';
+  }
+}
+
+// ============================================================
+// TAB 3 — QR LABEL PRINT
+// ============================================================
+function buildLabelHTML(b) {
+  const qrData = encodeURIComponent(b.basket_code);
+  const qrURL  = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${qrData}&format=svg`;
+  const tglFmt = b.tanggal
+    ? new Date(b.tanggal + 'T00:00:00').toLocaleDateString('id-ID', { day:'2-digit', month:'short', year:'numeric' })
+    : '—';
+
+  return `<div style="width:216px;height:144px;border:1px solid #374151;border-radius:4px;padding:5px 6px;
+      font-family:monospace;background:white;display:flex;gap:6px;box-sizing:border-box">
+    <div style="flex:1;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden;min-width:0">
+      <div>
+        <div style="font-size:9.5px;font-weight:900;letter-spacing:.5px;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${b.basket_code}</div>
+        <div style="font-size:8.5px;font-weight:700;color:#374151;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${b.produk_name}</div>
+        <div style="font-size:7.5px;color:#6b7280;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">WO: ${b.wo_code}</div>
+        ${b.wo_catatan ? `<div style="font-size:7px;color:#374151;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-style:italic">${b.wo_catatan}</div>` : ''}
+      </div>
+      <div>
+        <div style="font-size:8px;color:#374151">Qty: <strong>${fmt(b.qty)} ekor</strong></div>
+        <div style="font-size:8px;color:#374151">Kg: <strong>${fmtKg(b.kg)}</strong></div>
+        <div style="font-size:7.5px;color:#6b7280;margin-top:1px">WS: ${b.ws_kode}</div>
+        <div style="font-size:7.5px;color:#6b7280">Tgl: ${tglFmt}</div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;flex-shrink:0">
+      <img src="${qrURL}" width="78" height="78" style="display:block">
+    </div>
+  </div>`;
+}
+
+function showPrintModal(b) {
+  const container = document.getElementById('qr-label-container');
+  if (container) container.innerHTML = buildLabelHTML(b);
+  openModal('modal-print-label');
+}
+
+async function reprintLabel(outputId) {
+  const o = wsOutputsToday.find(x => x.id === outputId);
+  if (!o) return;
+  const ws  = allWorkstations.find(w => w.id === selectedWSId);
+  const wo  = activeWOs.find(w => w.id === o.order_id);
+  const b = {
+    basket_code:  o.baskets?.basket_code || '—',
+    produk_name:  o.product_master?.nama_produk || '—',
+    produk_code:  o.product_master?.product_code || '—',
+    qty:          o.qty_output,
+    kg:           o.kg_output,
+    wo_code:      o.processing_orders?.order_code || '—',
+    wo_catatan:   wo?.catatan || '',
+    ws_kode:      ws?.kode || '—',
+    tanggal:      o.tanggal_produksi,
+    output_type:  o.output_type,
+    worker_name:  o.users?.nama || '—'
+  };
+  lastPrintBasket = b;
+  showPrintModal(b);
+}
+
+function doPrintLabel() {
+  const container = document.getElementById('qr-label-container');
+  if (!container || !container.innerHTML) return;
+  const labelHTML = container.innerHTML;
+  const title     = lastPrintBasket?.basket_code || 'Label Keranjang';
+
+  const win = window.open('', '_blank', 'width=320,height=280');
+  win.document.write(`<!DOCTYPE html><html><head>
+    <meta charset="UTF-8">
+    <title>${title}</title>
+    <style>
+      *{box-sizing:border-box;margin:0;padding:0}
+      body{background:white;display:flex;justify-content:center;align-items:center;min-height:100vh}
+      @page{size:57mm 38mm;margin:0}
+      @media print{body{min-height:auto;display:block}.label-wrap{page-break-after:always}}
+    </style>
+  </head><body>
+    <div class="label-wrap">${labelHTML}</div>
+    <script>window.onload=function(){window.print();}<\/script>
+  </body></html>`);
+  win.document.close();
+}
+
+// ============================================================
+// TAB 3 — WO DETAIL PANEL (toggle, open, render)
+// ============================================================
+function toggleWSDetail(woId) {
+  if (wsDetailWOId === woId) { closeWSDetail(); }
+  else { openWSDetail(woId); }
+}
+
+function closeWSDetail() {
+  wsDetailWOId = null;
+  document.getElementById('ws-wo-detail').style.display = 'none';
+  renderWSWOList();
+}
+
+async function openWSDetail(woId) {
+  wsDetailWOId = woId;
+  const panel  = document.getElementById('ws-wo-detail');
+  const body   = document.getElementById('ws-wo-detail-body');
+  const title  = document.getElementById('ws-detail-title');
+  const sub    = document.getElementById('ws-detail-subtitle');
+
+  const wo = activeWOs.find(w => w.id === woId);
+  if (!wo) return;
+  const pm = wo.product_master || {};
+  if (title) title.textContent = `📋 Detail: ${wo.order_code}`;
+  if (sub)   sub.textContent   = `${pm.nama_produk || '—'} · Target ${fmtKg(wo.target_kg)} / ${fmt(wo.target_qty_ekor)} ekor · Status: ${wo.status}`;
+
+  panel.style.display = '';
+  if (body) body.innerHTML = '<div style="padding:24px;text-align:center;color:#6b7280;font-size:13px">⏳ Memuat data…</div>';
+  renderWSWOList(); // update highlight
+  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  await renderWSDetailContent(woId);
+}
+
+async function renderWSDetailContent(woId) {
+  const body = document.getElementById('ws-wo-detail-body');
+  if (!body) return;
+  const wo = activeWOs.find(w => w.id === woId);
+
+  try {
+    // Fetch inputs segar
+    const { data: inputs } = await db.from('processing_inputs')
+      .select(`
+        id, kg_diambil, qty_input, workstation_id, created_at,
+        baskets ( id, basket_code, qty_awal, kg_awal, qty_sisa, kg_sisa, lokasi, status ),
+        product_master ( nama_produk, product_code )
+      `)
+      .eq('order_id', woId)
+      .order('created_at');
+
+    // Fetch outputs segar
+    // Gunakan hint FK "users!worker_id" karena processing_outputs punya 2 FK ke users
+    const { data: outputs } = await db.from('processing_outputs')
+      .select(`
+        id, qty_output, kg_output, output_type, tanggal_produksi, created_at,
+        baskets ( id, basket_code, qty_sisa, kg_sisa, lokasi, status ),
+        product_master ( id, nama_produk, product_code, kg_min, kg_max ),
+        users!worker_id ( nama )
+      `)
+      .eq('order_id', woId)
+      .order('created_at', { ascending: false });
+
+    const iList = inputs  || [];
+    const oList = outputs || [];
+
+    // ── Cek kaitan basket via basket_movements ──
+    const basketIds = [
+      ...iList.map(i => i.baskets?.id),
+      ...oList.map(o => o.baskets?.id)
+    ].filter(Boolean);
+
+    const kaitanMap = {};
+    if (basketIds.length) {
+      const { data: mvs } = await db.from('basket_movements')
+        .select('basket_id, ke_lokasi, dari_lokasi, status')
+        .in('basket_id', basketIds)
+        .neq('status', 'REJECTED');
+      for (const bid of basketIds) {
+        const bMvs     = (mvs || []).filter(m => m.basket_id === bid);
+        const confirmed= bMvs.filter(m => m.status === 'CONFIRMED');
+        const pending  = bMvs.filter(m => m.status === 'PENDING');
+        if      (confirmed.length) kaitanMap[bid] = { level: 'danger',  text: '⚠ Sudah pindah → ' + confirmed[confirmed.length-1].ke_lokasi };
+        else if (pending.length)   kaitanMap[bid] = { level: 'warning', text: '⏳ Pending → ' + pending[pending.length-1].ke_lokasi };
+        else                       kaitanMap[bid] = { level: 'ok',      text: '✓ Bebas' };
+      }
+    }
+
+    // ── Cek input basket dipakai WO lain ──
+    if (iList.length) {
+      const iBids = iList.map(i => i.baskets?.id).filter(Boolean);
+      const { data: otherInp } = await db.from('processing_inputs')
+        .select('basket_id, order_id').in('basket_id', iBids).neq('order_id', woId);
+      for (const oi of (otherInp || [])) {
+        const bid = oi.basket_id;
+        if (kaitanMap[bid] && kaitanMap[bid].level === 'ok')
+          kaitanMap[bid] = { level: 'warning', text: '⚠ Dipakai WO lain juga' };
+      }
+    }
+
+    const kBadge = bid => {
+      if (!bid) return '—';
+      const k = kaitanMap[bid] || { level: 'ok', text: '✓ Bebas' };
+      const c = { ok:'background:#d1fae5;color:#065f46', warning:'background:#fef3c7;color:#92400e', danger:'background:#fee2e2;color:#991b1b' };
+      return '<span class="badge" style="' + (c[k.level]||c.ok) + '">' + k.text + '</span>';
+    };
+
+    const totalInputKg  = iList.reduce((s,i) => s+(Number(i.kg_diambil)||0), 0);
+    const totalOutputKg = oList.filter(o=>o.output_type==='PRIMARY').reduce((s,o) => s+(Number(o.kg_output)||0), 0);
+    const totalByProdKg = oList.filter(o=>o.output_type==='BYPRODUCT').reduce((s,o) => s+(Number(o.kg_output)||0), 0);
+
+    body.innerHTML =
+    // ── INPUT LIST ──
+    '<div style="border-top:1px solid #e5e7eb;padding:12px 16px 8px">' +
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">' +
+        '<div style="font-size:12px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:.5px">📥 Input Bahan Baku</div>' +
+        '<span class="panel-pill info">' + iList.length + ' keranjang · ' + fmtKg(totalInputKg) + '</span>' +
+      '</div>' +
+      (iList.length ?
+        '<div class="tbl-wrap"><table class="tbl"><thead><tr>' +
+          '<th>Kode Keranjang</th><th>Produk / Lokasi</th>' +
+          '<th>Kg Diambil</th><th>Sisa Keranjang</th>' +
+          '<th>Kaitan Bagian Lain</th><th>Aksi</th>' +
+        '</tr></thead><tbody>' +
+        iList.map(function(inp) {
+          const bsk = inp.baskets || {};
+          const pm2 = inp.product_master || {};
+          const bid = bsk.id;
+          const ed  = JSON.stringify({
+            id: inp.id, basket_id: bid, basket_code: bsk.basket_code,
+            produk_name: pm2.nama_produk, wo_code: wo ? wo.order_code : '—',
+            kg_diambil: inp.kg_diambil, qty_input: inp.qty_input,
+            kg_sisa_now: bsk.kg_sisa, qty_sisa_now: bsk.qty_sisa
+          }).replace(/'/g, '&#39;');
+          return '<tr>' +
+            '<td style="font-family:monospace;font-weight:700;font-size:12px">' + (bsk.basket_code||'—') + '</td>' +
+            '<td>' + (pm2.nama_produk||'—') + '<div class="tbl-sub">' + (bsk.lokasi||'—') + ' · ' + (bsk.status||'—') + '</div></td>' +
+            '<td><strong>' + fmtKg(inp.kg_diambil) + '</strong><div class="tbl-sub">' + fmt(inp.qty_input) + ' ekor</div></td>' +
+            '<td>' + fmtKg(bsk.kg_sisa) + '<div class="tbl-sub">' + fmt(bsk.qty_sisa) + ' ekor</div></td>' +
+            '<td>' + kBadge(bid) + '</td>' +
+            '<td><div style="display:flex;gap:4px">' +
+              "<button class='btn btn-outline btn-sm' onclick='openEditInput(" + ed + ")'>✏️ Edit</button>" +
+              "<button class='btn btn-red btn-sm' onclick='deleteInputFromDetail(\"" + inp.id + "\",\"" + woId + "\")'>✗</button>" +
+            '</div></td>' +
+          '</tr>';
+        }).join('') +
+        '</tbody></table></div>'
+      : '<div class="empty" style="padding:14px 0"><div class="e-icon" style="font-size:20px">📥</div>Belum ada input bahan baku untuk WO ini.</div>') +
+    '</div>' +
+    // ── OUTPUT LIST ──
+    '<div style="border-top:1px solid #e5e7eb;padding:12px 16px 12px">' +
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">' +
+        '<div style="font-size:12px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:.5px">📦 Output Produksi</div>' +
+        '<span class="panel-pill ok">' + oList.length + ' keranjang · ' + fmtKg(totalOutputKg) + ' primary</span>' +
+        (totalByProdKg > 0 ? '<span class="panel-pill" style="background:#fce7f3;color:#9d174d">' + fmtKg(totalByProdKg) + ' byproduct</span>' : '') +
+      '</div>' +
+      (oList.length ?
+        '<div class="tbl-wrap"><table class="tbl"><thead><tr>' +
+          '<th>Kode Keranjang</th><th>Produk</th>' +
+          '<th>Qty / Kg</th><th>Tipe</th>' +
+          '<th>Pekerja</th><th>Kaitan Bagian Lain</th><th>Aksi</th>' +
+        '</tr></thead><tbody>' +
+        oList.map(function(out) {
+          const bsk = out.baskets || {};
+          const pm2 = out.product_master || {};
+          const bid = bsk.id;
+          const isOut = bsk.lokasi && bsk.lokasi !== 'MARINASI';
+          const typeBadge = out.output_type === 'PRIMARY'
+            ? '<span class="badge b-aktif">Primary</span>'
+            : '<span class="badge" style="background:#fce7f3;color:#9d174d">Byproduct</span>';
+          const ed = JSON.stringify({
+            id: out.id, basket_id: bid, basket_code: bsk.basket_code,
+            produk_name: pm2.nama_produk, produk_id: pm2.id,
+            kg_min: pm2.kg_min, kg_max: pm2.kg_max,
+            wo_code: wo ? wo.order_code : '—', wo_id: woId,
+            qty_output: out.qty_output, kg_output: out.kg_output,
+            output_type: out.output_type,
+            basket_qty_sisa: bsk.qty_sisa, basket_kg_sisa: bsk.kg_sisa
+          }).replace(/'/g, '&#39;');
+          return '<tr>' +
+            '<td style="font-family:monospace;font-weight:700;font-size:12px">' + (bsk.basket_code||'—') +
+              (isOut ? '<div class="tbl-sub" style="color:#dc2626">Lokasi: ' + bsk.lokasi + '</div>' : '') + '</td>' +
+            '<td>' + (pm2.nama_produk||'—') + '<div class="tbl-sub">' + (pm2.product_code||'') + '</div></td>' +
+            '<td><strong>' + fmt(out.qty_output) + ' ekor</strong><div class="tbl-sub">' + fmtKg(out.kg_output) + '</div></td>' +
+            '<td>' + typeBadge + '</td>' +
+            '<td style="font-size:12px">' + (out.users ? out.users.nama : '—') + '</td>' +
+            '<td>' + kBadge(bid) + '</td>' +
+            '<td><div style="display:flex;gap:4px">' +
+              "<button class='btn btn-outline btn-sm' onclick='openEditOutput(" + ed + ")'>" + (isOut ? '⚠️' : '✏️') + " Edit</button>" +
+              "<button class='btn btn-red btn-sm' onclick='deleteOutputFromDetail(\"" + out.id + "\",\"" + woId + "\")'>" + (isOut ? '⚠✗' : '✗') + "</button>" +
+              "<button class='btn btn-ghost btn-sm' onclick='reprintLabelById(\"" + out.id + "\")' title='Cetak ulang label'>🖨️</button>" +
+            '</div></td>' +
+          '</tr>';
+        }).join('') +
+        '</tbody></table></div>'
+      : '<div class="empty" style="padding:14px 0"><div class="e-icon" style="font-size:20px">📦</div>Belum ada output produksi untuk WO ini.</div>') +
+    '</div>';
+
+
+  } catch(e) {
+    console.error(e);
+    body.innerHTML = '<div style="padding:20px;color:#dc2626;font-size:13px">⚠ Gagal memuat detail: ' + e.message + '</div>';
+  }
+}
+
+// ============================================================
+// TAB 3 — DELETE INPUT / OUTPUT DARI DETAIL PANEL
+// ============================================================
+async function deleteInputFromDetail(inputId, woId) {
+  if (!confirm('Hapus input ini? Kg keranjang sumber akan dikembalikan ke stok.')) return;
+  try {
+    // Get input record first to restore basket
+    const { data: inp } = await db.from('processing_inputs')
+      .select('basket_id, kg_diambil, qty_input').eq('id', inputId).maybeSingle();
+    const { error } = await db.from('processing_inputs').delete().eq('id', inputId);
+    if (error) throw error;
+    // Restore basket
+    if (inp?.basket_id) {
+      const { data: bsk } = await db.from('baskets')
+        .select('kg_sisa, qty_sisa').eq('id', inp.basket_id).maybeSingle();
+      if (bsk) {
+        const newKgSisa  = Number((Number(bsk.kg_sisa) + Number(inp.kg_diambil || 0)).toFixed(1));
+        const newQtySisa = Number(bsk.qty_sisa) + Number(inp.qty_input || 0);
+        await db.from('baskets').update({
+          kg_sisa:  newKgSisa,
+          qty_sisa: newQtySisa,
+          status:   'AKTIF'
+        }).eq('id', inp.basket_id);
+      }
+    }
+    showToast('Input dihapus, keranjang dikembalikan ke stok.', 'success');
+    await loadAll();
+    if (wsDetailWOId) await renderWSDetailContent(wsDetailWOId);
+  } catch(e) {
+    console.error(e); showToast('Gagal hapus: ' + e.message, 'error');
+  }
+}
+
+async function deleteOutputFromDetail(outputId, woId) {
+  if (!confirm('Hapus output ini? Data keranjang output akan dihapus.')) return;
+  try {
+    const { data: out } = await db.from('processing_outputs')
+      .select('basket_id').eq('id', outputId).maybeSingle();
+    const { error } = await db.from('processing_outputs').delete().eq('id', outputId);
+    if (error) throw error;
+    if (out?.basket_id) {
+      await db.from('baskets').delete().eq('id', out.basket_id);
+    }
+    showToast('Output dihapus.', 'success');
+    await loadAll();
+    if (wsDetailWOId) await renderWSDetailContent(wsDetailWOId);
+  } catch(e) {
+    console.error(e); showToast('Gagal hapus: ' + e.message, 'error');
+  }
+}
+
+// ============================================================
+// TAB 3 — EDIT INPUT
+// ============================================================
+function openEditInput(data) {
+  editInputData = data;
+  setEl('ei-basket-code', data.basket_code || '—');
+  setEl('ei-produk',      data.produk_name || '—');
+  setEl('ei-wo-code',     data.wo_code     || '—');
+  const maxKg = Number(data.kg_sisa_now || 0) + Number(data.kg_diambil || 0);
+  document.getElementById('ei-kg').value  = data.kg_diambil || '';
+  document.getElementById('ei-qty').value = data.qty_input  || '';
+  setEl('ei-kg-hint', 'Tersedia: maks ' + fmtKg(maxKg) + ' (sisa + sudah diambil)');
+  showErr('ei-err', '');
+  openModal('modal-edit-input');
+}
+
+async function doEditInput() {
+  const newKg  = parseFloat(document.getElementById('ei-kg').value);
+  const newQty = parseInt(document.getElementById('ei-qty').value) || 0;
+  showErr('ei-err', '');
+  if (!newKg || newKg <= 0) { showErr('ei-err', 'Kg diambil harus lebih dari 0.'); return; }
+  const maxKg = Number(editInputData.kg_sisa_now || 0) + Number(editInputData.kg_diambil || 0);
+  if (newKg > maxKg + 0.01) { showErr('ei-err', 'Melebihi kg tersedia (' + fmtKg(maxKg) + ').'); return; }
+  const btn = document.getElementById('ei-btn-ok');
+  btn.disabled = true; btn.textContent = 'Menyimpan…';
+  try {
+    const oldKg  = Number(editInputData.kg_diambil || 0);
+    const oldQty = Number(editInputData.qty_input  || 0);
+    const diff   = newKg  - oldKg;
+    const diffQ  = newQty - oldQty;
+
+    await db.from('processing_inputs').update({
+      kg_diambil: Number(newKg.toFixed(1)),
+      qty_input:  newQty || oldQty
+    }).eq('id', editInputData.id);
+
+    if (editInputData.basket_id) {
+      const { data: bsk } = await db.from('baskets')
+        .select('kg_sisa, qty_sisa').eq('id', editInputData.basket_id).maybeSingle();
+      if (bsk) {
+        const newKgSisa  = Number(Math.max(0, Number(bsk.kg_sisa) - diff).toFixed(1));
+        const newQtySisa = Math.max(0, Number(bsk.qty_sisa) - diffQ);
+        await db.from('baskets').update({
+          kg_sisa:  newKgSisa,
+          qty_sisa: newQtySisa,
+          status:   newKgSisa > 0.009 ? 'AKTIF' : 'HABIS'
+        }).eq('id', editInputData.basket_id);
+      }
+    }
+    await renderWSDetailContent(wsDetailWOId);
+    renderWSWOList();
+    showToast('Input berhasil diperbarui.', 'success');
+    closeModal('modal-edit-input');
+  } catch(e) {
+    console.error(e); showErr('ei-err', 'Gagal: ' + (e.message || ''));
+  } finally {
+    btn.disabled = false; btn.textContent = '💾 Simpan';
+  }
+}
+
+// ============================================================
+// TAB 3 — EDIT OUTPUT
+// ============================================================
+function openEditOutput(data) {
+  editOutputData = data;
+  setEl('eo-code',   data.basket_code  || '—');
+  setEl('eo-produk', data.produk_name  || '—');
+  setEl('eo-wo',     data.wo_code      || '—');
+  setEl('eo-type',   data.output_type  || '—');
+  document.getElementById('eo-qty').value = data.qty_output || '';
+  document.getElementById('eo-kg').value  = data.kg_output  || '';
+  const kaitanEl = document.getElementById('eo-kaitan');
+  if (kaitanEl) {
+    const kg_sisa = Number(data.basket_kg_sisa || 0);
+    if (kg_sisa <= 0) {
+      kaitanEl.style.display = '';
+      kaitanEl.style.background = '#fee2e2';
+      kaitanEl.style.color = '#991b1b';
+      kaitanEl.innerHTML = '⚠️ Keranjang ini sudah habis/keluar dari Marinasi. Edit tetap bisa dilakukan tetapi perhatikan dampaknya.';
+    } else {
+      kaitanEl.style.display = 'none';
+    }
+  }
+  showErr('eo-err', '');
+  updateEOKgHint();
+  openModal('modal-edit-output');
+}
+
+function updateEOKgHint() {
+  const qty  = parseInt(document.getElementById('eo-qty')?.value);
+  const hint = document.getElementById('eo-kg-hint');
+  if (!hint || !editOutputData) return;
+  const kg_min = Number(editOutputData.kg_min || 0);
+  const kg_max = Number(editOutputData.kg_max || 0);
+  if (!qty || qty <= 0 || !kg_min || !kg_max) { hint.style.display = 'none'; return; }
+  const expMin = (qty * kg_min).toFixed(1);
+  const expMax = (qty * kg_max).toFixed(1);
+  hint.innerHTML = '📏 <strong>' + qty + ' ekor ' + (editOutputData.produk_name || '') + '</strong> → expected <strong>' + expMin + ' – ' + expMax + ' kg</strong>';
+  hint.style.display = 'block';
+}
+
+async function doEditOutput() {
+  if (!editOutputData) return;
+  const newQty = parseInt(document.getElementById('eo-qty').value)  || 0;
+  const newKg  = parseFloat(document.getElementById('eo-kg').value) || 0;
+  showErr('eo-err', '');
+  if (!newQty || newQty <= 0) { showErr('eo-err', 'Qty ekor harus lebih dari 0.'); return; }
+  if (!newKg  || newKg  <= 0) { showErr('eo-err', 'Kg aktual harus lebih dari 0.'); return; }
+  const btn = document.getElementById('eo-btn-ok');
+  btn.disabled = true; btn.textContent = 'Menyimpan…';
+  try {
+    const oldQty = Number(editOutputData.qty_output || 0);
+    const oldKg  = Number(editOutputData.kg_output  || 0);
+    const diffQ  = newQty - oldQty;
+    const diffKg = Number((newKg - oldKg).toFixed(1));
+    const { error } = await db.from('processing_outputs').update({
+      qty_output: newQty,
+      kg_output:  Number(newKg.toFixed(1))
+    }).eq('id', editOutputData.id);
+    if (error) throw error;
+    if (editOutputData.basket_id) {
+      const { data: bsk } = await db.from('baskets')
+        .select('qty_awal, kg_awal, qty_sisa, kg_sisa').eq('id', editOutputData.basket_id).maybeSingle();
+      if (bsk) {
+        const newQtyAwal = Math.max(0, Number(bsk.qty_awal) + diffQ);
+        const newKgAwal  = Number(Math.max(0, Number(bsk.kg_awal) + diffKg).toFixed(1));
+        const newQtySisa = Math.max(0, Number(bsk.qty_sisa) + diffQ);
+        const newKgSisa  = Number(Math.max(0, Number(bsk.kg_sisa) + diffKg).toFixed(1));
+        await db.from('baskets').update({
+          qty_awal: newQtyAwal, kg_awal: newKgAwal,
+          qty_sisa: newQtySisa, kg_sisa: newKgSisa,
+          status:   newKgSisa > 0.009 ? 'AKTIF' : 'HABIS'
+        }).eq('id', editOutputData.basket_id);
+      }
+    }
+    if (wsDetailWOId) await renderWSDetailContent(wsDetailWOId);
+    renderWSWOList();
+    await loadWSOutputsToday();
+    renderWSOutputsToday();
+    showToast('Output berhasil diperbarui.', 'success');
+    closeModal('modal-edit-output');
+  } catch(e) {
+    console.error(e); showErr('eo-err', 'Gagal: ' + (e.message || ''));
+  } finally {
+    btn.disabled = false; btn.textContent = '💾 Simpan Revisi';
+  }
+}
+
+async function openEditOutputFromToday(outputId) {
+  const { data: out, error } = await db.from('processing_outputs')
+    .select('id, qty_output, kg_output, output_type, order_id, baskets(id,basket_code,qty_sisa,kg_sisa,lokasi,status), product_master(id,nama_produk,product_code,kg_min,kg_max), processing_orders(order_code)')
+    .eq('id', outputId).maybeSingle();
+  if (error || !out) { showToast('Data output tidak ditemukan.', 'error'); return; }
+  const bsk = out.baskets || {}; const pm = out.product_master || {}; const wo = out.processing_orders || {};
+  openEditOutput({
+    id: out.id, basket_id: bsk.id, basket_code: bsk.basket_code,
+    produk_name: pm.nama_produk, produk_id: pm.id,
+    kg_min: pm.kg_min, kg_max: pm.kg_max,
+    wo_code: wo.order_code, wo_id: out.order_id,
+    qty_output: out.qty_output, kg_output: out.kg_output,
+    output_type: out.output_type,
+    basket_qty_sisa: bsk.qty_sisa, basket_kg_sisa: bsk.kg_sisa
+  });
+}
+
+async function reprintLabelById(outputId) {
+  await reprintLabel(outputId);
+}
+
+// ============================================================
+// TAB 3 — SELESAI DI WS
+// ============================================================
+function openSelesaiDiWS(woId) {
+  selesaiWOId = woId;
+  const wo  = activeWOs.find(w => w.id === woId);
+  const ws  = allWorkstations.find(w => w.id === selectedWSId);
+  setEl('sws-wo-code', wo?.order_code || '—');
+  setEl('sws-ws-name', ws ? (ws.kode + ' — ' + ws.nama) : '—');
+  document.getElementById('sws-pin').value = '';
+  document.getElementById('sws-pin-err').style.display = 'none';
+  openModal('modal-selesai-ws');
+}
+
+async function doSelesaiDiWS() {
+  const pin    = document.getElementById('sws-pin').value.trim();
+  const pinErr = document.getElementById('sws-pin-err');
+  pinErr.style.display = 'none';
+  if (!pin || pin.length < 4) { pinErr.textContent = 'PIN minimal 4 digit.'; pinErr.style.display = 'block'; return; }
+  const btn = document.getElementById('sws-btn-ok');
+  btn.disabled = true; btn.textContent = 'Memverifikasi…';
+  try {
+    const { data: sup } = await db.from('users').select('id, nama').eq('pin', pin).eq('aktif', true)
+      .or('role.eq.SUPERVISOR,is_system_admin.eq.true').maybeSingle();
+    if (!sup) { pinErr.textContent = 'PIN salah atau bukan Supervisor.'; pinErr.style.display = 'block'; return; }
+    const wo = activeWOs.find(w => w.id === selesaiWOId);
+    if (!wo) throw new Error('WO tidak ditemukan.');
+    const { data: wwsRow, error: wwsErr } = await db.from('wo_workstations').select('id')
+      .eq('order_id', selesaiWOId).eq('workstation_id', selectedWSId).maybeSingle();
+    if (wwsErr || !wwsRow) throw new Error('Data workstation-WO tidak ditemukan.');
+    const { error } = await db.from('wo_workstations')
+      .update({ selesai_at: new Date().toISOString(), selesai_by: sup.id }).eq('id', wwsRow.id);
+    if (error) throw error;
+    const ws = allWorkstations.find(w => w.id === selectedWSId);
+    showToast('WO ' + wo.order_code + ' ditandai selesai di ' + (ws?.kode || 'WS ini') + ' oleh ' + sup.nama, 'success');
+    closeModal('modal-selesai-ws');
+    await loadAll();
+  } catch(e) {
+    console.error(e); pinErr.textContent = 'Kesalahan: ' + (e.message || ''); pinErr.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = '✅ Konfirmasi Selesai';
+  }
+}
+
+// ============================================================
+// SIDEBAR TOGGLE
+// ============================================================
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sidebar-overlay').classList.toggle('visible');
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-overlay').classList.remove('visible');
+}
+
+// ============================================================
+// INIT
+// ============================================================
+window.addEventListener('DOMContentLoaded', () => {
+  const saved = localStorage.getItem('rpa_user');
+  if (saved) {
+    try { currentUser = JSON.parse(saved); startApp(); } catch(e) {}
+  }
+});
+</script>
+</body>
+</html>

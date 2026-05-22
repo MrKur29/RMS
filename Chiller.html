@@ -1,0 +1,2486 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chiller — Kurnia's Food</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+/* ===== RESET & BASE ===== */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f2f5;color:#111827;font-size:14px}
+button{cursor:pointer;font-family:inherit}
+a{text-decoration:none}
+
+/* ===== LOGIN ===== */
+#login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(135deg,#0f172a 0%,#1e3a8a 60%,#2563eb 100%)}
+.login-card{background:white;border-radius:16px;padding:44px 40px;width:400px;box-shadow:0 25px 60px rgba(0,0,0,0.4)}
+.login-logo{text-align:center;margin-bottom:36px}
+.login-logo .icon{font-size:48px;display:block;margin-bottom:12px}
+.login-logo h1{font-size:22px;font-weight:800;color:#111827}
+.login-logo p{font-size:13px;color:#6b7280;margin-top:4px}
+.form-group{margin-bottom:20px}
+.form-group label{display:block;font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
+.form-group input,.form-group select,.form-group textarea{width:100%;padding:11px 14px;border:1.5px solid #d1d5db;border-radius:8px;font-size:15px;transition:border-color .2s,box-shadow .2s;color:#111827;background:white;font-family:inherit}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{outline:none;border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+.form-group textarea{resize:vertical;min-height:72px;font-size:14px}
+.btn-login{width:100%;padding:13px;background:#2563eb;color:white;border:none;border-radius:8px;font-size:15px;font-weight:700;transition:background .2s,transform .1s}
+.btn-login:hover{background:#1d4ed8}
+.btn-login:active{transform:scale(.98)}
+.btn-login:disabled{background:#93c5fd;cursor:not-allowed}
+.login-error{background:#fee2e2;color:#dc2626;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:18px;border:1px solid #fecaca;display:none}
+.login-version{text-align:center;margin-top:20px;font-size:11px;color:#9ca3af}
+
+/* ===== APP LAYOUT ===== */
+#app-screen{display:none;height:100vh;overflow:hidden}
+.app-layout{display:flex;height:100%}
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:90}
+.sidebar-overlay.visible{display:block}
+
+/* ===== SIDEBAR ===== */
+.sidebar{width:230px;flex-shrink:0;background:#0f172a;color:white;display:flex;flex-direction:column;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.1) transparent;transition:transform .28s cubic-bezier(.4,0,.2,1);z-index:100}
+.sidebar-brand{padding:20px 18px 16px;border-bottom:1px solid rgba(255,255,255,.08);flex-shrink:0}
+.sidebar-brand h2{font-size:15px;font-weight:800;color:#f8fafc;display:flex;align-items:center;gap:8px}
+.sidebar-brand p{font-size:11px;color:rgba(255,255,255,.4);margin-top:3px}
+.sidebar-nav{flex:1;padding:10px 0}
+.nav-section-label{font-size:10px;font-weight:700;color:rgba(255,255,255,.3);text-transform:uppercase;letter-spacing:1px;padding:12px 18px 4px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 18px;font-size:13px;color:rgba(255,255,255,.65);cursor:pointer;transition:all .15s;border-left:3px solid transparent}
+.nav-item:hover:not(.disabled){background:rgba(255,255,255,.07);color:white}
+.nav-item.active{background:rgba(37,99,235,.2);color:#93c5fd;border-left-color:#3b82f6}
+.nav-item.disabled{opacity:.3;cursor:not-allowed}
+.nav-icon{font-size:15px;width:22px;text-align:center;flex-shrink:0}
+.nav-label-text{flex:1}
+.nav-tag{font-size:9px;font-weight:700;padding:2px 5px;border-radius:4px;background:rgba(37,99,235,.3);color:#93c5fd}
+.sidebar-footer{padding:14px 18px;border-top:1px solid rgba(255,255,255,.08);flex-shrink:0}
+.user-card{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.user-avatar{width:34px;height:34px;border-radius:50%;background:#2563eb;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:white;flex-shrink:0}
+.user-info-text .user-name{font-size:13px;font-weight:700;color:#f8fafc}
+.user-info-text .user-role{font-size:11px;color:rgba(255,255,255,.45);margin-top:1px}
+.btn-logout{width:100%;padding:8px 12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.6);border-radius:6px;font-size:12px;font-weight:600;transition:all .15s}
+.btn-logout:hover{background:rgba(220,38,38,.25);border-color:rgba(220,38,38,.5);color:#fca5a5}
+
+/* ===== MAIN AREA ===== */
+.main-area{flex:1;display:flex;flex-direction:column;overflow:hidden}
+
+/* ===== TOPBAR ===== */
+.topbar{background:white;height:58px;padding:0 20px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e5e7eb;box-shadow:0 1px 4px rgba(0,0,0,.05);gap:12px}
+.topbar-left{display:flex;align-items:center;gap:12px;min-width:0}
+.topbar-left h1{font-size:17px;font-weight:800;color:#111827;white-space:nowrap}
+.topbar-left p{font-size:12px;color:#9ca3af;margin-top:1px;white-space:nowrap}
+.topbar-left-text{min-width:0}
+.topbar-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.btn-hamburger{display:none;align-items:center;justify-content:center;width:40px;height:40px;border-radius:8px;background:#f3f4f6;border:1.5px solid #e5e7eb;font-size:18px;color:#374151;flex-shrink:0;transition:background .15s}
+.btn-hamburger:hover{background:#e5e7eb}
+.clock-display{font-size:14px;font-weight:700;color:#374151;background:#f9fafb;padding:6px 10px;border-radius:6px;border:1px solid #e5e7eb;white-space:nowrap}
+
+/* ===== CONTENT AREA ===== */
+.content-area{flex:1;overflow-y:auto;padding:20px 24px 32px}
+
+/* ===== FILTER BAR (date only) ===== */
+.filter-bar{background:white;border-radius:10px;padding:12px 18px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.06);display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.filter-bar label{font-size:12px;font-weight:700;color:#374151;white-space:nowrap}
+.filter-bar input[type=date]{padding:7px 10px;border:1.5px solid #d1d5db;border-radius:7px;font-size:13px;color:#111827;background:white;font-family:inherit;transition:border-color .2s}
+.filter-bar input[type=date]:focus{outline:none;border-color:#2563eb}
+.filter-spacer{flex:1}
+.btn-refresh{display:flex;align-items:center;gap:5px;padding:7px 14px;background:#f3f4f6;border:1.5px solid #e5e7eb;border-radius:7px;font-size:12px;font-weight:700;color:#374151;transition:all .15s}
+.btn-refresh:hover{background:#e5e7eb}
+
+/* ===== SUMMARY CARDS ===== */
+.cards-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;margin-bottom:16px}
+.summary-card{background:white;border-radius:10px;padding:14px;border-left:4px solid #e5e7eb;box-shadow:0 1px 3px rgba(0,0,0,.06);transition:transform .15s,box-shadow .15s}
+.summary-card:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.1)}
+.summary-card.c-blue{border-left-color:#2563eb}
+.summary-card.c-green{border-left-color:#16a34a}
+.summary-card.c-amber{border-left-color:#d97706}
+.summary-card.c-red{border-left-color:#dc2626}
+.summary-card.c-teal{border-left-color:#2563eb}
+.summary-card.c-warn{border-left-color:#dc2626;background:#fff5f5}
+.sc-label{font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.6px}
+.sc-value{font-size:26px;font-weight:900;color:#111827;line-height:1.1;margin:4px 0 2px}
+.sc-value.small{font-size:18px}
+.sc-value.warn{color:#dc2626}
+.sc-sub{font-size:11px;color:#9ca3af}
+
+/* ===== TWO-PANEL GRID ===== */
+.chiller-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start;margin-bottom:14px}
+
+/* ===== PANEL ===== */
+.panel{background:white;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden;margin-bottom:14px}
+.panel:last-child{margin-bottom:0}
+.panel-head{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:1px solid #f3f4f6;gap:8px;flex-wrap:wrap}
+.panel-title{font-size:14px;font-weight:800;color:#111827}
+.panel-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.panel-pill{font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;background:#f3f4f6;color:#374151}
+.panel-pill.alert{background:#fee2e2;color:#dc2626}
+.panel-pill.ok{background:#d1fae5;color:#065f46}
+.panel-pill.warn{background:#fef3c7;color:#92400e}
+.panel-pill.info{background:#dbeafe;color:#1e40af}
+
+/* ===== SCAN AREA ===== */
+.scan-area{padding:14px 16px;border-bottom:1px solid #f3f4f6;background:#f8faff}
+.scan-field-wrap{position:relative;margin-bottom:8px}
+.scan-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:18px;pointer-events:none}
+.scan-input{width:100%;padding:11px 11px 11px 40px;border:2px solid #2563eb;border-radius:8px;font-size:15px;font-weight:700;letter-spacing:1px;color:#111827;background:#f0f7ff;font-family:inherit;transition:box-shadow .2s}
+.scan-input:focus{outline:none;box-shadow:0 0 0 3px rgba(37,99,235,.2)}
+.scan-input::placeholder{font-weight:400;letter-spacing:0;color:#9ca3af}
+.scan-hint{font-size:11px;color:#6b7280}
+.scan-result{background:white;border-radius:8px;padding:12px;border:1.5px solid #e5e7eb;margin-top:10px;display:none}
+.scan-result.visible{display:block}
+.scan-result.scan-ok{border-color:#a7f3d0}
+.scan-result.scan-err{border-color:#fecaca;background:#fff5f5}
+.scan-result.scan-warn{border-color:#fde68a;background:#fffbeb}
+.scan-basket-code{font-size:13px;font-weight:800;color:#111827;margin-bottom:4px;font-family:monospace}
+.scan-basket-detail{font-size:12px;color:#374151;line-height:1.7}
+.scan-action-row{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+
+/* ===== TABLE ===== */
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl thead th{text-align:left;padding:9px 14px;font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;background:#f9fafb;border-bottom:1px solid #f0f2f5;white-space:nowrap}
+.tbl tbody td{padding:10px 14px;border-bottom:1px solid #f9fafb;vertical-align:middle}
+.tbl tbody tr:last-child td{border-bottom:none}
+.tbl tbody tr:hover td{background:#fafafa}
+.tbl-sub{font-size:11px;color:#6b7280;margin-top:2px}
+
+/* ===== AGE WARNING ROW STYLES ===== */
+.row-age-warn td{background:#fff7ed !important}
+.row-age-warn:hover td{background:#fff0e0 !important}
+.row-age-danger td{background:#fff1f2 !important}
+.row-age-danger:hover td{background:#ffe4e6 !important}
+.age-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700;white-space:nowrap}
+.age-fresh{background:#d1fae5;color:#065f46}
+.age-ok{background:#dbeafe;color:#1e40af}
+.age-warn{background:#fef3c7;color:#92400e}
+.age-danger{background:#fee2e2;color:#991b1b;animation:pulse-red .8s ease-in-out infinite alternate}
+@keyframes pulse-red{from{background:#fee2e2}to{background:#fecaca}}
+
+/* ===== LAPORAN STOK GRID ===== */
+.laporan-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+
+/* ===== UMUR STOK TABLE — special ===== */
+.umur-section{margin-bottom:8px}
+.umur-header{display:flex;align-items:center;justify-content:space-between;padding:8px 14px;background:#f9fafb;border-bottom:1px solid #f0f2f5;cursor:pointer;user-select:none}
+.umur-header:hover{background:#f0f2f5}
+.umur-day-label{font-size:13px;font-weight:800;color:#111827;display:flex;align-items:center;gap:8px}
+.umur-day-stats{font-size:12px;color:#6b7280;font-weight:600}
+.umur-body{display:none}
+.umur-body.open{display:block}
+
+/* ===== BADGES ===== */
+.badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:12px;font-size:11px;font-weight:700;white-space:nowrap}
+.b-pending{background:#fef3c7;color:#92400e}
+.b-confirmed{background:#d1fae5;color:#065f46}
+.b-rejected{background:#fee2e2;color:#991b1b}
+.b-chiller{background:#dbeafe;color:#1e40af}
+.b-parting{background:#dbeafe;color:#1e40af}
+.b-boneless{background:#fce7f3;color:#9d174d}
+.b-blasting{background:#ccfbf1;color:#065f46}
+.b-lantai{background:#f3f4f6;color:#374151}
+.b-gradeA{background:#d1fae5;color:#065f46}
+.b-gradeB{background:#fef3c7;color:#92400e}
+.b-gradeC{background:#fee2e2;color:#991b1b}
+
+/* ===== LAPORAN PRODUK CARD ===== */
+.produk-row{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid #f3f4f6;gap:8px}
+.produk-row:last-child{border-bottom:none}
+.produk-row:hover{background:#fafafa}
+.produk-info{flex:1;min-width:0}
+.produk-name{font-size:13px;font-weight:700;color:#111827;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.produk-code{font-size:11px;color:#6b7280;margin-top:2px}
+.produk-nums{text-align:right;flex-shrink:0}
+.produk-qty{font-size:14px;font-weight:800;color:#111827}
+.produk-kg{font-size:11px;color:#6b7280;margin-top:1px}
+.produk-keranjang{font-size:10px;color:#9ca3af;margin-top:1px}
+
+/* ===== BUTTONS ===== */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 12px;border-radius:6px;border:none;font-size:12px;font-weight:700;transition:all .15s;min-height:34px;touch-action:manipulation;-webkit-tap-highlight-color:transparent;white-space:nowrap}
+.btn-primary{background:#2563eb;color:white}
+.btn-primary:hover{background:#1d4ed8}
+.btn-green{background:#16a34a;color:white}
+.btn-green:hover{background:#15803d}
+.btn-amber{background:#d97706;color:white}
+.btn-amber:hover{background:#b45309}
+.btn-red{background:#dc2626;color:white}
+.btn-red:hover{background:#b91c1c}
+.btn-ghost{background:#f3f4f6;color:#374151}
+.btn-ghost:hover{background:#e5e7eb}
+.btn-outline{background:white;color:#374151;border:1.5px solid #d1d5db}
+.btn-outline:hover{background:#f9fafb;border-color:#9ca3af}
+.btn-sm{padding:5px 9px;font-size:11px;min-height:28px}
+.btn:disabled{opacity:.45;cursor:not-allowed;pointer-events:none}
+
+/* ===== DESTINATION BUTTONS ===== */
+.dest-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:12px}
+.btn-dest{padding:14px 8px;border:2px solid transparent;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;transition:all .15s;text-align:center;line-height:1.4}
+.btn-dest.selected{transform:scale(1.03);box-shadow:0 4px 12px rgba(0,0,0,.15)}
+.btn-dest-parting{background:#dbeafe;color:#1e40af;border-color:#bfdbfe}
+.btn-dest-parting:hover,.btn-dest-parting.selected{background:#2563eb;color:white;border-color:#2563eb}
+.btn-dest-boneless{background:#fce7f3;color:#9d174d;border-color:#fbcfe8}
+.btn-dest-boneless:hover,.btn-dest-boneless.selected{background:#db2777;color:white;border-color:#db2777}
+.btn-dest-blasting{background:#ccfbf1;color:#065f46;border-color:#99f6e4}
+.btn-dest-blasting:hover,.btn-dest-blasting.selected{background:#0d9488;color:white;border-color:#0d9488}
+.btn-dest-marinasi{background:#fef9c3;color:#854d0e;border-color:#fde68a}
+.btn-dest-marinasi:hover,.btn-dest-marinasi.selected{background:#d97706;color:white;border-color:#d97706}
+/* Partial transfer toggle */
+.partial-toggle{display:flex;gap:0;border:1.5px solid #d1d5db;border-radius:8px;overflow:hidden;margin:14px 0 0}
+.partial-toggle button{flex:1;padding:8px;font-size:13px;font-weight:600;cursor:pointer;border:none;background:#f9fafb;color:#6b7280;transition:all .15s}
+.partial-toggle button.active{background:#1d4ed8;color:white}
+.partial-toggle button:first-child{border-right:1.5px solid #d1d5db}
+.partial-input-box{display:none;background:#f0f9ff;border:1.5px solid #bae6fd;border-radius:8px;padding:12px;margin-top:10px}
+.partial-input-box.show{display:block}
+.partial-input-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.partial-input-row label{font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:4px}
+.partial-input-row input{width:100%;padding:7px 9px;border:1.5px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box}
+.partial-input-row input:focus{outline:none;border-color:#1d4ed8}
+.partial-max-hint{font-size:11px;color:#6b7280;margin-top:6px}
+
+/* ===== EMPTY STATE ===== */
+.empty{text-align:center;padding:28px 16px;color:#9ca3af;font-size:13px}
+.empty .e-icon{font-size:28px;margin-bottom:8px}
+
+/* ===== MODAL ===== */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;align-items:flex-start;justify-content:center;padding:32px 16px;overflow-y:auto}
+.modal-overlay.open{display:flex}
+.modal-box{background:white;border-radius:14px;padding:28px;width:480px;max-width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);animation:modal-in .2s ease;margin:auto}
+.modal-box.modal-sm{width:400px}
+@keyframes modal-in{from{transform:scale(.92);opacity:0}to{transform:scale(1);opacity:1}}
+.modal-title{font-size:16px;font-weight:800;margin-bottom:4px;color:#111827}
+.modal-desc{font-size:13px;color:#6b7280;margin-bottom:20px}
+.modal-info-box{background:#f9fafb;border-radius:8px;padding:14px;border:1px solid #e5e7eb;margin-bottom:16px}
+.modal-info-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #f0f2f5;font-size:13px}
+.modal-info-row:last-child{border-bottom:none}
+.modal-info-label{color:#6b7280}
+.modal-info-val{font-weight:700;color:#111827}
+.modal-footer{display:flex;justify-content:flex-end;gap:10px;margin-top:22px;padding-top:18px;border-top:1px solid #f0f2f5}
+
+/* ===== PIN INPUT ===== */
+.pin-input{width:100%;padding:14px;border:2px solid #d1d5db;border-radius:8px;font-size:22px;font-weight:800;letter-spacing:6px;text-align:center;color:#111827;font-family:monospace;transition:border-color .2s}
+.pin-input:focus{outline:none;border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.15)}
+.pin-error{color:#dc2626;font-size:12px;font-weight:700;margin-top:6px;display:none}
+
+/* ===== TOAST ===== */
+#toast{position:fixed;bottom:28px;right:28px;padding:13px 20px;border-radius:10px;font-size:13px;font-weight:700;box-shadow:0 8px 24px rgba(0,0,0,.2);display:none;z-index:999;animation:toast-in .25s ease}
+#toast.show{display:block}
+#toast.success{background:#065f46;color:white}
+#toast.error{background:#991b1b;color:white}
+#toast.warning{background:#92400e;color:white}
+@keyframes toast-in{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+
+/* ===== SECTION TOOLBAR (search + export) ===== */
+.section-toolbar{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid #f3f4f6;flex-wrap:wrap;background:#fafafa}
+.search-wrap{position:relative;flex:1;min-width:160px}
+.search-wrap .s-icon{position:absolute;left:9px;top:50%;transform:translateY(-50%);font-size:13px;pointer-events:none;color:#9ca3af}
+.search-inp{width:100%;padding:6px 10px 6px 28px;border:1.5px solid #e5e7eb;border-radius:7px;font-size:13px;color:#111827;font-family:inherit;background:white;transition:border-color .2s}
+.search-inp:focus{outline:none;border-color:#2563eb;box-shadow:0 0 0 2px rgba(37,99,235,.1)}
+.search-inp::placeholder{color:#9ca3af}
+
+/* ===== EXPORT BUTTONS ===== */
+.btn-csv{background:#f0fdf4;color:#15803d;border:1.5px solid #86efac;padding:5px 10px;border-radius:6px;font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:4px;cursor:pointer;transition:background .15s;white-space:nowrap}
+.btn-csv:hover{background:#dcfce7}
+.btn-xlsx{background:#eff6ff;color:#1d4ed8;border:1.5px solid #93c5fd;padding:5px 10px;border-radius:6px;font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:4px;cursor:pointer;transition:background .15s;white-space:nowrap}
+.btn-xlsx:hover{background:#dbeafe}
+
+/* ===== PAGINATION ===== */
+.pagination{display:flex;align-items:center;justify-content:space-between;padding:9px 14px;border-top:1px solid #f3f4f6;font-size:12px;color:#6b7280;flex-wrap:wrap;gap:8px;background:#fafafa}
+.pag-info{font-weight:600}
+.pag-btns{display:flex;gap:4px}
+.btn-pag{padding:4px 12px;border:1.5px solid #e5e7eb;border-radius:6px;background:white;font-size:12px;font-weight:700;color:#374151;cursor:pointer;transition:all .15s}
+.btn-pag:hover:not(:disabled){background:#f3f4f6;border-color:#d1d5db}
+.btn-pag:disabled{opacity:.35;cursor:not-allowed}
+
+/* ===== GROUPED STOK — LEVEL 1 ===== */
+.grp-row{cursor:pointer;user-select:none}
+.grp-row td{background:#f0f7ff;padding:10px 14px;border-bottom:1px solid #dbeafe;font-weight:700;font-size:13px}
+.grp-row:hover td{background:#dbeafe}
+.grp-arrow{display:inline-block;width:16px;transition:transform .2s;font-style:normal;font-size:11px}
+.grp-row.expanded .grp-arrow{transform:rotate(90deg)}
+.grp-name{font-size:13px;font-weight:800;color:#111827}
+.grp-meta{font-size:11px;font-weight:400;color:#4b5563;margin-left:6px}
+
+/* ===== GROUPED STOK — LEVEL 2 ===== */
+.sub-row td{padding:8px 14px 8px 30px;border-bottom:1px solid #f3f4f6;background:#f8faff;font-size:12px}
+.sub-row:hover td{background:#eff6ff}
+.sub-row.last-sub td{border-bottom:2px solid #dbeafe}
+
+/* ===== SCAN GRID (2-col khusus scan) ===== */
+.scan-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+
+/* ===== TABLET / MOBILE ===== */
+@media (max-width:1023px){
+  .sidebar{position:fixed;top:0;left:0;height:100vh;transform:translateX(-100%)}
+  .sidebar.open{transform:translateX(0)}
+  .btn-hamburger{display:flex}
+  .scan-grid{grid-template-columns:1fr}
+  .laporan-grid{grid-template-columns:1fr}
+  .cards-row{grid-template-columns:repeat(auto-fill,minmax(130px,1fr))}
+}
+@media (max-width:600px){
+  .content-area{padding:14px 14px 24px}
+  .topbar{padding:0 14px}
+  .modal-box{padding:20px}
+  .dest-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<!-- ==================== LOGIN ==================== -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <span class="icon">❄️</span>
+      <h1>RPA Management System</h1>
+      <p>Chiller — Login</p>
+    </div>
+    <div class="login-error" id="login-error"></div>
+    <div class="form-group">
+      <label>Username</label>
+      <input type="text" id="inp-username" placeholder="Masukkan username" autocomplete="username"
+             onkeydown="if(event.key==='Enter')document.getElementById('inp-password').focus()">
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input type="password" id="inp-password" placeholder="Masukkan password" autocomplete="current-password"
+             onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button class="btn-login" id="btn-login" onclick="doLogin()">Masuk →</button>
+    <p class="login-version">v1.0 — RPA System</p>
+  </div>
+</div>
+
+<!-- ==================== APP ==================== -->
+<div id="app-screen">
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+<div class="app-layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <div style="display:flex;align-items:center;gap:10px;"><img src="logo.png" style="height:36px;width:auto;object-fit:contain;"><span style="font-size:15px;font-weight:800;color:#f8fafc;">Kurnia's Food</span></div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section-label">Utama</div>
+      <div class="nav-item" onclick="navTo('Dashboard.html')">
+        <span class="nav-icon">🏠</span><span class="nav-label-text">Dashboard</span>
+      </div>
+      <div class="nav-section-label">Produksi</div>
+      <div class="nav-item" onclick="navTo('BatchAyamHidup.html')">
+        <span class="nav-icon">🐔</span><span class="nav-label-text">Batch Ayam Hidup</span>
+      </div>
+      <div class="nav-item" onclick="navTo('ProduksiKarkas.html')"><span class="nav-icon">⚙️</span><span class="nav-label-text">Produksi Karkas</span></div>
+      <div class="nav-item" onclick="navTo('Thawing.html')"><span class="nav-icon">🧊</span><span class="nav-label-text">Thawing</span></div>
+      <div class="nav-item active">
+        <span class="nav-icon">❄️</span><span class="nav-label-text">Chiller</span>
+        <span class="nav-tag">Aktif</span>
+      </div>
+      <div class="nav-item" onclick="navTo('WorkOrder.html')"><span class="nav-icon">📋</span><span class="nav-label-text">Work Order</span></div>
+      <div class="nav-item" onclick="navTo('Parting.html')"><span class="nav-icon">✂️</span><span class="nav-label-text">Parting</span></div>
+      <div class="nav-item" onclick="navTo('Boneless.html')"><span class="nav-icon">🥩</span><span class="nav-label-text">Boneless</span></div>
+      <div class="nav-item" onclick="navTo('Marinasi.html')"><span class="nav-icon">🌶️</span><span class="nav-label-text">Marinasi</span></div>
+      <div class="nav-item" onclick="navTo('Blasting.html')"><span class="nav-icon">🧊</span><span class="nav-label-text">Blasting</span></div>
+      <div class="nav-item" onclick="navTo('ByProductKarkas.html')"><span class="nav-icon">📦</span><span class="nav-label-text">By-product Karkas</span></div>
+      <div class="nav-section-label">Penjualan</div>
+      <div class="nav-item disabled"><span class="nav-icon">🛒</span><span class="nav-label-text">Penjualan</span></div>
+      <div class="nav-section-label">Manajemen</div>
+      <div class="nav-item disabled"><span class="nav-icon">✅</span><span class="nav-label-text">Koreksi &amp; Approval</span></div>
+      <div class="nav-item disabled"><span class="nav-icon">📊</span><span class="nav-label-text">Traceability</span></div>
+      <div class="nav-item" onclick="navTo('MasterData.html')"><span class="nav-icon">🗂️</span><span class="nav-label-text">Master Data</span></div>
+      <div class="nav-item" id="nav-user-mgmt" style="display:none" onclick="navTo('UserManagement.html')"><span class="nav-icon">👥</span><span class="nav-label-text">Manajemen User</span></div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-card">
+        <div class="user-avatar" id="user-avatar">?</div>
+        <div class="user-info-text">
+          <div class="user-name" id="sidebar-name">—</div>
+          <div class="user-role" id="sidebar-role">—</div>
+        </div>
+      </div>
+      <button class="btn-logout" onclick="doLogout()">⬅ Keluar</button>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="main-area">
+    <div class="topbar">
+      <div class="topbar-left">
+        <button class="btn-hamburger" id="btn-hamburger" onclick="toggleSidebar()">☰</button>
+        <div class="topbar-left-text">
+          <h1>❄️ Chiller</h1>
+          <p id="topbar-date">—</p>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <div class="clock-display" id="clock">—</div>
+      </div>
+    </div>
+
+    <div class="content-area" id="content-area">
+
+      <!-- FILTER BAR — refresh only -->
+      <div class="filter-bar">
+        <div class="filter-spacer"></div>
+        <button class="btn-refresh" onclick="loadAll()">🔄 Refresh Semua</button>
+      </div>
+
+      <!-- SUMMARY CARDS -->
+      <div class="cards-row">
+        <div class="summary-card c-amber">
+          <div class="sc-label">Pending Masuk</div>
+          <div class="sc-value" id="sc-pending">—</div>
+          <div class="sc-sub">keranjang antri</div>
+        </div>
+        <div class="summary-card c-blue">
+          <div class="sc-label">Stok Chiller</div>
+          <div class="sc-value" id="sc-stok">—</div>
+          <div class="sc-sub">keranjang aktif</div>
+        </div>
+        <div class="summary-card c-teal">
+          <div class="sc-label">Total Kg Chiller</div>
+          <div class="sc-value small" id="sc-kg">—</div>
+        </div>
+        <div class="summary-card c-green">
+          <div class="sc-label">Keluar Hari Ini</div>
+          <div class="sc-value" id="sc-keluar">—</div>
+          <div class="sc-sub">keranjang pindah</div>
+        </div>
+        <div class="summary-card c-warn" id="sc-card-warn" style="display:none">
+          <div class="sc-label">⚠️ Umur ≥ 3 Hari</div>
+          <div class="sc-value warn" id="sc-warn-age">0</div>
+          <div class="sc-sub">perlu segera dibekukan</div>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- SECTION 1: AREA SCAN (2-kolom) -->
+      <!-- ============================================================ -->
+      <div class="scan-grid">
+
+        <!-- SCAN MASUK -->
+        <div class="panel">
+          <div class="panel-head">
+            <div class="panel-title">📥 Scan Keranjang Masuk</div>
+          </div>
+          <div class="scan-area">
+            <div class="scan-field-wrap">
+              <span class="scan-icon">📷</span>
+              <input type="text" class="scan-input" id="scan-masuk-input"
+                     placeholder="Scan QR / ketik kode keranjang…"
+                     autocomplete="off"
+                     onkeydown="if(event.key==='Enter')doScanMasuk()"
+                     oninput="clearScanResult('scan-masuk-result')">
+            </div>
+            <div class="scan-hint">Arahkan barcode reader ke QR label, lalu tekan Enter</div>
+            <div class="scan-result" id="scan-masuk-result">
+              <div class="scan-basket-code" id="smr-code">—</div>
+              <div class="scan-basket-detail" id="smr-detail">—</div>
+              <div class="scan-action-row" id="smr-actions"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SCAN KELUAR -->
+        <div class="panel">
+          <div class="panel-head">
+            <div class="panel-title">📤 Scan Pindah Keluar</div>
+          </div>
+          <div class="scan-area">
+            <div class="scan-field-wrap">
+              <span class="scan-icon">📷</span>
+              <input type="text" class="scan-input" id="scan-keluar-input"
+                     placeholder="Scan QR keranjang yang akan dipindah…"
+                     autocomplete="off"
+                     onkeydown="if(event.key==='Enter')doScanKeluar()"
+                     oninput="clearScanResult('scan-keluar-result')">
+            </div>
+            <div class="scan-hint">Scan keranjang di Chiller → pilih tujuan Parting / Boneless / Blasting</div>
+            <div class="scan-result" id="scan-keluar-result">
+              <div class="scan-basket-code" id="skr-code">—</div>
+              <div class="scan-basket-detail" id="skr-detail">—</div>
+              <div class="scan-action-row" id="skr-actions"></div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /scan-grid -->
+
+      <!-- ============================================================ -->
+      <!-- SECTION 2: ANTRIAN MASUK CHILLER (full-width) -->
+      <!-- ============================================================ -->
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title">⏳ Antrian Masuk Chiller</div>
+          <div class="panel-actions">
+            <span class="panel-pill alert" id="pill-pending-count">0 pending</span>
+            <button class="btn btn-green btn-sm" id="btn-konfirm-semua" onclick="konfirmasiSemua()" style="display:none">✅ Konfirmasi Semua</button>
+          </div>
+        </div>
+        <div class="section-toolbar">
+          <div class="search-wrap">
+            <span class="s-icon">🔍</span>
+            <input type="text" class="search-inp" id="search-pending"
+                   placeholder="Cari kode keranjang, produk, asal…"
+                   oninput="pendingFilter=this.value;pendingPage=0;renderPendingTable()">
+          </div>
+          <button class="btn-csv" onclick="exportPendingCSV()">⬇ CSV</button>
+          <button class="btn-xlsx" onclick="exportPendingXLSX()">⬇ Excel</button>
+        </div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>Kode Keranjang</th>
+                <th>Produk</th>
+                <th>Qty / Kg</th>
+                <th>Dari</th>
+                <th>Waktu Kirim</th>
+                <th>Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-pending">
+              <tr><td colspan="6"><div class="empty"><div class="e-icon">⏳</div>Memuat…</div></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pagination" id="pag-pending" style="display:none">
+          <span class="pag-info" id="pag-pending-info">—</span>
+          <div class="pag-btns">
+            <button class="btn-pag" id="pag-pending-prev" onclick="pendingPage--;renderPendingTable()">‹ Prev</button>
+            <button class="btn-pag" id="pag-pending-next" onclick="pendingPage++;renderPendingTable()">Next ›</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- SECTION 3: STOK CHILLER — GROUPED (full-width) -->
+      <!-- ============================================================ -->
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title">❄️ Stok di Chiller</div>
+          <div class="panel-actions">
+            <span class="panel-pill info" id="pill-stok-count">0 keranjang</span>
+          </div>
+        </div>
+        <div class="section-toolbar">
+          <div class="search-wrap">
+            <span class="s-icon">🔍</span>
+            <input type="text" class="search-inp" id="search-stok"
+                   placeholder="Cari produk atau kode keranjang…"
+                   oninput="stokFilter=this.value;stokPage=0;renderStokTable()">
+          </div>
+          <button class="btn-csv" onclick="exportStokCSV()">⬇ CSV</button>
+          <button class="btn-xlsx" onclick="exportStokXLSX()">⬇ Excel</button>
+        </div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>Produk / Kode Keranjang</th>
+                <th style="text-align:center">Keranjang</th>
+                <th>Total Qty</th>
+                <th>Total Kg</th>
+                <th>Umur Maks</th>
+                <th>Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-stok">
+              <tr><td colspan="6"><div class="empty"><div class="e-icon">❄️</div>Memuat…</div></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pagination" id="pag-stok" style="display:none">
+          <span class="pag-info" id="pag-stok-info">—</span>
+          <div class="pag-btns">
+            <button class="btn-pag" id="pag-stok-prev" onclick="stokPage--;renderStokTable()">‹ Prev</button>
+            <button class="btn-pag" id="pag-stok-next" onclick="stokPage++;renderStokTable()">Next ›</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- SECTION 4B: ANTRIAN BY-PRODUCT KARKAS MASUK CHILLER -->
+      <!-- ============================================================ -->
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title">📦 By-product Karkas — Antrian Masuk</div>
+          <div class="panel-actions">
+            <span class="panel-pill" id="pill-bpk-count">0 item</span>
+            <button class="btn btn-green btn-sm" id="btn-bpk-konfirm-semua" onclick="bpkKonfirmasiSemua()" style="display:none">✅ Konfirmasi Semua BPK</button>
+          </div>
+        </div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>Produk</th>
+                <th>Bungkus</th>
+                <th>Kg</th>
+                <th>Keterangan</th>
+                <th>Kode Label</th>
+                <th>Waktu Input</th>
+                <th>Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-bpk-antrian">
+              <tr><td colspan="7"><div class="empty"><div class="e-icon">📦</div>Tidak ada antrian by-product karkas</div></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <!-- Riwayat konfirmasi BPK hari ini -->
+        <div style="padding:10px 18px;border-top:1px solid #f3f4f6">
+          <div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Sudah Dikonfirmasi Hari Ini</div>
+          <div id="bpk-confirmed-list" style="font-size:12px;color:#9ca3af;font-style:italic;padding:4px 0">—</div>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- SECTION 4: RIWAYAT KELUAR (full-width) -->
+      <!-- ============================================================ -->
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title">📤 Riwayat Keluar</div>
+          <div class="panel-actions">
+            <span class="panel-pill" id="pill-keluar-count">0 movement</span>
+          </div>
+        </div>
+        <div class="section-toolbar">
+          <label style="font-size:12px;font-weight:700;color:#374151;white-space:nowrap">📅 Tanggal:</label>
+          <input type="date" id="inp-filter-date"
+                 style="padding:6px 10px;border:1.5px solid #e5e7eb;border-radius:7px;font-size:13px;font-family:inherit"
+                 onchange="keluarPage=0;loadKeluarHariIni()">
+          <div class="search-wrap">
+            <span class="s-icon">🔍</span>
+            <input type="text" class="search-inp" id="search-keluar"
+                   placeholder="Cari kode, produk, tujuan…"
+                   oninput="keluarFilter=this.value;keluarPage=0;renderKeluarTable()">
+          </div>
+          <button class="btn-csv" onclick="exportKeluarCSV()">⬇ CSV</button>
+          <button class="btn-xlsx" onclick="exportKeluarXLSX()">⬇ Excel</button>
+        </div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>Kode Keranjang</th>
+                <th>Produk</th>
+                <th>Kg</th>
+                <th>Tujuan</th>
+                <th>Status</th>
+                <th>Waktu Kirim</th>
+                <th>Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-keluar">
+              <tr><td colspan="7"><div class="empty"><div class="e-icon">📤</div>Belum ada</div></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pagination" id="pag-keluar" style="display:none">
+          <span class="pag-info" id="pag-keluar-info">—</span>
+          <div class="pag-btns">
+            <button class="btn-pag" id="pag-keluar-prev" onclick="keluarPage--;renderKeluarTable()">‹ Prev</button>
+            <button class="btn-pag" id="pag-keluar-next" onclick="keluarPage++;renderKeluarTable()">Next ›</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- SECTION 2: LAPORAN STOK -->
+      <!-- ============================================================ -->
+      <div class="laporan-grid">
+
+        <!-- LAPORAN STOK PER PRODUK -->
+        <div class="panel" style="margin-bottom:0">
+          <div class="panel-head">
+            <div class="panel-title">📊 Stok per Jenis Produk</div>
+            <div class="panel-actions">
+              <span class="panel-pill info" id="pill-produk-count">—</span>
+            </div>
+          </div>
+          <div id="laporan-produk-body">
+            <div class="empty"><div class="e-icon">📊</div>Memuat…</div>
+          </div>
+          <!-- TOTAL ROW -->
+          <div id="laporan-produk-total" style="display:none;padding:10px 16px;background:#f0f7ff;border-top:2px solid #dbeafe">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span style="font-size:12px;font-weight:800;color:#1e40af">TOTAL KESELURUHAN</span>
+              <div style="text-align:right">
+                <div style="font-size:14px;font-weight:800;color:#111827" id="lap-total-qty">—</div>
+                <div style="font-size:11px;color:#6b7280" id="lap-total-kg">—</div>
+                <div style="font-size:10px;color:#9ca3af" id="lap-total-krj">—</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- LAPORAN UMUR STOK -->
+        <div class="panel" style="margin-bottom:0">
+          <div class="panel-head">
+            <div class="panel-title">🕐 Laporan Umur Stok</div>
+            <div class="panel-actions">
+              <span class="panel-pill warn" id="pill-warn-age" style="display:none">⚠️ Ada yg perlu dibekukan</span>
+            </div>
+          </div>
+          <!-- LEGEND -->
+          <div style="padding:10px 16px;border-bottom:1px solid #f3f4f6;display:flex;gap:10px;flex-wrap:wrap">
+            <span style="font-size:11px;display:flex;align-items:center;gap:4px">
+              <span style="width:10px;height:10px;border-radius:50%;background:#d1fae5;display:inline-block;border:1.5px solid #6ee7b7"></span>Hari ini
+            </span>
+            <span style="font-size:11px;display:flex;align-items:center;gap:4px">
+              <span style="width:10px;height:10px;border-radius:50%;background:#dbeafe;display:inline-block;border:1.5px solid #93c5fd"></span>1-2 hari
+            </span>
+            <span style="font-size:11px;display:flex;align-items:center;gap:4px">
+              <span style="width:10px;height:10px;border-radius:50%;background:#fef3c7;display:inline-block;border:1.5px solid #fcd34d"></span>3 hari — segera bekukan!
+            </span>
+            <span style="font-size:11px;display:flex;align-items:center;gap:4px">
+              <span style="width:10px;height:10px;border-radius:50%;background:#fee2e2;display:inline-block;border:1.5px solid #fca5a5"></span>≥4 hari — KRITIS
+            </span>
+          </div>
+          <div id="laporan-umur-body">
+            <div class="empty"><div class="e-icon">🕐</div>Memuat…</div>
+          </div>
+        </div>
+
+      </div><!-- /laporan-grid -->
+
+    </div><!-- /content-area -->
+  </div><!-- /main-area -->
+</div><!-- /app-layout -->
+</div><!-- /app-screen -->
+
+
+<!-- ==================== MODAL: KONFIRMASI MASUK ==================== -->
+<div class="modal-overlay" id="modal-konfirm">
+  <div class="modal-box modal-sm">
+    <div class="modal-title">✅ Konfirmasi Masuk Chiller</div>
+    <div class="modal-desc">Keranjang akan dikonfirmasi masuk ke area Chiller.</div>
+    <div class="modal-info-box">
+      <div class="modal-info-row"><span class="modal-info-label">Kode Keranjang</span><span class="modal-info-val" id="mk-code">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Produk</span><span class="modal-info-val" id="mk-produk">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Qty / Kg</span><span class="modal-info-val" id="mk-qty-kg">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Dari Lokasi</span><span class="modal-info-val" id="mk-dari">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Batch</span><span class="modal-info-val" id="mk-batch">—</span></div>
+    </div>
+    <div id="mk-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-bottom:10px;display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-konfirm')">Batal</button>
+      <button class="btn btn-red btn-sm" onclick="openTolakFromKonfirmModal()">✗ Tolak</button>
+      <button class="btn btn-green" id="mk-btn-ok" onclick="doKonfirmasi()">✅ Konfirmasi Masuk</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ==================== MODAL: TOLAK MOVEMENT ==================== -->
+<div class="modal-overlay" id="modal-tolak">
+  <div class="modal-box modal-sm">
+    <div class="modal-title">✗ Tolak Keranjang</div>
+    <div class="modal-desc">Keranjang <strong id="mt-code">—</strong> akan dikembalikan. Masukkan alasan penolakan.</div>
+    <div class="form-group" style="margin-bottom:0">
+      <label>Alasan Penolakan <span style="color:#dc2626">*</span></label>
+      <textarea id="mt-alasan" placeholder="Contoh: Produk tidak sesuai, keranjang kotor…" rows="3"></textarea>
+    </div>
+    <div id="mt-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-top:8px;display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-tolak')">Batal</button>
+      <button class="btn btn-red" id="mt-btn-ok" onclick="doTolak()">✗ Tolak Keranjang</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ==================== MODAL: PINDAH KELUAR ==================== -->
+<div class="modal-overlay" id="modal-pindah">
+  <div class="modal-box">
+    <div class="modal-title">📤 Pindah Keluar dari Chiller</div>
+    <div class="modal-desc">Movement akan berstatus PENDING sampai penerima mengkonfirmasi.</div>
+    <div class="modal-info-box">
+      <div class="modal-info-row"><span class="modal-info-label">Kode Keranjang</span><span class="modal-info-val" id="mp-code">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Produk</span><span class="modal-info-val" id="mp-produk">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Qty / Kg</span><span class="modal-info-val" id="mp-qty-kg">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Umur Produk</span><span class="modal-info-val" id="mp-umur">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Batch</span><span class="modal-info-val" id="mp-batch">—</span></div>
+    </div>
+    <div style="font-size:13px;font-weight:700;color:#374151;margin-bottom:8px">Pilih Tujuan <span style="color:#dc2626">*</span></div>
+    <div class="dest-grid">
+      <button class="btn-dest btn-dest-parting"  id="dest-parting"  onclick="selectDest('PARTING')">✂️<br>Parting</button>
+      <button class="btn-dest btn-dest-boneless" id="dest-boneless" onclick="selectDest('BONELESS')">🥩<br>Boneless</button>
+      <button class="btn-dest btn-dest-blasting" id="dest-blasting" onclick="selectDest('BLASTING')">🧊<br>Blasting</button>
+      <button class="btn-dest btn-dest-marinasi" id="dest-marinasi" onclick="selectDest('MARINASI')">🌶️<br>Marinasi</button>
+    </div>
+    <!-- Toggle Kirim Semua / Sebagian -->
+    <div style="font-size:13px;font-weight:700;color:#374151;margin-top:14px;margin-bottom:4px">Jumlah yang Dikirim</div>
+    <div class="partial-toggle">
+      <button id="mp-toggle-semua" class="active" onclick="setPartialMode(false)">📦 Kirim Semua</button>
+      <button id="mp-toggle-sebagian" onclick="setPartialMode(true)">✂️ Kirim Sebagian</button>
+    </div>
+    <!-- Input partial (muncul hanya saat Kirim Sebagian) -->
+    <div class="partial-input-box" id="mp-partial-box">
+      <div class="partial-input-row">
+        <div>
+          <label>Jumlah Ekor yang Dikirim <span style="color:#dc2626">*</span></label>
+          <input type="number" id="mp-qty-kirim" min="1" placeholder="ekor" oninput="checkPartialRatio()">
+        </div>
+        <div>
+          <label>Berat yang Dikirim (kg) <span style="color:#dc2626">*</span></label>
+          <input type="number" id="mp-kg-kirim" min="0.01" step="0.01" placeholder="kg" oninput="checkPartialRatio()">
+        </div>
+      </div>
+      <div class="partial-max-hint" id="mp-partial-hint">Maks: — ekor / — kg</div>
+      <div id="mp-ratio-warn" style="display:none;background:#fef9c3;border:1.5px solid #fde047;border-radius:6px;padding:8px 10px;font-size:12px;color:#854d0e;margin-top:8px;line-height:1.5"></div>
+    </div>
+    <div class="form-group" style="margin-top:14px;margin-bottom:0">
+      <label>Catatan (Opsional)</label>
+      <input type="text" id="mp-catatan" placeholder="Catatan tambahan…">
+    </div>
+    <div id="mp-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-top:8px;display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-pindah')">Batal</button>
+      <button class="btn btn-primary" id="mp-btn-ok" onclick="doPindahKeluar()">📤 Pindah Keluar</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ==================== MODAL: KONFIRMASI SEMUA ==================== -->
+<div class="modal-overlay" id="modal-konfirm-semua">
+  <div class="modal-box modal-sm">
+    <div class="modal-title">✅ Konfirmasi Semua Keranjang</div>
+    <div class="modal-desc" id="mks-desc">Semua keranjang pending akan dikonfirmasi masuk ke Chiller.</div>
+    <div style="background:#fef3c7;border:1.5px solid #fde68a;border-radius:8px;padding:12px;margin-bottom:16px;font-size:13px;color:#92400e">
+      <strong>⚠️ Perhatian:</strong> Pastikan semua keranjang sudah benar-benar berada di area Chiller sebelum konfirmasi.
+    </div>
+    <div id="mks-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-bottom:10px;display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-konfirm-semua')">Batal</button>
+      <button class="btn btn-green" id="mks-btn-ok" onclick="doKonfirmasiSemua()">✅ Ya, Konfirmasi Semua</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ==================== MODAL: DETAIL KERANJANG ==================== -->
+<div class="modal-overlay" id="modal-detail">
+  <div class="modal-box" style="width:560px">
+    <div class="modal-title">🔍 Detail Keranjang</div>
+    <div class="modal-desc" id="md-subtitle">—</div>
+    <div class="modal-info-box">
+      <div class="modal-info-row"><span class="modal-info-label">Kode Keranjang</span><span class="modal-info-val" style="font-family:monospace" id="md-code">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Produk</span><span class="modal-info-val" id="md-produk">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Qty / Kg</span><span class="modal-info-val" id="md-qty-kg">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Lokasi Sekarang</span><span class="modal-info-val" id="md-lokasi">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Batch</span><span class="modal-info-val" id="md-batch">—</span></div>
+    </div>
+    <div style="font-size:12px;font-weight:800;color:#374151;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Riwayat Pergerakan</div>
+    <div style="max-height:220px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px">
+      <table class="tbl" style="font-size:12px">
+        <thead>
+          <tr>
+            <th>Waktu</th>
+            <th>Dari → Ke</th>
+            <th>Status</th>
+            <th>Catatan</th>
+          </tr>
+        </thead>
+        <tbody id="md-tbody">
+          <tr><td colspan="4"><div class="empty">Memuat…</div></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-detail')">Tutup</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ==================== MODAL: BATALKAN MOVEMENT ==================== -->
+<div class="modal-overlay" id="modal-cancel-mv">
+  <div class="modal-box modal-sm">
+    <div class="modal-title">🚫 Batalkan Movement</div>
+    <div class="modal-desc">Movement PENDING dari Chiller akan dibatalkan. Keranjang tetap di Chiller.</div>
+    <div class="modal-info-box">
+      <div class="modal-info-row"><span class="modal-info-label">Kode Keranjang</span><span class="modal-info-val" style="font-family:monospace" id="mcv-code">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Tujuan</span><span class="modal-info-val" id="mcv-dest">—</span></div>
+    </div>
+    <div id="mcv-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-bottom:10px;display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-cancel-mv')">Batal</button>
+      <button class="btn btn-red" id="mcv-btn-ok" onclick="doCancel()">🚫 Ya, Batalkan</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ==================== MODAL: MINTA KEMBALI ==================== -->
+<div class="modal-overlay" id="modal-return">
+  <div class="modal-box modal-sm">
+    <div class="modal-title">↩️ Minta Kembali ke Chiller</div>
+    <div class="modal-desc">Akan dibuat movement PENDING dari lokasi tujuan kembali ke Chiller. Operator tujuan perlu mengkonfirmasi.</div>
+    <div class="modal-info-box">
+      <div class="modal-info-row"><span class="modal-info-label">Kode Keranjang</span><span class="modal-info-val" style="font-family:monospace" id="mr-code">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Produk</span><span class="modal-info-val" id="mr-produk">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Lokasi Saat Ini</span><span class="modal-info-val" id="mr-lokasi">—</span></div>
+    </div>
+    <div class="form-group" style="margin-bottom:0">
+      <label>Alasan / Catatan <span style="color:#dc2626">*</span></label>
+      <input type="text" id="mr-catatan" placeholder="Contoh: Stok terlalu lama, perlu re-chilling…">
+    </div>
+    <div id="mr-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-top:8px;display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-return')">Batal</button>
+      <button class="btn btn-amber" id="mr-btn-ok" onclick="doReturn()">↩️ Minta Kembali</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ==================== TOAST ==================== -->
+<div id="toast"></div>
+
+
+<!-- ==================== SCRIPT ==================== -->
+<script>
+const SUPABASE_URL = 'https://dxixqyokuqrdprupsvic.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR4aXhxeW9rdXFyZHBydXBzdmljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5NjM3ODcsImV4cCI6MjA5MjUzOTc4N30.D_yaPwNbe4FFg_hmDeJ9cuxzbNvXZT8l1_TyZuq1t1M';
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ============================================================
+// STATE
+// ============================================================
+let currentUser      = null;
+let pendingMovements = [];
+let chillerBaskets   = [];
+let keluarMovements  = [];
+let clockTimer       = null;
+
+// Modal state
+let activeMovementId = null;
+let activeBasketId   = null;
+let selectedDest     = null;
+let cancelMovementId = null;   // untuk modal-cancel-mv
+let returnBasketId   = null;   // untuk modal-return
+
+// ============================================================
+// PAGINATION & FILTER STATE
+// ============================================================
+const ROWS = 10;
+let pendingPage   = 0;
+let pendingFilter = '';
+let stokPage      = 0;
+let stokFilter    = '';
+let expandedGroups = new Set();  // key grup yg sedang di-expand
+let keluarPage    = 0;
+let keluarFilter  = '';
+
+// ============================================================
+// FILTER HELPERS
+// ============================================================
+function filteredPending() {
+  const f = pendingFilter.trim().toLowerCase();
+  if (!f) return pendingMovements;
+  return pendingMovements.filter(m => {
+    const code = (m.baskets?.basket_code || '').toLowerCase();
+    const prod = (m.baskets?.product_master?.nama_produk || '').toLowerCase();
+    const dari = (m.dari_lokasi || '').toLowerCase();
+    return code.includes(f) || prod.includes(f) || dari.includes(f);
+  });
+}
+
+function filteredKeluar() {
+  const f = keluarFilter.trim().toLowerCase();
+  if (!f) return keluarMovements;
+  return keluarMovements.filter(m => {
+    const code = (m.baskets?.basket_code || '').toLowerCase();
+    const prod = (m.baskets?.product_master?.nama_produk || '').toLowerCase();
+    const dest = (m.ke_lokasi || '').toLowerCase();
+    return code.includes(f) || prod.includes(f) || dest.includes(f);
+  });
+}
+
+// Build grouped stok dari chillerBaskets dengan filter aktif
+function buildStokGroups() {
+  const f = stokFilter.trim().toLowerCase();
+  const map = {};
+  chillerBaskets.forEach(b => {
+    const pm = b.product_master;
+    if (!pm) return;
+    const key = `${pm.product_code}__${pm.grade || 'X'}`;
+    if (!map[key]) map[key] = {
+      key, nama: pm.nama_produk, code: pm.product_code, grade: pm.grade || '',
+      baskets: [], totalQty: 0, totalKg: 0
+    };
+    map[key].baskets.push(b);
+    map[key].totalQty += parseFloat(b.qty_sisa) || 0;
+    map[key].totalKg  += parseFloat(b.kg_sisa)  || 0;
+  });
+  const gradeOrder = { A: 0, B: 1, C: 2, '': 3 };
+  let groups = Object.values(map).sort((a, b) => {
+    if (a.code !== b.code) return a.code.localeCompare(b.code);
+    return (gradeOrder[a.grade] ?? 3) - (gradeOrder[b.grade] ?? 3);
+  });
+  if (f) {
+    groups = groups.filter(g =>
+      g.nama.toLowerCase().includes(f) ||
+      g.code.toLowerCase().includes(f) ||
+      g.baskets.some(b => b.basket_code.toLowerCase().includes(f))
+    );
+  }
+  return groups;
+}
+
+// ============================================================
+// PAGINATION HELPERS
+// ============================================================
+function pagSlice(arr, page) {
+  return arr.slice(page * ROWS, (page + 1) * ROWS);
+}
+
+function updatePagBar(barId, infoId, prevId, nextId, arr, page) {
+  const total = arr.length;
+  const totalPages = Math.ceil(total / ROWS) || 1;
+  const from = total === 0 ? 0 : page * ROWS + 1;
+  const to   = Math.min((page + 1) * ROWS, total);
+  const bar  = document.getElementById(barId);
+  const info = document.getElementById(infoId);
+  const prev = document.getElementById(prevId);
+  const next = document.getElementById(nextId);
+  if (!bar) return;
+  bar.style.display  = total > ROWS ? '' : 'none';
+  if (info) info.textContent = `${from}–${to} dari ${total}`;
+  if (prev) prev.disabled = (page === 0);
+  if (next) next.disabled = (page >= totalPages - 1);
+}
+
+// ============================================================
+// EXPORT HELPERS
+// ============================================================
+function exportCSV(headers, rows, filename) {
+  const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const lines = [headers.map(esc).join(','), ...rows.map(r => r.map(esc).join(','))];
+  const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+}
+
+function exportXLSX(headers, rows, sheetName, filename) {
+  if (typeof XLSX === 'undefined') { showToast('Library Excel belum dimuat. Coba refresh.', 'error'); return; }
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  XLSX.writeFile(wb, filename);
+}
+
+function todayFilename(prefix) {
+  return `${prefix}_${new Date().toISOString().slice(0,10)}.`;
+}
+
+// ============================================================
+// EXPORT — PENDING
+// ============================================================
+function exportPendingCSV() {
+  const headers = ['Kode Keranjang','Batch','Produk','Qty (ekor)','Kg','Dari','Waktu Kirim'];
+  const rows = filteredPending().map(m => [
+    m.baskets?.basket_code || '',
+    m.live_chicken_batches?.batch_code || '',
+    m.baskets?.product_master?.nama_produk || '',
+    m.qty_pindah,
+    m.kg_pindah,
+    lokasiLabel(m.dari_lokasi),
+    fmtDT(m.created_at)
+  ]);
+  exportCSV(headers, rows, todayFilename('chiller_antrian') + 'csv');
+}
+function exportPendingXLSX() {
+  const headers = ['Kode Keranjang','Batch','Produk','Qty (ekor)','Kg','Dari','Waktu Kirim'];
+  const rows = filteredPending().map(m => [
+    m.baskets?.basket_code || '',
+    m.live_chicken_batches?.batch_code || '',
+    m.baskets?.product_master?.nama_produk || '',
+    Number(m.qty_pindah),
+    Number(m.kg_pindah),
+    lokasiLabel(m.dari_lokasi),
+    fmtDT(m.created_at)
+  ]);
+  exportXLSX(headers, rows, 'Antrian Masuk', todayFilename('chiller_antrian') + 'xlsx');
+}
+
+// ============================================================
+// EXPORT — STOK CHILLER
+// ============================================================
+function exportStokCSV() {
+  const q = stokFilter.toLowerCase();
+  const filtered = chillerBaskets.filter(b =>
+    !q || b.basket_code?.toLowerCase().includes(q) ||
+    b.product_master?.nama_produk?.toLowerCase().includes(q)
+  );
+  const headers = ['Kode Keranjang','Produk','Grade','Qty Sisa (ekor)','Kg Sisa','Batch','Tgl Produksi'];
+  const rows = filtered.map(b => [
+    b.basket_code || '',
+    b.product_master?.nama_produk || '',
+    b.product_master?.grade || '',
+    Number(b.qty_sisa),
+    Number(b.kg_sisa),
+    b.live_chicken_batches?.batch_code || '',
+    b.tanggal_produksi || ''
+  ]);
+  exportCSV(headers, rows, todayFilename('chiller_stok') + 'csv');
+}
+function exportStokXLSX() {
+  const q = stokFilter.toLowerCase();
+  const filtered = chillerBaskets.filter(b =>
+    !q || b.basket_code?.toLowerCase().includes(q) ||
+    b.product_master?.nama_produk?.toLowerCase().includes(q)
+  );
+  const headers = ['Kode Keranjang','Produk','Grade','Qty Sisa (ekor)','Kg Sisa','Batch','Tgl Produksi'];
+  const rows = filtered.map(b => [
+    b.basket_code || '',
+    b.product_master?.nama_produk || '',
+    b.product_master?.grade || '',
+    Number(b.qty_sisa),
+    Number(b.kg_sisa),
+    b.live_chicken_batches?.batch_code || '',
+    b.tanggal_produksi || ''
+  ]);
+  exportXLSX(headers, rows, 'Stok Chiller', todayFilename('chiller_stok') + 'xlsx');
+}
+
+// ============================================================
+// EXPORT — RIWAYAT KELUAR
+// ============================================================
+function exportKeluarCSV() {
+  const headers = ['Kode Keranjang','Produk','Qty (ekor)','Kg','Tujuan','Status','Waktu Kirim'];
+  const rows = filteredKeluar().map(m => [
+    m.baskets?.basket_code || '',
+    m.baskets?.product_master?.nama_produk || '',
+    Number(m.qty_pindah),
+    Number(m.kg_pindah),
+    lokasiLabel(m.ke_lokasi),
+    m.status,
+    fmtDT(m.created_at)
+  ]);
+  exportCSV(headers, rows, todayFilename('chiller_keluar') + 'csv');
+}
+function exportKeluarXLSX() {
+  const headers = ['Kode Keranjang','Produk','Qty (ekor)','Kg','Tujuan','Status','Waktu Kirim'];
+  const rows = filteredKeluar().map(m => [
+    m.baskets?.basket_code || '',
+    m.baskets?.product_master?.nama_produk || '',
+    Number(m.qty_pindah),
+    Number(m.kg_pindah),
+    lokasiLabel(m.ke_lokasi),
+    m.status,
+    fmtDT(m.created_at)
+  ]);
+  exportXLSX(headers, rows, 'Riwayat Keluar', todayFilename('chiller_keluar') + 'xlsx');
+}
+
+// ============================================================
+// DETAIL MODAL
+// ============================================================
+async function openDetailModal(basketId) {
+  if (!basketId) return;
+  // Populate from local state first (instant)
+  const b = chillerBaskets.find(x => x.id === basketId);
+  if (b) {
+    setEl('md-code',    b.basket_code || '—');
+    setEl('md-produk',  b.product_master ? `${b.product_master.nama_produk} (${b.product_master.product_code})` : '—');
+    setEl('md-qty-kg',  `${fmt(b.qty_sisa)} ekor / ${fmtKg(b.kg_sisa)}`);
+    setEl('md-lokasi',  lokasiLabel(b.lokasi));
+    setEl('md-batch',   b.live_chicken_batches?.batch_code || '—');
+    setEl('md-subtitle', b.basket_code);
+  }
+  document.getElementById('md-tbody').innerHTML =
+    '<tr><td colspan="4"><div class="empty">Memuat riwayat…</div></td></tr>';
+  openModal('modal-detail');
+
+  // Load movement history
+  const { data, error } = await db
+    .from('basket_movements')
+    .select('dari_lokasi, ke_lokasi, qty_pindah, kg_pindah, status, catatan, created_at')
+    .eq('basket_id', basketId)
+    .order('created_at', { ascending: false })
+    .limit(30);
+
+  if (error || !data?.length) {
+    document.getElementById('md-tbody').innerHTML =
+      '<tr><td colspan="4"><div class="empty">Belum ada riwayat pergerakan</div></td></tr>';
+    return;
+  }
+  const statusBadge = s => ({
+    CONFIRMED: '<span class="badge b-active" style="font-size:10px">✓ Confirmed</span>',
+    PENDING:   '<span class="badge b-pending" style="font-size:10px">⏳ Pending</span>',
+    REJECTED:  '<span class="badge b-rejected" style="font-size:10px">✗ Rejected</span>'
+  })[s] || `<span class="badge" style="font-size:10px">${s}</span>`;
+
+  document.getElementById('md-tbody').innerHTML = data.map(m => `
+    <tr>
+      <td>${fmtDT(m.created_at)}</td>
+      <td>${lokasiLabel(m.dari_lokasi)} → ${lokasiLabel(m.ke_lokasi)}</td>
+      <td>${statusBadge(m.status)}</td>
+      <td style="color:#6b7280;font-size:11px">${m.catatan || '—'}</td>
+    </tr>`).join('');
+}
+
+// ============================================================
+// UTILITY
+// ============================================================
+async function sha256(str) {
+  const buf  = new TextEncoder().encode(str);
+  const hash = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+function fmt(n, d=0) {
+  if (n == null || n === '') return '—';
+  return Number(n).toLocaleString('id-ID', {minimumFractionDigits:d, maximumFractionDigits:d});
+}
+function fmtKg(n) {
+  if (n == null) return '—';
+  return Number(n).toLocaleString('id-ID', {minimumFractionDigits:1, maximumFractionDigits:1}) + ' kg';
+}
+function fmtDT(s) {
+  if (!s) return '—';
+  return new Date(s).toLocaleString('id-ID', {day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'});
+}
+function fmtDate(s) {
+  if (!s) return '—';
+  return new Date(s).toLocaleDateString('id-ID', {day:'2-digit', month:'short', year:'numeric'});
+}
+function todayISO() {
+  return new Date().toISOString().split('T')[0];
+}
+function showToast(msg, type='success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `show ${type}`;
+  setTimeout(() => { t.className = ''; }, 3500);
+}
+function setEl(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = val;
+}
+function navTo(url) {
+  closeSidebar();
+  if (currentUser) {
+        localStorage.setItem('rpa_user', JSON.stringify(currentUser));
+        sessionStorage.setItem('rpa_user', JSON.stringify(currentUser));
+    }
+  window.location.href = url;
+}
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+function lokasiLabel(l) {
+  const map = {LANTAI:'Lantai Produksi',CHILLER:'Chiller',PARTING:'Parting',BONELESS:'Boneless',MARINASI:'Marinasi',BLASTING:'Blasting',SOLD:'Sold',BYPRODUCT_DIRECT:'By-product'};
+  return map[l] || l || '—';
+}
+
+// Hitung umur produk (hari) dari tanggal_produksi (tgl pemotongan/batch)
+function getAgeDays(updatedAt) {
+  if (!updatedAt) return null;
+  const now     = new Date();
+  const masuk   = new Date(updatedAt);
+  const nowDay  = new Date(now.getFullYear(),   now.getMonth(),   now.getDate());
+  const masukDay= new Date(masuk.getFullYear(), masuk.getMonth(), masuk.getDate());
+  return Math.floor((nowDay - masukDay) / 86400000);
+}
+
+function ageBadgeHtml(age) {
+  if (age === null) return '<span class="age-badge age-fresh">—</span>';
+  if (age === 0)  return '<span class="age-badge age-fresh">Hari ini</span>';
+  if (age === 1)  return '<span class="age-badge age-ok">1 hari</span>';
+  if (age === 2)  return '<span class="age-badge age-ok">2 hari</span>';
+  if (age === 3)  return '<span class="age-badge age-warn">⚠️ 3 hari</span>';
+  return           `<span class="age-badge age-danger">🔴 ${age} hari</span>`;
+}
+
+function ageRowClass(age) {
+  if (age >= 4) return 'row-age-danger';
+  if (age === 3) return 'row-age-warn';
+  return '';
+}
+
+// ============================================================
+// AUTH
+// ============================================================
+async function doLogin() {
+  const username = document.getElementById('inp-username').value.trim();
+  const password = document.getElementById('inp-password').value;
+  const errEl    = document.getElementById('login-error');
+  const btn      = document.getElementById('btn-login');
+  errEl.style.display = 'none';
+  if (!username || !password) { showLoginErr('Username dan password wajib diisi.'); return; }
+  btn.disabled = true; btn.textContent = 'Memproses…';
+  try {
+    const hash = await sha256(password);
+    const { data, error } = await db.from('users')
+      .select('id, nama, username, role, aktif, pin, is_system_admin')
+      .eq('username', username).eq('password_hash', hash).eq('aktif', true).maybeSingle();
+    if (error) throw error;
+    if (!data) { showLoginErr('Username atau password salah.'); return; }
+    currentUser = data;
+    localStorage.setItem('rpa_user', JSON.stringify(data));
+    startApp();
+  } catch(e) {
+    console.error(e);
+    showLoginErr('Gagal terhubung ke server. Periksa koneksi internet.');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Masuk →';
+  }
+}
+function showLoginErr(msg) {
+  const el = document.getElementById('login-error');
+  el.textContent = msg; el.style.display = 'block';
+}
+function doLogout() {
+  localStorage.removeItem('rpa_user');
+  currentUser = null;
+  if (clockTimer) clearInterval(clockTimer);
+  document.getElementById('app-screen').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+}
+function startApp() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app-screen').style.display = 'block';
+  document.getElementById('user-avatar').textContent = currentUser.nama.charAt(0).toUpperCase();
+  setEl('sidebar-name', currentUser.nama);
+  setEl('sidebar-role', currentUser.is_system_admin ? 'Admin' : currentUser.role === 'SUPERVISOR' ? 'Supervisor' : 'Operator');
+  if (currentUser.is_system_admin) {
+    const umEl = document.getElementById('nav-user-mgmt');
+    if (umEl) umEl.style.display = 'flex';
+  }
+  updateClock();
+  clockTimer = setInterval(updateClock, 1000);
+  setEl('topbar-date', new Date().toLocaleDateString('id-ID',{weekday:'long',day:'2-digit',month:'long',year:'numeric'}));
+  document.getElementById('inp-filter-date').value = todayISO();
+  loadAll();
+}
+function updateClock() {
+  setEl('clock', new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit'}));
+}
+
+// ============================================================
+// SIDEBAR
+// ============================================================
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sidebar-overlay').classList.toggle('visible');
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-overlay').classList.remove('visible');
+}
+
+// ============================================================
+// LOAD DATA
+// ============================================================
+async function loadAll() {
+  await Promise.all([
+    loadPendingMasuk(),
+    loadChillerStok(),
+    loadKeluarHariIni(),
+    loadBpkAntrian()
+  ]);
+  // Laporan dirender dari data yang sudah ada
+  renderLaporanProduk();
+  renderLaporanUmur();
+  updateSummaryCards();
+}
+
+// ---- BY-PRODUCT KARKAS ANTRIAN MASUK ----
+let bpkAntrianList = [];
+
+async function loadBpkAntrian() {
+  const today = new Date().toISOString().slice(0,10);
+  // Load PENDING_KONFIRMASI (antrian)
+  const { data: pending, error } = await db.from('byproduct_karkas_entries')
+    .select('id,tanggal,qty_bungkus,kg,keterangan,tujuan,status,label_code,created_at,product_master(nama_produk,product_code)')
+    .eq('tujuan', 'CHILLER')
+    .eq('status', 'PENDING_KONFIRMASI')
+    .order('created_at', {ascending:true});
+  if(error){ console.error('loadBpkAntrian:', error); return; }
+  bpkAntrianList = pending||[];
+
+  // Load CONFIRMED hari ini untuk riwayat
+  const { data: confirmed } = await db.from('byproduct_karkas_entries')
+    .select('id,qty_bungkus,kg,keterangan,confirmed_at,product_master(nama_produk)')
+    .eq('tujuan','CHILLER')
+    .eq('status','CONFIRMED')
+    .gte('confirmed_at', today+'T00:00:00')
+    .order('confirmed_at', {ascending:false});
+
+  renderBpkAntrian(bpkAntrianList, confirmed||[]);
+}
+
+function renderBpkAntrian(pending, confirmed) {
+  const tbody = document.getElementById('tbody-bpk-antrian');
+  const pill  = document.getElementById('pill-bpk-count');
+  const btnAll = document.getElementById('btn-bpk-konfirm-semua');
+
+  pill.textContent = `${pending.length} item`;
+  btnAll.style.display = pending.length > 1 ? '' : 'none';
+
+  if(!pending.length) {
+    tbody.innerHTML = '<tr><td colspan="7"><div class="empty"><div class="e-icon">✅</div>Tidak ada antrian by-product karkas</div></td></tr>';
+  } else {
+    tbody.innerHTML = pending.map(e => {
+      const namaP = e.product_master?.nama_produk||'-';
+      const code  = e.label_code || e.id.slice(0,8).toUpperCase();
+      const waktu = new Date(e.created_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'});
+      return `<tr>
+        <td style="font-weight:700">${namaP}</td>
+        <td>${e.qty_bungkus} bks</td>
+        <td>${parseFloat(e.kg||0).toFixed(1)} kg</td>
+        <td>${e.keterangan||'<span style="color:#d1d5db">—</span>'}</td>
+        <td style="font-family:monospace;font-size:11px;color:#6b7280">${code}</td>
+        <td>${waktu}</td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-green btn-sm" onclick="bpkKonfirmasi('${e.id}')">✅ Terima</button>
+          <button class="btn btn-red btn-sm" style="margin-left:4px" onclick="bpkTolak('${e.id}')">❌ Tolak</button>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  // Riwayat confirmed hari ini
+  const confEl = document.getElementById('bpk-confirmed-list');
+  if(!confirmed.length) {
+    confEl.innerHTML = '<span style="color:#9ca3af;font-style:italic">Belum ada yang dikonfirmasi hari ini</span>';
+  } else {
+    confEl.innerHTML = confirmed.map(e => {
+      const namaP = e.product_master?.nama_produk||'-';
+      const waktu = new Date(e.confirmed_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'});
+      return `<span style="display:inline-flex;align-items:center;gap:4px;background:#d1fae5;color:#065f46;padding:3px 9px;border-radius:12px;font-size:11px;font-weight:700;margin:2px">
+        ✅ ${namaP} ${e.qty_bungkus}bks/${parseFloat(e.kg||0).toFixed(1)}kg${e.keterangan?' ('+e.keterangan+')':''} — ${waktu}
+      </span>`;
+    }).join('');
+  }
+}
+
+async function bpkKonfirmasi(id) {
+  const e = bpkAntrianList.find(x=>x.id===id);
+  if(!e) return;
+  const namaP = e.product_master?.nama_produk||'By-product';
+  if(!confirm(`Konfirmasi terima ${namaP} — ${e.qty_bungkus} bks / ${parseFloat(e.kg).toFixed(1)} kg?`)) return;
+  const { error } = await db.from('byproduct_karkas_entries')
+    .update({ status:'CONFIRMED', confirmed_at: new Date().toISOString(), confirmed_by: currentUser.id })
+    .eq('id', id);
+  if(error){ showToast('Gagal konfirmasi: '+error.message,'error'); return; }
+  showToast(`${namaP} diterima di Chiller ✅`,'success');
+  loadBpkAntrian();
+}
+
+async function bpkTolak(id) {
+  const e = bpkAntrianList.find(x=>x.id===id);
+  if(!e) return;
+  const namaP = e.product_master?.nama_produk||'By-product';
+  const alasan = prompt(`Alasan tolak ${namaP}?`);
+  if(alasan===null) return; // user cancel
+  const { error } = await db.from('byproduct_karkas_entries')
+    .update({ status:'REJECTED', rejected_reason: alasan||'Ditolak', confirmed_by: currentUser.id })
+    .eq('id', id);
+  if(error){ showToast('Gagal: '+error.message,'error'); return; }
+  showToast(`${namaP} ditolak`,'warning');
+  loadBpkAntrian();
+}
+
+async function bpkKonfirmasiSemua() {
+  if(!bpkAntrianList.length) return;
+  if(!confirm(`Konfirmasi semua ${bpkAntrianList.length} by-product karkas masuk?`)) return;
+  let ok=0, fail=0;
+  for(const e of bpkAntrianList) {
+    const { error } = await db.from('byproduct_karkas_entries')
+      .update({ status:'CONFIRMED', confirmed_at: new Date().toISOString(), confirmed_by: currentUser.id })
+      .eq('id', e.id);
+    if(error) fail++; else ok++;
+  }
+  showToast(`${ok} by-product dikonfirmasi${fail?' ('+fail+' gagal)':''}`, fail?'warning':'success');
+  loadBpkAntrian();
+}
+
+async function loadPendingMasuk() {
+  // Tampilkan SEMUA movement PENDING ke CHILLER (tidak filter batch)
+  const { data, error } = await db.from('basket_movements')
+    .select(`
+      id, basket_id, batch_id, dari_lokasi, ke_lokasi, qty_pindah, kg_pindah,
+      status, created_at,
+      baskets ( basket_code, product_master ( nama_produk, product_code, grade ) ),
+      live_chicken_batches ( batch_code )
+    `)
+    .eq('ke_lokasi', 'CHILLER')
+    .eq('status', 'PENDING')
+    .order('created_at', {ascending: true});
+
+  if (error) { console.error('loadPendingMasuk:', error); return; }
+  pendingMovements = data || [];
+  renderPendingTable();
+}
+
+async function loadChillerStok() {
+  // tanggal_produksi = tgl pemotongan (dari batch), dipakai untuk hitung umur produk
+  // masuk_chiller_at tetap di-fetch untuk info display di modal (kapan masuk Chiller)
+  const { data, error } = await db.from('baskets')
+    .select(`
+      id, basket_code, lokasi, status, qty_sisa, kg_sisa, batch_id, tanggal_produksi,
+      product_master ( nama_produk, product_code, grade, kg_min, kg_max ),
+      live_chicken_batches ( batch_code ),
+      basket_movements ( ke_lokasi, status, created_at )
+    `)
+    .eq('lokasi', 'CHILLER')
+    .eq('status', 'AKTIF');
+
+  if (error) { console.error('loadChillerStok:', error); return; }
+
+  // Tetap hitung masuk_chiller_at untuk ditampilkan di modal detail / pindah
+  const processed = (data || []).map(b => {
+    const mvs = b.basket_movements || [];
+    const mv  = mvs
+      .filter(m => m.ke_lokasi === 'CHILLER' && m.status === 'CONFIRMED')
+      .sort((a, z) => new Date(a.created_at) - new Date(z.created_at))
+      .at(-1);
+    return { ...b, masuk_chiller_at: mv?.created_at || null };
+  });
+
+  // Urut: produk paling tua (tanggal_produksi terlama) di atas — paling urgent
+  processed.sort((a, z) => {
+    const ta = a.tanggal_produksi ? new Date(a.tanggal_produksi) : new Date();
+    const tz = z.tanggal_produksi ? new Date(z.tanggal_produksi) : new Date();
+    return ta - tz;
+  });
+
+  chillerBaskets = processed;
+  renderStokTable();
+}
+
+async function loadKeluarHariIni() {
+  const filterDate = document.getElementById('inp-filter-date').value || todayISO();
+  const dateStart  = filterDate + 'T00:00:00.000Z';
+  const dateEnd    = filterDate + 'T23:59:59.999Z';
+
+  const { data, error } = await db.from('basket_movements')
+    .select(`
+      id, basket_id, batch_id, dari_lokasi, ke_lokasi, qty_pindah, kg_pindah,
+      status, created_at, confirmed_at,
+      baskets ( basket_code, product_master ( nama_produk, product_code, grade ) )
+    `)
+    .eq('dari_lokasi', 'CHILLER')
+    .gte('created_at', dateStart)
+    .lte('created_at', dateEnd)
+    .order('created_at', {ascending: false});
+
+  if (error) { console.error('loadKeluarHariIni:', error); return; }
+  keluarMovements = data || [];
+  renderKeluarTable();
+  updateSummaryCards();
+}
+
+// ============================================================
+// RENDER TABLES
+// ============================================================
+function renderPendingTable() {
+  const tbody = document.getElementById('tbody-pending');
+  const pill  = document.getElementById('pill-pending-count');
+  const btn   = document.getElementById('btn-konfirm-semua');
+  const arr   = filteredPending();
+
+  pill.textContent = `${pendingMovements.length} pending`;
+  pill.className   = `panel-pill ${pendingMovements.length > 0 ? 'alert' : 'ok'}`;
+  btn.style.display = pendingMovements.length > 1 ? 'inline-flex' : 'none';
+
+  if (!arr.length) {
+    tbody.innerHTML = `<tr><td colspan="6"><div class="empty"><div class="e-icon">${pendingMovements.length ? '🔍' : '✅'}</div>${pendingMovements.length ? 'Tidak ada hasil pencarian' : 'Tidak ada antrian masuk'}</div></td></tr>`;
+    updatePagBar('pag-pending','pag-pending-info','pag-pending-prev','pag-pending-next', arr, pendingPage);
+    return;
+  }
+  // Clamp page
+  const maxPage = Math.ceil(arr.length / ROWS) - 1;
+  if (pendingPage > maxPage) pendingPage = maxPage;
+
+  const page = pagSlice(arr, pendingPage);
+  tbody.innerHTML = page.map(m => {
+    const b    = m.baskets;
+    const pm   = b?.product_master;
+    const kode = b?.basket_code || '—';
+    const prod = pm ? pm.nama_produk : '—';
+    const sub  = pm ? `<div class="tbl-sub">${pm.product_code}${pm.grade ? ' · Grade '+pm.grade : ''}</div>` : '';
+    return `<tr>
+      <td><span style="font-family:monospace;font-weight:700;font-size:12px">${kode}</span>
+          <div class="tbl-sub">${m.live_chicken_batches?.batch_code||'—'}</div></td>
+      <td>${prod}${sub}</td>
+      <td>${fmt(m.qty_pindah)} ekor<div class="tbl-sub">${fmtKg(m.kg_pindah)}</div></td>
+      <td><span style="font-size:12px">${lokasiLabel(m.dari_lokasi)}</span></td>
+      <td>${fmtDT(m.created_at)}</td>
+      <td>
+        <div style="display:flex;gap:5px">
+          <button class="btn btn-green btn-sm" title="Konfirmasi" onclick="openKonfirmModal('${m.id}')">✅</button>
+          <button class="btn btn-red btn-sm" title="Tolak" onclick="openTolakModal('${m.id}','${kode}')">✗</button>
+          <button class="btn btn-ghost btn-sm" title="Detail" onclick="openDetailModal('${b?.id||''}')">🔍</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+  updatePagBar('pag-pending','pag-pending-info','pag-pending-prev','pag-pending-next', arr, pendingPage);
+}
+
+// ---- STOK CHILLER — GROUPED (Level 1 + Level 2 inline) ----
+function renderStokTable() {
+  const tbody = document.getElementById('tbody-stok');
+  const pill  = document.getElementById('pill-stok-count');
+  pill.textContent = `${chillerBaskets.length} keranjang`;
+
+  const groups = buildStokGroups();
+
+  if (!groups.length) {
+    tbody.innerHTML = `<tr><td colspan="6"><div class="empty"><div class="e-icon">${chillerBaskets.length ? '🔍' : '❄️'}</div>${chillerBaskets.length ? 'Tidak ada hasil pencarian' : 'Chiller kosong'}</div></td></tr>`;
+    updatePagBar('pag-stok','pag-stok-info','pag-stok-prev','pag-stok-next', groups, stokPage);
+    return;
+  }
+  const maxPage = Math.ceil(groups.length / ROWS) - 1;
+  if (stokPage > maxPage) stokPage = maxPage;
+
+  const pageGroups = pagSlice(groups, stokPage);
+  let html = '';
+  pageGroups.forEach(g => {
+    const isExp = expandedGroups.has(g.key);
+    const gradeBadge = g.grade ? `<span class="badge b-grade${g.grade}" style="font-size:10px;padding:1px 6px;margin-left:6px">Grade ${g.grade}</span>` : '';
+    // Umur tertua di grup
+    const ages = g.baskets.map(b => getAgeDays(b.tanggal_produksi)).filter(a => a !== null);
+    const maxAge = ages.length ? Math.max(...ages) : null;
+
+    html += `<tr class="grp-row${isExp?' expanded':''}" onclick="toggleGroup('${g.key}')">
+      <td><i class="grp-arrow">▶</i> <span class="grp-name">${g.nama}${gradeBadge}</span>
+          <span class="grp-meta">${g.code}</span></td>
+      <td style="text-align:center;font-weight:800">${g.baskets.length}</td>
+      <td style="font-weight:700">${fmt(g.totalQty)} ekor</td>
+      <td style="font-weight:700">${fmtKg(g.totalKg)}</td>
+      <td>${ageBadgeHtml(maxAge)}</td>
+      <td></td>
+    </tr>`;
+
+    if (isExp) {
+      g.baskets.forEach((b, i) => {
+        const age  = getAgeDays(b.tanggal_produksi);
+        const rCls = ageRowClass(age);
+        const isLast = (i === g.baskets.length - 1);
+        html += `<tr class="sub-row${isLast?' last-sub':''} ${rCls}">
+          <td><span style="font-family:monospace;font-weight:700;font-size:12px">${b.basket_code}</span>
+              <div class="tbl-sub">${b.live_chicken_batches?.batch_code||'—'}</div></td>
+          <td></td>
+          <td>${fmt(b.qty_sisa)} ekor</td>
+          <td>${fmtKg(b.kg_sisa)}</td>
+          <td>${ageBadgeHtml(age)}</td>
+          <td>
+            <div style="display:flex;gap:4px">
+              <button class="btn btn-primary btn-sm" title="Pindah Keluar" onclick="event.stopPropagation();openPindahModal('${b.id}')">📤</button>
+              <button class="btn btn-ghost btn-sm" title="Detail" onclick="event.stopPropagation();openDetailModal('${b.id}')">🔍</button>
+            </div>
+          </td>
+        </tr>`;
+      });
+    }
+  });
+  tbody.innerHTML = html;
+  updatePagBar('pag-stok','pag-stok-info','pag-stok-prev','pag-stok-next', groups, stokPage);
+}
+
+function toggleGroup(key) {
+  if (expandedGroups.has(key)) expandedGroups.delete(key);
+  else expandedGroups.add(key);
+  renderStokTable();
+}
+
+// ---- RIWAYAT KELUAR dengan tombol Batalkan / Minta Kembali ----
+function renderKeluarTable() {
+  const tbody = document.getElementById('tbody-keluar');
+  const pill  = document.getElementById('pill-keluar-count');
+  const arr   = filteredKeluar();
+  pill.textContent = `${keluarMovements.length} movement`;
+
+  if (!arr.length) {
+    tbody.innerHTML = `<tr><td colspan="7"><div class="empty"><div class="e-icon">${keluarMovements.length ? '🔍' : '📤'}</div>${keluarMovements.length ? 'Tidak ada hasil pencarian' : 'Belum ada'}</div></td></tr>`;
+    updatePagBar('pag-keluar','pag-keluar-info','pag-keluar-prev','pag-keluar-next', arr, keluarPage);
+    return;
+  }
+  const maxPage = Math.ceil(arr.length / ROWS) - 1;
+  if (keluarPage > maxPage) keluarPage = maxPage;
+
+  const page = pagSlice(arr, keluarPage);
+  tbody.innerHTML = page.map(m => {
+    const b   = m.baskets;
+    const pm  = b?.product_master;
+    const kode = b?.basket_code || '—';
+    const klsDest   = m.ke_lokasi==='PARTING'?'b-parting':m.ke_lokasi==='BONELESS'?'b-boneless':'b-blasting';
+    const klsStatus = m.status==='CONFIRMED'?'b-confirmed':m.status==='REJECTED'?'b-rejected':'b-pending';
+
+    let aksiHtml = '';
+    if (m.status === 'PENDING') {
+      aksiHtml = `<button class="btn btn-red btn-sm" title="Batalkan" onclick="openCancelModal('${m.id}','${kode}','${lokasiLabel(m.ke_lokasi)}')">🚫</button>`;
+    } else if (m.status === 'CONFIRMED') {
+      aksiHtml = `<button class="btn btn-amber btn-sm" title="Minta Kembali" onclick="openReturnModal('${m.id}','${b?.id||''}','${kode}','${pm?.nama_produk||'—'}','${m.ke_lokasi}')">↩️</button>`;
+    }
+
+    return `<tr>
+      <td><span style="font-family:monospace;font-weight:700;font-size:12px">${kode}</span></td>
+      <td>${pm ? pm.nama_produk : '—'}<div class="tbl-sub">${pm?.product_code||''}</div></td>
+      <td>${fmtKg(m.kg_pindah)}</td>
+      <td><span class="badge ${klsDest}">${lokasiLabel(m.ke_lokasi)}</span></td>
+      <td><span class="badge ${klsStatus}">${m.status}</span></td>
+      <td>${fmtDT(m.created_at)}</td>
+      <td>${aksiHtml}</td>
+    </tr>`;
+  }).join('');
+  updatePagBar('pag-keluar','pag-keluar-info','pag-keluar-prev','pag-keluar-next', arr, keluarPage);
+}
+
+// ============================================================
+// LAPORAN STOK PER PRODUK
+// ============================================================
+function renderLaporanProduk() {
+  const body  = document.getElementById('laporan-produk-body');
+  const total = document.getElementById('laporan-produk-total');
+  const pill  = document.getElementById('pill-produk-count');
+
+  if (!chillerBaskets.length) {
+    body.innerHTML = '<div class="empty"><div class="e-icon">📊</div>Tidak ada stok di Chiller</div>';
+    total.style.display = 'none';
+    pill.textContent = '0 jenis';
+    return;
+  }
+
+  // Agregasi per produk (group by product_id + grade)
+  const map = {};
+  chillerBaskets.forEach(b => {
+    const pm  = b.product_master;
+    if (!pm) return;
+    const key = `${pm.product_code}__${pm.grade||''}`;
+    if (!map[key]) map[key] = {
+      nama: pm.nama_produk, code: pm.product_code, grade: pm.grade||'',
+      totalQty: 0, totalKg: 0, jumlahKrj: 0
+    };
+    map[key].totalQty  += parseFloat(b.qty_sisa) || 0;
+    map[key].totalKg   += parseFloat(b.kg_sisa)  || 0;
+    map[key].jumlahKrj += 1;
+  });
+
+  const rows = Object.values(map).sort((a,b) => {
+    const gradeOrder = {A:0, B:1, C:2, '':3};
+    if (a.code !== b.code) return a.code.localeCompare(b.code);
+    return (gradeOrder[a.grade]??3) - (gradeOrder[b.grade]??3);
+  });
+
+  pill.textContent = `${rows.length} jenis`;
+
+  let sumQty=0, sumKg=0, sumKrj=0;
+  body.innerHTML = rows.map(r => {
+    sumQty  += r.totalQty;
+    sumKg   += r.totalKg;
+    sumKrj  += r.jumlahKrj;
+    const gradeBadge = r.grade ? `<span class="badge b-grade${r.grade}" style="font-size:10px;padding:1px 6px;margin-left:4px">Grade ${r.grade}</span>` : '';
+    return `<div class="produk-row">
+      <div class="produk-info">
+        <div class="produk-name">${r.nama}${gradeBadge}</div>
+        <div class="produk-code">${r.code}</div>
+      </div>
+      <div class="produk-nums">
+        <div class="produk-qty">${fmt(r.totalQty)} ekor</div>
+        <div class="produk-kg">${fmtKg(r.totalKg)}</div>
+        <div class="produk-keranjang">${r.jumlahKrj} keranjang</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  setEl('lap-total-qty', `${fmt(sumQty)} ekor`);
+  setEl('lap-total-kg',  fmtKg(sumKg));
+  setEl('lap-total-krj', `${sumKrj} keranjang`);
+  total.style.display = 'block';
+}
+
+// ============================================================
+// LAPORAN UMUR STOK
+// ============================================================
+function renderLaporanUmur() {
+  const body    = document.getElementById('laporan-umur-body');
+  const pill    = document.getElementById('pill-warn-age');
+
+  if (!chillerBaskets.length) {
+    body.innerHTML = '<div class="empty"><div class="e-icon">🕐</div>Tidak ada stok di Chiller</div>';
+    pill.style.display = 'none';
+    return;
+  }
+
+  // Kelompokkan basket per hari-umur, lalu per produk dalam setiap hari
+  // Key: age (integer hari)
+  const byAge = {};
+  chillerBaskets.forEach(b => {
+    const age = getAgeDays(b.tanggal_produksi);
+    const k   = age ?? 0;
+    if (!byAge[k]) byAge[k] = [];
+    byAge[k].push(b);
+  });
+
+  // Urut dari yang terlama (paling urgent)
+  const ages = Object.keys(byAge).map(Number).sort((a,b) => b - a);
+
+  const hasWarning = ages.some(a => a >= 3);
+  pill.style.display = hasWarning ? 'inline-flex' : 'none';
+
+  let html = '';
+  ages.forEach(age => {
+    const items = byAge[age];
+    // Agregasi per produk dalam hari ini
+    const prodMap = {};
+    items.forEach(b => {
+      const pm  = b.product_master;
+      if (!pm) return;
+      const key = `${pm.product_code}__${pm.grade||''}`;
+      if (!prodMap[key]) prodMap[key] = {
+        nama: pm.nama_produk, code: pm.product_code, grade: pm.grade||'',
+        totalQty: 0, totalKg: 0, jumlahKrj: 0
+      };
+      prodMap[key].totalQty  += parseFloat(b.qty_sisa) || 0;
+      prodMap[key].totalKg   += parseFloat(b.kg_sisa)  || 0;
+      prodMap[key].jumlahKrj += 1;
+    });
+    const prodRows = Object.values(prodMap).sort((a,b)=>a.code.localeCompare(b.code));
+
+    // Header warna per umur
+    let headerBg = '#f9fafb', headerBorder = '#f0f2f5', ageLabelHtml = '';
+    if (age === 0) {
+      headerBg = '#f0fdf4'; headerBorder = '#bbf7d0';
+      ageLabelHtml = '<span style="color:#065f46">✅ Hari ini (masuk hari ini)</span>';
+    } else if (age <= 2) {
+      headerBg = '#eff6ff'; headerBorder = '#bfdbfe';
+      ageLabelHtml = `<span style="color:#1e40af">🕐 ${age} hari lalu</span>`;
+    } else if (age === 3) {
+      headerBg = '#fffbeb'; headerBorder = '#fde68a';
+      ageLabelHtml = `<span style="color:#92400e">⚠️ ${age} hari — segera bekukan!</span>`;
+    } else {
+      headerBg = '#fff1f2'; headerBorder = '#fecaca';
+      ageLabelHtml = `<span style="color:#991b1b">🔴 ${age} hari — KRITIS!</span>`;
+    }
+
+    const totalKrj = items.length;
+    const totalKg  = items.reduce((s,b)=>s+(parseFloat(b.kg_sisa)||0),0);
+    const totalQty = items.reduce((s,b)=>s+(parseFloat(b.qty_sisa)||0),0);
+
+    const sectionId = `umur-body-${age}`;
+    html += `
+    <div class="umur-section">
+      <div class="umur-header" onclick="toggleUmurSection('${sectionId}')"
+           style="background:${headerBg};border-bottom-color:${headerBorder}">
+        <div class="umur-day-label">${ageLabelHtml}</div>
+        <div class="umur-day-stats">${totalKrj} krj · ${fmt(totalQty)} ekor · ${fmtKg(totalKg)}</div>
+      </div>
+      <div class="umur-body" id="${sectionId}">
+        <table class="tbl" style="min-width:unset">
+          <thead>
+            <tr>
+              <th>Produk</th>
+              <th style="text-align:right">Keranjang</th>
+              <th style="text-align:right">Total Qty</th>
+              <th style="text-align:right">Total Kg</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${prodRows.map(r => {
+              const gBadge = r.grade ? `<span class="badge b-grade${r.grade}" style="font-size:10px;padding:1px 6px;margin-left:4px">Grade ${r.grade}</span>` : '';
+              return `<tr>
+                <td>${r.nama}${gBadge}<div class="tbl-sub">${r.code}</div></td>
+                <td style="text-align:right;font-weight:700">${r.jumlahKrj}</td>
+                <td style="text-align:right;font-weight:700">${fmt(r.totalQty)} ekor</td>
+                <td style="text-align:right;font-weight:700">${fmtKg(r.totalKg)}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+  });
+
+  body.innerHTML = html;
+
+  // Buka otomatis section yang umur >= 3 (warning/kritis)
+  ages.forEach(age => {
+    if (age >= 3) {
+      const el = document.getElementById(`umur-body-${age}`);
+      if (el) el.classList.add('open');
+    }
+  });
+}
+
+function toggleUmurSection(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.toggle('open');
+}
+
+// ============================================================
+// SUMMARY CARDS
+// ============================================================
+function updateSummaryCards() {
+  setEl('sc-pending', pendingMovements.length);
+  setEl('sc-stok', chillerBaskets.length);
+
+  const totalKg = chillerBaskets.reduce((s,b)=>s+(parseFloat(b.kg_sisa)||0),0);
+  setEl('sc-kg', totalKg > 0 ? totalKg.toLocaleString('id-ID',{minimumFractionDigits:1,maximumFractionDigits:1})+' kg' : '0 kg');
+
+  const confirmed = keluarMovements.filter(m=>m.status==='CONFIRMED').length;
+  const pending   = keluarMovements.filter(m=>m.status==='PENDING').length;
+  setEl('sc-keluar', confirmed + pending);
+
+  // Warning card — pakai tanggal_produksi (umur produk sejak pemotongan)
+  const warnCount = chillerBaskets.filter(b => (getAgeDays(b.tanggal_produksi) ?? 0) >= 3).length;
+  const warnCard  = document.getElementById('sc-card-warn');
+  setEl('sc-warn-age', warnCount);
+  if (warnCard) warnCard.style.display = warnCount > 0 ? '' : 'none';
+}
+
+// ============================================================
+// SCAN MASUK
+// ============================================================
+function clearScanResult(resultId) {
+  const el = document.getElementById(resultId);
+  if (el) { el.className = 'scan-result'; el.style.display = 'none'; }
+}
+
+async function doScanMasuk() {
+  const inp  = document.getElementById('scan-masuk-input');
+  const code = inp.value.trim().toUpperCase();
+  if (!code) return;
+
+  const resEl    = document.getElementById('scan-masuk-result');
+  const codeEl   = document.getElementById('smr-code');
+  const detailEl = document.getElementById('smr-detail');
+  const actEl    = document.getElementById('smr-actions');
+
+  resEl.style.display = 'block';
+  resEl.className = 'scan-result';
+  codeEl.textContent  = code;
+  detailEl.innerHTML  = '<span style="color:#6b7280">Mencari…</span>';
+  actEl.innerHTML     = '';
+
+  try {
+    const { data: basket } = await db.from('baskets')
+      .select('id, basket_code, lokasi, status, qty_sisa, kg_sisa, batch_id, product_master(nama_produk,product_code,grade), live_chicken_batches(batch_code)')
+      .eq('basket_code', code).maybeSingle();
+
+    if (!basket) {
+      resEl.className = 'scan-result scan-err';
+      detailEl.innerHTML = '❌ Keranjang tidak ditemukan dalam sistem.';
+      return;
+    }
+
+    const { data: mv } = await db.from('basket_movements')
+      .select('id, dari_lokasi, ke_lokasi, qty_pindah, kg_pindah, status')
+      .eq('basket_id', basket.id).eq('ke_lokasi', 'CHILLER').eq('status', 'PENDING')
+      .maybeSingle();
+
+    const pm  = basket.product_master;
+    const lcb = basket.live_chicken_batches;
+    const prodStr = pm ? `${pm.nama_produk} (${pm.product_code})${pm.grade ? ' — Grade '+pm.grade : ''}` : '—';
+
+    if (!mv) {
+      if (basket.lokasi === 'CHILLER' && basket.status === 'AKTIF') {
+        resEl.className = 'scan-result scan-warn';
+        detailEl.innerHTML = `Produk: <strong>${prodStr}</strong><br>Qty: <strong>${fmt(basket.qty_sisa)} ekor / ${fmtKg(basket.kg_sisa)}</strong><br>Batch: <strong>${lcb?.batch_code||'—'}</strong><br><span style="color:#d97706">⚠️ Keranjang sudah di Chiller</span>`;
+        actEl.innerHTML = `<button class="btn btn-primary btn-sm" onclick="openPindahModalByBasketId('${basket.id}');clearScanResult('scan-masuk-result');document.getElementById('scan-masuk-input').value=''">📤 Pindah Keluar</button>`;
+      } else {
+        resEl.className = 'scan-result scan-err';
+        detailEl.innerHTML = `Produk: <strong>${prodStr}</strong><br>Lokasi: <strong>${lokasiLabel(basket.lokasi)}</strong><br>❌ Tidak ada movement PENDING ke Chiller.`;
+      }
+      return;
+    }
+
+    resEl.className = 'scan-result scan-ok';
+    detailEl.innerHTML = `Produk: <strong>${prodStr}</strong><br>Qty: <strong>${fmt(mv.qty_pindah)} ekor / ${fmtKg(mv.kg_pindah)}</strong><br>Dari: <strong>${lokasiLabel(mv.dari_lokasi)}</strong><br>Batch: <strong>${lcb?.batch_code||'—'}</strong><br><span style="color:#16a34a">✅ Siap dikonfirmasi masuk Chiller</span>`;
+    actEl.innerHTML = `
+      <button class="btn btn-green" onclick="confirmFromScan('${mv.id}');document.getElementById('scan-masuk-input').value=''">✅ Konfirmasi Masuk</button>
+      <button class="btn btn-red" onclick="openTolakModal('${mv.id}','${basket.basket_code}');clearScanResult('scan-masuk-result');document.getElementById('scan-masuk-input').value=''">✗ Tolak</button>`;
+
+  } catch(e) {
+    console.error(e);
+    resEl.className = 'scan-result scan-err';
+    detailEl.innerHTML = '❌ Kesalahan sistem. Coba lagi.';
+  }
+}
+
+async function confirmFromScan(movementId) {
+  clearScanResult('scan-masuk-result');
+  try {
+    const { data, error } = await db.rpc('konfirmasi_movement', { p_movement_id: movementId, p_user_id: currentUser.id });
+    if (error) throw error;
+    const r = typeof data === 'string' ? JSON.parse(data) : data;
+    if (!(r.ok ?? r.success)) throw new Error(r.error);
+    showToast('✅ Keranjang dikonfirmasi masuk Chiller!', 'success');
+    loadAll();
+  } catch(e) { showToast('Gagal: ' + (e.message||'Error'), 'error'); }
+}
+
+// ============================================================
+// SCAN KELUAR
+// ============================================================
+async function doScanKeluar() {
+  const inp  = document.getElementById('scan-keluar-input');
+  const code = inp.value.trim().toUpperCase();
+  if (!code) return;
+
+  const resEl    = document.getElementById('scan-keluar-result');
+  const codeEl   = document.getElementById('skr-code');
+  const detailEl = document.getElementById('skr-detail');
+  const actEl    = document.getElementById('skr-actions');
+
+  resEl.style.display = 'block';
+  resEl.className = 'scan-result';
+  codeEl.textContent  = code;
+  detailEl.innerHTML  = '<span style="color:#6b7280">Mencari…</span>';
+  actEl.innerHTML     = '';
+
+  try {
+    const { data: basket } = await db.from('baskets')
+      .select('id, basket_code, lokasi, status, qty_sisa, kg_sisa, batch_id, tanggal_produksi, product_master(nama_produk,product_code,grade), live_chicken_batches(batch_code)')
+      .eq('basket_code', code).maybeSingle();
+
+    if (!basket) {
+      resEl.className = 'scan-result scan-err';
+      detailEl.innerHTML = '❌ Keranjang tidak ditemukan dalam sistem.';
+      return;
+    }
+
+    if (basket.lokasi !== 'CHILLER' || basket.status !== 'AKTIF') {
+      resEl.className = 'scan-result scan-err';
+      detailEl.innerHTML = `Produk: <strong>${basket.product_master?.nama_produk||'—'}</strong><br>Lokasi saat ini: <strong>${lokasiLabel(basket.lokasi)}</strong><br>❌ Keranjang ini tidak berada di Chiller.`;
+      return;
+    }
+
+    const pm  = basket.product_master;
+    const lcb = basket.live_chicken_batches;
+    const age = getAgeDays(basket.tanggal_produksi);   // umur sejak tgl produksi
+    const prodStr = pm ? `${pm.nama_produk} (${pm.product_code})${pm.grade ? ' — Grade '+pm.grade : ''}` : '—';
+    const ageStr  = age === 0 ? 'diproduksi hari ini' : age === null ? '—' : `${age} hari (sejak produksi)`;
+    const ageWarn = age >= 3 ? `<br><span style="color:#dc2626;font-weight:700">⚠️ Umur ${age} hari — segera bekukan!</span>` : '';
+
+    resEl.className = age >= 3 ? 'scan-result scan-warn' : 'scan-result scan-ok';
+    detailEl.innerHTML = `Produk: <strong>${prodStr}</strong><br>Qty: <strong>${fmt(basket.qty_sisa)} ekor / ${fmtKg(basket.kg_sisa)}</strong><br>Umur: <strong>${ageStr}</strong><br>Batch: <strong>${lcb?.batch_code||'—'}</strong>${ageWarn}`;
+    actEl.innerHTML = `<button class="btn btn-primary" onclick="openPindahModalByBasketId('${basket.id}');clearScanResult('scan-keluar-result');document.getElementById('scan-keluar-input').value=''">📤 Pindah Keluar</button>`;
+
+  } catch(e) {
+    console.error(e);
+    resEl.className = 'scan-result scan-err';
+    detailEl.innerHTML = '❌ Kesalahan sistem. Coba lagi.';
+  }
+}
+
+// ============================================================
+// KONFIRMASI MODAL
+// ============================================================
+function openKonfirmModal(movementId) {
+  const mv = pendingMovements.find(m => m.id === movementId);
+  if (!mv) return;
+  activeMovementId = movementId;
+  const b = mv.baskets; const pm = b?.product_master;
+  setEl('mk-code',   b?.basket_code||'—');
+  setEl('mk-produk', pm ? `${pm.nama_produk} (${pm.product_code})` : '—');
+  setEl('mk-qty-kg', `${fmt(mv.qty_pindah)} ekor / ${fmtKg(mv.kg_pindah)}`);
+  setEl('mk-dari',   lokasiLabel(mv.dari_lokasi));
+  setEl('mk-batch',  mv.live_chicken_batches?.batch_code||'—');
+  document.getElementById('mk-err').style.display = 'none';
+  document.getElementById('mk-btn-ok').disabled = false;
+  document.getElementById('mk-btn-ok').textContent = '✅ Konfirmasi Masuk';
+  openModal('modal-konfirm');
+}
+
+async function doKonfirmasi() {
+  const btn = document.getElementById('mk-btn-ok');
+  const err = document.getElementById('mk-err');
+  btn.disabled = true; btn.textContent = 'Memproses…';
+  err.style.display = 'none';
+  try {
+    const { data, error } = await db.rpc('konfirmasi_movement', { p_movement_id: activeMovementId, p_user_id: currentUser.id });
+    if (error) throw error;
+    const r = typeof data === 'string' ? JSON.parse(data) : data;
+    if (!(r.ok ?? r.success)) throw new Error(r.error);
+    closeModal('modal-konfirm');
+    showToast('✅ Keranjang dikonfirmasi masuk Chiller!', 'success');
+    activeMovementId = null;
+    loadAll();
+  } catch(e) {
+    err.textContent = 'Gagal: '+(e.message||'Terjadi kesalahan'); err.style.display = 'block';
+    btn.disabled = false; btn.textContent = '✅ Konfirmasi Masuk';
+  }
+}
+
+// ============================================================
+// TOLAK MODAL
+// ============================================================
+function openTolakModal(movementId, basketCode) {
+  activeMovementId = movementId;
+  setEl('mt-code', basketCode||'—');
+  document.getElementById('mt-alasan').value = '';
+  document.getElementById('mt-err').style.display = 'none';
+  document.getElementById('mt-btn-ok').disabled = false;
+  document.getElementById('mt-btn-ok').textContent = '✗ Tolak Keranjang';
+  openModal('modal-tolak');
+}
+function openTolakFromKonfirmModal() {
+  const code = document.getElementById('mk-code').textContent;
+  closeModal('modal-konfirm');
+  openTolakModal(activeMovementId, code);
+}
+async function doTolak() {
+  const alasan = document.getElementById('mt-alasan').value.trim();
+  const btn    = document.getElementById('mt-btn-ok');
+  const err    = document.getElementById('mt-err');
+  if (!alasan) { err.textContent='Alasan wajib diisi.'; err.style.display='block'; return; }
+  btn.disabled = true; btn.textContent = 'Memproses…';
+  err.style.display = 'none';
+  try {
+    const { data, error } = await db.rpc('tolak_movement', { p_movement_id: activeMovementId, p_user_id: currentUser.id, p_alasan: alasan });
+    if (error) throw error;
+    const r = typeof data === 'string' ? JSON.parse(data) : data;
+    if (!(r.ok ?? r.success)) throw new Error(r.error);
+    closeModal('modal-tolak');
+    showToast('Keranjang ditolak.', 'warning');
+    activeMovementId = null;
+    loadAll();
+  } catch(e) {
+    err.textContent='Gagal: '+(e.message||'Error'); err.style.display='block';
+    btn.disabled=false; btn.textContent='✗ Tolak Keranjang';
+  }
+}
+
+// ============================================================
+// KONFIRMASI SEMUA
+// ============================================================
+function konfirmasiSemua() {
+  if (!pendingMovements.length) return;
+  setEl('mks-desc', `${pendingMovements.length} keranjang pending akan dikonfirmasi masuk ke Chiller sekaligus.`);
+  document.getElementById('mks-err').style.display = 'none';
+  document.getElementById('mks-btn-ok').disabled = false;
+  document.getElementById('mks-btn-ok').textContent = '✅ Ya, Konfirmasi Semua';
+  openModal('modal-konfirm-semua');
+}
+async function doKonfirmasiSemua() {
+  const btn = document.getElementById('mks-btn-ok');
+  const err = document.getElementById('mks-err');
+  btn.disabled = true; btn.textContent = 'Memproses…';
+  let ok=0, gagal=0;
+  for (const mv of pendingMovements) {
+    try {
+      const { data } = await db.rpc('konfirmasi_movement', { p_movement_id: mv.id, p_user_id: currentUser.id });
+      const r = typeof data === 'string' ? JSON.parse(data) : data;
+      if (r.ok ?? r.success) ok++; else gagal++;
+    } catch { gagal++; }
+  }
+  closeModal('modal-konfirm-semua');
+  showToast(`✅ ${ok} dikonfirmasi${gagal>0?`, ${gagal} gagal`:''}`, ok>0?'success':'error');
+  loadAll();
+}
+
+// ============================================================
+// PINDAH KELUAR
+// ============================================================
+function openPindahModal(basketId) {
+  // Dipanggil dari tabel stok (chillerBaskets sudah di-load)
+  const b = chillerBaskets.find(x => x.id === basketId);
+  if (!b) { openPindahModalByBasketId(basketId); return; }
+  _populatePindahModal(b);
+}
+
+async function openPindahModalByBasketId(basketId) {
+  // Dipanggil dari scan (mungkin basket belum ada di state chillerBaskets, atau reload dibutuhkan)
+  let b = chillerBaskets.find(x => x.id === basketId);
+  if (!b) {
+    // Fetch langsung dari DB (dipanggil dari scan, state mungkin belum update)
+    const { data } = await db.from('baskets')
+      .select('id, basket_code, lokasi, status, qty_sisa, kg_sisa, batch_id, tanggal_produksi, product_master(nama_produk,product_code,grade,kg_min,kg_max), live_chicken_batches(batch_code)')
+      .eq('id', basketId).maybeSingle();
+    if (data) { b = data; }
+  }
+  if (!b) { showToast('Data keranjang tidak ditemukan', 'error'); return; }
+  _populatePindahModal(b);
+}
+
+let isPartialMode    = false;
+let activeBasketQty  = 0;
+let activeBasketKg   = 0;
+let activeQtyEfektif = 0;
+let activeKgEfektif  = 0;
+let activeKgMin      = null;
+let activeKgMax      = null;
+
+function setPartialMode(partial) {
+  isPartialMode = partial;
+  document.getElementById('mp-toggle-semua').classList.toggle('active', !partial);
+  document.getElementById('mp-toggle-sebagian').classList.toggle('active', partial);
+  const box = document.getElementById('mp-partial-box');
+  box.classList.toggle('show', partial);
+  if (!partial) {
+    document.getElementById('mp-qty-kirim').value = '';
+    document.getElementById('mp-kg-kirim').value  = '';
+    document.getElementById('mp-ratio-warn').style.display = 'none';
+  }
+}
+
+function checkPartialRatio() {
+  const warn = document.getElementById('mp-ratio-warn');
+  const qty  = parseFloat(document.getElementById('mp-qty-kirim').value);
+  const kg   = parseFloat(document.getElementById('mp-kg-kirim').value);
+  // Kalau kg_min/kg_max tidak ada di produk, skip validasi
+  if (!qty || qty <= 0 || !kg || kg <= 0 || activeKgMin === null || activeKgMax === null) {
+    warn.style.display = 'none'; return;
+  }
+  const minExpected = +(qty * activeKgMin).toFixed(2);
+  const maxExpected = +(qty * activeKgMax).toFixed(2);
+  if (kg < minExpected || kg > maxExpected) {
+    warn.textContent = `⚠️ Berat tidak wajar untuk ${qty} ekor. Rentang wajar: ${minExpected} – ${maxExpected} kg (standar produk: ${activeKgMin}–${activeKgMax} kg/ekor).`;
+    warn.style.display = 'block';
+  } else {
+    warn.style.display = 'none';
+  }
+}
+
+async function _populatePindahModal(b) {
+  activeBasketId  = b.id;
+  activeBasketQty = b.qty_sisa || 0;
+  activeBasketKg  = b.kg_sisa  || 0;
+  activeKgMin     = b.product_master?.kg_min ?? null;
+  activeKgMax     = b.product_master?.kg_max ?? null;
+  selectedDest    = null;
+  isPartialMode   = false;
+  const pm  = b.product_master;
+  const age = getAgeDays(b.tanggal_produksi);
+  const ageStr = age === 0 ? 'Hari ini' : age === null ? '—' : `${age} hari`;
+  setEl('mp-code',   b.basket_code||'—');
+  setEl('mp-produk', pm ? `${pm.nama_produk} (${pm.product_code})` : '—');
+  setEl('mp-qty-kg', `${fmt(b.qty_sisa)} ekor / ${fmtKg(b.kg_sisa)}`);
+  setEl('mp-umur',   ageStr);
+  setEl('mp-batch',  b.live_chicken_batches?.batch_code||'—');
+  setEl('mp-partial-hint', `Maks: ${fmt(b.qty_sisa)} ekor / ${fmtKg(b.kg_sisa)}`);
+  document.getElementById('mp-catatan').value = '';
+  document.getElementById('mp-err').style.display = 'none';
+  document.getElementById('mp-ratio-warn').style.display = 'none';
+  // Tombol disabled dulu sementara cek pending
+  const btn = document.getElementById('mp-btn-ok');
+  btn.disabled = true; btn.textContent = 'Memeriksa…';
+  setPartialMode(false);
+  ['dest-parting','dest-boneless','dest-blasting','dest-marinasi'].forEach(id => document.getElementById(id).classList.remove('selected'));
+  openModal('modal-pindah');
+
+  // Cek pending outgoing movements — hitung sisa efektif
+  try {
+    const { data: pendings } = await db.from('basket_movements')
+      .select('id, ke_lokasi, qty_pindah, kg_pindah')
+      .eq('basket_id', b.id)
+      .eq('status', 'PENDING')
+      .eq('dari_lokasi', 'CHILLER');
+
+    const totalPendingQty = (pendings||[]).reduce((s, m) => s + (m.qty_pindah||0), 0);
+    const totalPendingKg  = (pendings||[]).reduce((s, m) => s + (m.kg_pindah||0),  0);
+    activeQtyEfektif = activeBasketQty - totalPendingQty;
+    activeKgEfektif  = activeBasketKg  - totalPendingKg;
+
+    if (totalPendingQty > 0) {
+      // Tampilkan info pending sebagai warning kuning
+      const err = document.getElementById('mp-err');
+      const destList = [...new Set((pendings||[]).map(m => lokasiLabel(m.ke_lokasi)))].join(', ');
+      if (activeQtyEfektif <= 0) {
+        err.textContent = `⚠️ Semua isi keranjang sudah dalam pengiriman PENDING ke ${destList}. Tidak ada sisa untuk dikirim.`;
+        err.style.display = 'block';
+        btn.disabled = true; btn.textContent = '📤 Pindah Keluar';
+        return;
+      } else {
+        err.style.color = '#92400e';
+        err.textContent = `ℹ️ ${fmt(totalPendingQty)} ekor / ${fmtKg(totalPendingKg)} sedang PENDING ke ${destList}. Sisa efektif: ${fmt(activeQtyEfektif)} ekor / ${fmtKg(activeKgEfektif)}.`;
+        err.style.display = 'block';
+      }
+    } else {
+      activeQtyEfektif = activeBasketQty;
+      activeKgEfektif  = activeBasketKg;
+    }
+
+    // Update hint partial dengan sisa efektif
+    setEl('mp-partial-hint', `Maks: ${fmt(activeQtyEfektif)} ekor / ${fmtKg(activeKgEfektif)}`);
+    btn.disabled = false; btn.textContent = '📤 Pindah Keluar';
+  } catch(e) {
+    activeQtyEfektif = activeBasketQty;
+    activeKgEfektif  = activeBasketKg;
+    btn.disabled = false; btn.textContent = '📤 Pindah Keluar';
+  }
+}
+
+function selectDest(dest) {
+  selectedDest = dest;
+  const map = {PARTING:'dest-parting',BONELESS:'dest-boneless',BLASTING:'dest-blasting',MARINASI:'dest-marinasi'};
+  ['dest-parting','dest-boneless','dest-blasting','dest-marinasi'].forEach(id=>document.getElementById(id).classList.remove('selected'));
+  if (map[dest]) document.getElementById(map[dest]).classList.add('selected');
+  document.getElementById('mp-err').style.display = 'none';
+}
+
+async function doPindahKeluar() {
+  const err     = document.getElementById('mp-err');
+  const btn     = document.getElementById('mp-btn-ok');
+  const catatan = document.getElementById('mp-catatan').value.trim();
+
+  if (!selectedDest) { err.textContent='Pilih tujuan terlebih dahulu.'; err.style.display='block'; return; }
+
+  // Ambil qty/kg yang akan dikirim
+  let qtyKirim, kgKirim;
+  if (isPartialMode) {
+    qtyKirim = parseFloat(document.getElementById('mp-qty-kirim').value);
+    kgKirim  = parseFloat(document.getElementById('mp-kg-kirim').value);
+    if (!qtyKirim || qtyKirim <= 0) {
+      err.textContent='Jumlah ekor yang dikirim harus diisi.'; err.style.display='block'; return;
+    }
+    if (!kgKirim || kgKirim <= 0) {
+      err.textContent='Berat yang dikirim harus diisi.'; err.style.display='block'; return;
+    }
+    if (qtyKirim > activeQtyEfektif) {
+      err.textContent=`Melebihi sisa efektif keranjang (${fmt(activeQtyEfektif)} ekor).`; err.style.display='block'; return;
+    }
+    if (kgKirim > activeKgEfektif) {
+      err.textContent=`Berat melebihi sisa efektif keranjang (${fmtKg(activeKgEfektif)}).`; err.style.display='block'; return;
+    }
+  } else {
+    // Kirim Semua = kirim sisa efektif (bisa lebih kecil dari qty_sisa kalau ada pending)
+    qtyKirim = activeQtyEfektif;
+    kgKirim  = activeKgEfektif;
+  }
+
+  let basket = chillerBaskets.find(x=>x.id===activeBasketId);
+  if (!basket) {
+    const { data } = await db.from('baskets').select('id,qty_sisa,kg_sisa,batch_id').eq('id',activeBasketId).maybeSingle();
+    basket = data;
+  }
+  if (!basket) { err.textContent='Data keranjang tidak ditemukan.'; err.style.display='block'; return; }
+
+  btn.disabled = true; btn.textContent = 'Memproses…';
+  err.style.display = 'none';
+  try {
+    const { error } = await db.from('basket_movements').insert({
+      basket_id:    activeBasketId,
+      batch_id:     basket.batch_id,
+      dari_lokasi:  'CHILLER',
+      ke_lokasi:    selectedDest,
+      qty_pindah:   qtyKirim,
+      kg_pindah:    kgKirim,
+      is_partial:   isPartialMode,
+      status:       'PENDING',
+      catatan:      catatan || null,
+      submitted_by: currentUser.id
+    });
+    if (error) throw error;
+    closeModal('modal-pindah');
+    const label = isPartialMode
+      ? `📤 Sebagian dikirim ke ${lokasiLabel(selectedDest)} (${fmt(qtyKirim)} ekor / ${fmtKg(kgKirim)}) — menunggu konfirmasi penerima`
+      : `📤 Dikirim ke ${lokasiLabel(selectedDest)} — menunggu konfirmasi penerima`;
+    showToast(label, 'success');
+    activeBasketId = null; selectedDest = null; isPartialMode = false;
+    loadAll();
+  } catch(e) {
+    err.textContent='Gagal: '+(e.message||'Error'); err.style.display='block';
+    btn.disabled=false; btn.textContent='📤 Pindah Keluar';
+  }
+}
+
+// ============================================================
+// BATALKAN MOVEMENT (PENDING keluar dari Chiller)
+// ============================================================
+function openCancelModal(movementId, basketCode, destLabel) {
+  cancelMovementId = movementId;
+  setEl('mcv-code', basketCode);
+  setEl('mcv-dest', destLabel);
+  document.getElementById('mcv-err').style.display = 'none';
+  const btn = document.getElementById('mcv-btn-ok');
+  btn.disabled = false; btn.textContent = '🚫 Ya, Batalkan';
+  openModal('modal-cancel-mv');
+}
+
+async function doCancel() {
+  const btn = document.getElementById('mcv-btn-ok');
+  const err = document.getElementById('mcv-err');
+  btn.disabled = true; btn.textContent = 'Memproses…';
+  err.style.display = 'none';
+  try {
+    const { error } = await db.from('basket_movements')
+      .update({ status: 'REJECTED', catatan: 'Dibatalkan oleh pengirim (Chiller)' })
+      .eq('id', cancelMovementId)
+      .eq('status', 'PENDING')
+      .eq('dari_lokasi', 'CHILLER');
+    if (error) throw error;
+    closeModal('modal-cancel-mv');
+    showToast('🚫 Movement dibatalkan. Keranjang tetap di Chiller.', 'warning');
+    cancelMovementId = null;
+    loadAll();
+  } catch(e) {
+    err.textContent = 'Gagal: ' + (e.message || 'Error');
+    err.style.display = 'block';
+    btn.disabled = false; btn.textContent = '🚫 Ya, Batalkan';
+  }
+}
+
+// ============================================================
+// MINTA KEMBALI KE CHILLER (CONFIRMED movement)
+// ============================================================
+function openReturnModal(movementId, basketId, basketCode, prodNama, currentLokasi) {
+  returnBasketId = basketId;
+  setEl('mr-code',   basketCode);
+  setEl('mr-produk', prodNama);
+  setEl('mr-lokasi', lokasiLabel(currentLokasi));
+  document.getElementById('mr-catatan').value = '';
+  document.getElementById('mr-err').style.display = 'none';
+  const btn = document.getElementById('mr-btn-ok');
+  btn.disabled = false; btn.textContent = '↩️ Minta Kembali';
+  openModal('modal-return');
+}
+
+async function doReturn() {
+  const btn     = document.getElementById('mr-btn-ok');
+  const err     = document.getElementById('mr-err');
+  const catatan = document.getElementById('mr-catatan').value.trim();
+  if (!catatan) { err.textContent = 'Alasan wajib diisi.'; err.style.display = 'block'; return; }
+  btn.disabled = true; btn.textContent = 'Memproses…';
+  err.style.display = 'none';
+  try {
+    // Ambil data terbaru basket (lokasi, qty, kg, batch_id)
+    const { data: basket, error: bErr } = await db.from('baskets')
+      .select('id, lokasi, qty_sisa, kg_sisa, batch_id')
+      .eq('id', returnBasketId).maybeSingle();
+    if (bErr) throw bErr;
+    if (!basket) throw new Error('Data keranjang tidak ditemukan.');
+    if (basket.lokasi === 'CHILLER') throw new Error('Keranjang sudah berada di Chiller.');
+
+    const { error } = await db.from('basket_movements').insert({
+      basket_id:    returnBasketId,
+      batch_id:     basket.batch_id,
+      dari_lokasi:  basket.lokasi,
+      ke_lokasi:    'CHILLER',
+      qty_pindah:   basket.qty_sisa,
+      kg_pindah:    basket.kg_sisa,
+      status:       'PENDING',
+      catatan:      catatan,
+      submitted_by: currentUser.id    });
+    if (error) throw error;
+    closeModal('modal-return');
+    showToast('↩️ Permintaan kembali ke Chiller berhasil dikirim.', 'success');
+    returnBasketId = null;
+    loadAll();
+  } catch(e) {
+    err.textContent = 'Gagal: ' + (e.message || 'Error tidak diketahui');
+    err.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = '↩️ Minta Kembali';
+  }
+}
+
+// ===== INIT =====
+window.addEventListener('DOMContentLoaded', () => {
+  const saved = localStorage.getItem('rpa_user');
+  if (saved) {
+    try { currentUser = JSON.parse(saved); startApp(); }
+    catch(e) { localStorage.removeItem('rpa_user'); }
+  }
+});
+</script>
+</body>
+</html>

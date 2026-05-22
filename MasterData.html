@@ -1,0 +1,1215 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Master Data — Kurnia's Food</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+/* =====================================================
+   RESET & BASE
+   ===================================================== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f3f4f6; color: #111827; }
+button { cursor: pointer; font-family: inherit; }
+input, select, textarea { font-family: inherit; }
+
+/* =====================================================
+   LOGIN SCREEN
+   ===================================================== */
+#login-screen {
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh; background: linear-gradient(135deg, #1e3a5f 0%, #1d4ed8 100%);
+    padding: 20px;
+}
+.login-card {
+    background: white; border-radius: 20px; padding: 44px 40px;
+    width: 100%; max-width: 400px; box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+}
+.login-logo { text-align: center; margin-bottom: 36px; }
+.login-logo .icon { font-size: 48px; display: block; margin-bottom: 12px; }
+.login-logo h1 { font-size: 22px; font-weight: 800; color: #111827; }
+.login-logo p { font-size: 13px; color: #6b7280; margin-top: 4px; }
+.login-card label { display: block; font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px; margin-top: 16px; }
+.login-card input { width: 100%; padding: 12px 14px; border: 1.5px solid #d1d5db; border-radius: 10px; font-size: 15px; outline: none; transition: border-color .2s; }
+.login-card input:focus { border-color: #2563eb; }
+.btn-login { width: 100%; margin-top: 24px; padding: 14px; background: #2563eb; color: white; border: none; border-radius: 10px; font-size: 16px; font-weight: 700; transition: background .2s; }
+.btn-login:hover { background: #1d4ed8; }
+.btn-login:disabled { background: #93c5fd; cursor: not-allowed; }
+.login-error { margin-top: 12px; padding: 10px 14px; background: #fef2f2; border: 1px solid #fca5a5; border-radius: 8px; color: #dc2626; font-size: 13px; display: none; }
+.login-version { text-align: center; margin-top: 20px; font-size: 11px; color: #9ca3af; }
+
+/* =====================================================
+   APP LAYOUT
+   ===================================================== */
+#app-screen { display: none; height: 100vh; flex-direction: column; }
+
+.topbar {
+    height: 56px; background: white; border-bottom: 1px solid #e5e7eb;
+    display: flex; align-items: center; padding: 0 16px; gap: 12px;
+    flex-shrink: 0; position: sticky; top: 0; z-index: 100;
+}
+.topbar-menu-btn {
+    width: 36px; height: 36px; border: none; background: none;
+    border-radius: 8px; font-size: 18px; display: flex; align-items: center; justify-content: center;
+}
+.topbar-menu-btn:hover { background: #f3f4f6; }
+.topbar-title { font-weight: 700; font-size: 16px; color: #111827; flex: 1; }
+.topbar-right { display: flex; align-items: center; gap: 10px; }
+
+.sidebar {
+    width: 230px; flex-shrink: 0; background: #0f172a; color: white;
+    display: flex; flex-direction: column;
+    position: fixed; top: 0; left: 0; height: 100vh; z-index: 200;
+    transition: transform 0.28s cubic-bezier(0.4,0,0.2,1); overflow-y: auto;
+    scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.1) transparent;
+}
+.sidebar-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 199;
+}
+.sidebar-brand {
+    padding: 20px 18px 16px; border-bottom: 1px solid rgba(255,255,255,0.08);
+    flex-shrink: 0;
+}
+.sidebar-brand h2 { font-size: 15px; font-weight: 800; color: #f8fafc; display: flex; align-items: center; gap: 8px; }
+.sidebar-brand p { font-size: 11px; color: rgba(255,255,255,0.4); margin-top: 3px; }
+.sidebar-nav { flex: 1; padding: 10px 0; }
+.nav-section-label {
+    font-size: 10px; font-weight: 700; color: rgba(255,255,255,0.3);
+    text-transform: uppercase; letter-spacing: 1px;
+    padding: 12px 18px 4px;
+}
+.nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 18px; font-size: 13px; color: rgba(255,255,255,0.65);
+    cursor: pointer; transition: all 0.15s;
+    border-left: 3px solid transparent; position: relative;
+}
+.nav-item:hover:not(.disabled) { background: rgba(255,255,255,0.07); color: white; }
+.nav-item.active {
+    background: rgba(37,99,235,0.2); color: #93c5fd;
+    border-left-color: #3b82f6;
+}
+.nav-item.disabled { opacity: 0.3; cursor: not-allowed; }
+.nav-icon { font-size: 15px; width: 22px; text-align: center; flex-shrink: 0; }
+.nav-label-text { flex: 1; }
+.sidebar-footer { padding: 14px 18px; border-top: 1px solid rgba(255,255,255,0.08); flex-shrink: 0; }
+.user-card { display: flex; align-items: center; gap: 10px; }
+.user-avatar {
+    width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,.2);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 14px; color: white; flex-shrink: 0;
+}
+.user-name { font-size: 13px; font-weight: 600; color: white; }
+.user-role { font-size: 11px; color: rgba(255,255,255,.45); margin-top: 1px; }
+.btn-logout {
+    margin-top: 10px; width: 100%; padding: 9px; background: rgba(255,255,255,.08);
+    border: 1px solid rgba(255,255,255,.15); border-radius: 8px;
+    color: rgba(255,255,255,.7); font-size: 13px; font-weight: 600;
+}
+.btn-logout:hover { background: rgba(255,255,255,.12); color: white; }
+
+.app-body { display: flex; flex: 1; overflow: hidden; }
+.content-area { flex: 1; overflow-y: auto; padding: 20px 16px 40px; }
+@media (min-width: 1024px) {
+    .sidebar { position: relative; top: auto; left: auto; height: auto; }
+    .content-area { padding: 24px; }
+    #app-screen { flex-direction: row; }
+    .topbar { display: none; }
+    .app-body { display: flex; height: 100vh; }
+}
+@media (max-width: 1023px) {
+    .sidebar { transform: translateX(-100%); }
+    .sidebar.open { transform: translateX(0); }
+    .sidebar-overlay.open { display: block; }
+}
+
+/* =====================================================
+   PAGE CONTENT
+   ===================================================== */
+.page-header {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    margin-bottom: 20px; gap: 12px; flex-wrap: wrap;
+}
+.page-title { font-size: 22px; font-weight: 800; color: #111827; }
+.page-subtitle { font-size: 13px; color: #6b7280; margin-top: 2px; }
+
+/* Tabs */
+.tab-bar {
+    display: flex; gap: 4px; margin-bottom: 20px;
+    background: white; padding: 6px; border-radius: 12px;
+    border: 1px solid #e5e7eb; width: fit-content;
+}
+.tab-btn {
+    padding: 8px 20px; border: none; background: none;
+    border-radius: 8px; font-size: 14px; font-weight: 600;
+    color: #6b7280; transition: all .15s;
+}
+.tab-btn.active { background: #2563eb; color: white; }
+.tab-btn:hover:not(.active) { background: #f3f4f6; color: #111827; }
+
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* Filter / toolbar */
+.toolbar {
+    display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: center;
+}
+.search-input {
+    flex: 1; min-width: 200px; padding: 10px 14px;
+    border: 1.5px solid #d1d5db; border-radius: 10px; font-size: 14px; outline: none;
+}
+.search-input:focus { border-color: #2563eb; }
+.filter-select {
+    padding: 10px 14px; border: 1.5px solid #d1d5db; border-radius: 10px;
+    font-size: 14px; outline: none; background: white; color: #111827;
+}
+.filter-select:focus { border-color: #2563eb; }
+.btn-primary {
+    padding: 10px 18px; background: #2563eb; color: white;
+    border: none; border-radius: 10px; font-size: 14px; font-weight: 600;
+    display: flex; align-items: center; gap: 6px; white-space: nowrap;
+}
+.btn-primary:hover { background: #1d4ed8; }
+
+/* Table */
+.card { background: white; border-radius: 14px; border: 1px solid #e5e7eb; overflow: hidden; }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+thead th {
+    padding: 12px 14px; text-align: left; font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .5px; color: #6b7280;
+    background: #f9fafb; border-bottom: 1px solid #e5e7eb; white-space: nowrap;
+}
+tbody td { padding: 12px 14px; border-bottom: 1px solid #f3f4f6; vertical-align: middle; }
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover { background: #f9fafb; }
+
+.badge {
+    display: inline-flex; align-items: center; padding: 3px 10px;
+    border-radius: 20px; font-size: 11px; font-weight: 700; white-space: nowrap;
+}
+.badge-green  { background: #dcfce7; color: #15803d; }
+.badge-red    { background: #fee2e2; color: #b91c1c; }
+.badge-blue   { background: #dbeafe; color: #1d4ed8; }
+.badge-purple { background: #dbeafe; color: #2563eb; }
+.badge-orange { background: #ffedd5; color: #c2410c; }
+.badge-yellow { background: #fef9c3; color: #a16207; }
+.badge-gray   { background: #f3f4f6; color: #4b5563; }
+.badge-teal   { background: #ccfbf1; color: #0f766e; }
+
+.action-btns { display: flex; gap: 6px; }
+.btn-icon {
+    width: 32px; height: 32px; border: none; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center; font-size: 14px;
+}
+.btn-edit { background: #eff6ff; color: #2563eb; }
+.btn-edit:hover { background: #dbeafe; }
+.btn-del { background: #fef2f2; color: #dc2626; }
+.btn-del:hover { background: #fee2e2; }
+.btn-del:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
+
+.empty-state { padding: 40px; text-align: center; color: #9ca3af; font-size: 14px; }
+.empty-icon { font-size: 36px; margin-bottom: 10px; }
+
+/* Toggle switch */
+.toggle-wrap { display: flex; align-items: center; gap: 8px; }
+.toggle {
+    position: relative; width: 40px; height: 22px;
+    background: #d1d5db; border-radius: 11px; cursor: pointer;
+    transition: background .2s; flex-shrink: 0;
+}
+.toggle.on { background: #22c55e; }
+.toggle::after {
+    content: ''; position: absolute; top: 3px; left: 3px;
+    width: 16px; height: 16px; border-radius: 50%; background: white;
+    transition: transform .2s; box-shadow: 0 1px 3px rgba(0,0,0,.2);
+}
+.toggle.on::after { transform: translateX(18px); }
+
+/* =====================================================
+   MODAL
+   ===================================================== */
+.modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,.5); z-index: 300; align-items: center; justify-content: center; padding: 16px;
+}
+.modal-overlay.open { display: flex; }
+.modal {
+    background: white; border-radius: 20px; width: 100%; max-width: 520px;
+    max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.25);
+}
+.modal-header {
+    padding: 20px 24px 16px; border-bottom: 1px solid #e5e7eb;
+    display: flex; align-items: center; justify-content: space-between;
+}
+.modal-title { font-size: 17px; font-weight: 800; color: #111827; }
+.modal-close { background: none; border: none; font-size: 20px; color: #6b7280; padding: 4px; }
+.modal-close:hover { color: #111827; }
+.modal-body { padding: 20px 24px; }
+.modal-footer { padding: 16px 24px; border-top: 1px solid #e5e7eb; display: flex; gap: 10px; justify-content: flex-end; }
+
+.form-group { margin-bottom: 16px; }
+.form-label { display: block; font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px; }
+.form-label .req { color: #dc2626; margin-left: 2px; }
+.form-hint { font-size: 11px; color: #9ca3af; margin-top: 4px; }
+.form-input, .form-select {
+    width: 100%; padding: 10px 12px; border: 1.5px solid #d1d5db;
+    border-radius: 10px; font-size: 14px; outline: none; transition: border-color .2s;
+    background: white;
+}
+.form-input:focus, .form-select:focus { border-color: #2563eb; }
+.form-input:disabled, .form-select:disabled { background: #f9fafb; color: #6b7280; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form-error { font-size: 12px; color: #dc2626; margin-top: 4px; display: none; }
+
+.btn-cancel {
+    padding: 10px 18px; background: #f3f4f6; color: #374151;
+    border: none; border-radius: 10px; font-size: 14px; font-weight: 600;
+}
+.btn-cancel:hover { background: #e5e7eb; }
+.btn-save {
+    padding: 10px 22px; background: #2563eb; color: white;
+    border: none; border-radius: 10px; font-size: 14px; font-weight: 600;
+}
+.btn-save:hover { background: #1d4ed8; }
+.btn-save:disabled { background: #93c5fd; cursor: not-allowed; }
+.btn-danger {
+    padding: 10px 18px; background: #dc2626; color: white;
+    border: none; border-radius: 10px; font-size: 14px; font-weight: 600;
+}
+.btn-danger:hover { background: #b91c1c; }
+
+/* Alert box */
+.alert { padding: 12px 16px; border-radius: 10px; font-size: 13px; margin-bottom: 14px; }
+.alert-warning { background: #fffbeb; border: 1px solid #fcd34d; color: #92400e; }
+.alert-info    { background: #eff6ff; border: 1px solid #93c5fd; color: #1e40af; }
+
+/* Toast */
+#toast {
+    position: fixed; bottom: 24px; right: 24px; z-index: 999;
+    background: #111827; color: white; padding: 12px 20px;
+    border-radius: 10px; font-size: 14px; font-weight: 500;
+    opacity: 0; transform: translateY(10px); transition: all .3s;
+    pointer-events: none; max-width: 320px;
+}
+#toast.show { opacity: 1; transform: translateY(0); }
+#toast.success { background: #15803d; }
+#toast.error   { background: #dc2626; }
+
+.section-divider {
+    border: none; border-top: 1px solid #e5e7eb; margin: 16px 0;
+}
+</style>
+</head>
+<body>
+
+<!-- LOGIN SCREEN -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <span class="icon">🗂️</span>
+      <h1>Master Data</h1>
+      <p>RPA Management System</p>
+    </div>
+    <label>Username</label>
+    <input type="text" id="login-username" placeholder="Masukkan username" autocomplete="username">
+    <label>Password</label>
+    <input type="password" id="login-password" placeholder="Masukkan password" autocomplete="current-password">
+    <button class="btn-login" id="btn-login" onclick="doLogin()">Masuk</button>
+    <div class="login-error" id="login-error"></div>
+    <div class="login-version">RPA System v1.0</div>
+  </div>
+</div>
+
+<!-- APP SCREEN -->
+<div id="app-screen">
+  <!-- Topbar (mobile) -->
+  <div class="topbar">
+    <button class="topbar-menu-btn" onclick="toggleSidebar()">☰</button>
+    <span class="topbar-title">🗂️ Master Data</span>
+  </div>
+  <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+  <div class="app-body">
+    <!-- SIDEBAR -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-brand">
+        <div style="display:flex;align-items:center;gap:10px;"><img src="logo.png" style="height:36px;width:auto;object-fit:contain;"><span style="font-size:15px;font-weight:800;color:#f8fafc;">Kurnia's Food</span></div>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="nav-section-label">Utama</div>
+        <div class="nav-item" onclick="navTo('Dashboard.html')"><span class="nav-icon">🏠</span><span class="nav-label-text">Dashboard</span></div>
+
+        <div class="nav-section-label">Produksi</div>
+        <div class="nav-item" onclick="navTo('BatchAyamHidup.html')"><span class="nav-icon">🐔</span><span class="nav-label-text">Batch Ayam Hidup</span></div>
+        <div class="nav-item" onclick="navTo('ProduksiKarkas.html')"><span class="nav-icon">⚙️</span><span class="nav-label-text">Produksi Karkas</span></div>
+        <div class="nav-item" onclick="navTo('Thawing.html')"><span class="nav-icon">🧊</span><span class="nav-label-text">Thawing</span></div>
+        <div class="nav-item" onclick="navTo('Chiller.html')"><span class="nav-icon">❄️</span><span class="nav-label-text">Chiller</span></div>
+        <div class="nav-item" onclick="navTo('WorkOrder.html')"><span class="nav-icon">📋</span><span class="nav-label-text">Work Order</span></div>
+        <div class="nav-item" onclick="navTo('Parting.html')"><span class="nav-icon">✂️</span><span class="nav-label-text">Parting</span></div>
+        <div class="nav-item" onclick="navTo('Boneless.html')"><span class="nav-icon">🥩</span><span class="nav-label-text">Boneless</span></div>
+        <div class="nav-item" onclick="navTo('Marinasi.html')"><span class="nav-icon">🌶️</span><span class="nav-label-text">Marinasi</span></div>
+        <div class="nav-item" onclick="navTo('Blasting.html')"><span class="nav-icon">🧊</span><span class="nav-label-text">Blasting</span></div>
+        <div class="nav-item" onclick="navTo('ByProductKarkas.html')"><span class="nav-icon">📦</span><span class="nav-label-text">By-product Karkas</span></div>
+
+        <div class="nav-section-label">Penjualan</div>
+        <div class="nav-item disabled"><span class="nav-icon">🛒</span><span class="nav-label-text">Penjualan</span></div>
+
+        <div class="nav-section-label">Manajemen</div>
+        <div class="nav-item disabled"><span class="nav-icon">✅</span><span class="nav-label-text">Koreksi & Approval</span></div>
+        <div class="nav-item disabled"><span class="nav-icon">📊</span><span class="nav-label-text">Traceability</span></div>
+        <div class="nav-item active"><span class="nav-icon">🗂️</span><span class="nav-label-text">Master Data</span><span class="nav-tag">Aktif</span></div>
+        <div class="nav-item" id="nav-user-mgmt" style="display:none" onclick="navTo('UserManagement.html')"><span class="nav-icon">👥</span><span class="nav-label-text">Manajemen User</span></div>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="user-card">
+          <div class="user-avatar" id="sidebar-avatar">?</div>
+          <div class="user-info-text">
+            <div class="user-name" id="sidebar-name">—</div>
+            <div class="user-role" id="sidebar-role">—</div>
+          </div>
+        </div>
+        <button class="btn-logout" onclick="doLogout()">Keluar ↩</button>
+      </div>
+    </aside>
+
+    <!-- CONTENT -->
+    <div class="content-area">
+      <div class="page-header">
+        <div>
+          <div class="page-title">🗂️ Master Data</div>
+          <div class="page-subtitle">Kelola produk dan work station</div>
+        </div>
+      </div>
+
+      <!-- TABS -->
+      <div class="tab-bar">
+        <button class="tab-btn active" id="tab-product-btn" onclick="switchTab('product')">📦 Produk</button>
+        <button class="tab-btn" id="tab-ws-btn" onclick="switchTab('workstation')">🏭 Work Station</button>
+      </div>
+
+      <!-- ===== TAB: PRODUCT ===== -->
+      <div class="tab-panel active" id="tab-product">
+        <div class="toolbar">
+          <input type="text" class="search-input" id="product-search" placeholder="🔍 Cari kode / nama produk..." oninput="renderProductTable()">
+          <select class="filter-select" id="product-filter-kategori" onchange="renderProductTable()">
+            <option value="">Semua Kategori</option>
+            <option value="KARKAS">Karkas</option>
+            <option value="CU">Cut Up</option>
+            <option value="PART">Part</option>
+            <option value="BONELESS">Boneless</option>
+            <option value="MARINASI">Marinasi</option>
+            <option value="BYPRODUCT_KARKAS">By-product Karkas</option>
+            <option value="BYPRODUCT_PARTING">By-product Parting</option>
+            <option value="BYPRODUCT_BONELESS">By-product Boneless</option>
+            <option value="EXT">EXT</option>
+          </select>
+          <select class="filter-select" id="product-filter-aktif" onchange="renderProductTable()">
+            <option value="">Semua Status</option>
+            <option value="true">Aktif</option>
+            <option value="false">Non-aktif</option>
+          </select>
+          <button class="btn-primary" onclick="openProductModal()">+ Tambah Produk</button>
+        </div>
+        <div class="card">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Kode</th>
+                  <th>Nama Produk</th>
+                  <th>Kategori</th>
+                  <th>Grade</th>
+                  <th>Sub Kategori</th>
+                  <th>Satuan</th>
+                  <th>Validasi</th>
+                  <th>Status</th>
+                  <th style="width:80px">Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="product-tbody">
+                <tr><td colspan="9" class="empty-state"><div class="empty-icon">⏳</div>Memuat data...</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div style="padding:12px 16px; font-size:12px; color:#9ca3af; border-top:1px solid #f3f4f6;" id="product-count"></div>
+        </div>
+      </div>
+
+      <!-- ===== TAB: WORKSTATION ===== -->
+      <div class="tab-panel" id="tab-workstation">
+        <div class="toolbar">
+          <input type="text" class="search-input" id="ws-search" placeholder="🔍 Cari kode / nama work station..." oninput="renderWsTable()">
+          <select class="filter-select" id="ws-filter-tipe" onchange="renderWsTable()">
+            <option value="">Semua Tipe</option>
+            <option value="PARTING">Parting</option>
+            <option value="BONELESS">Boneless</option>
+          </select>
+          <select class="filter-select" id="ws-filter-aktif" onchange="renderWsTable()">
+            <option value="">Semua Status</option>
+            <option value="true">Aktif</option>
+            <option value="false">Non-aktif</option>
+          </select>
+          <button class="btn-primary" onclick="openWsModal()">+ Tambah Work Station</button>
+        </div>
+        <div class="card">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Kode</th>
+                  <th>Nama Work Station</th>
+                  <th>Tipe</th>
+                  <th>Status</th>
+                  <th style="width:80px">Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="ws-tbody">
+                <tr><td colspan="5" class="empty-state"><div class="empty-icon">⏳</div>Memuat data...</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div style="padding:12px 16px; font-size:12px; color:#9ca3af; border-top:1px solid #f3f4f6;" id="ws-count"></div>
+        </div>
+      </div>
+    </div><!-- /content-area -->
+  </div><!-- /app-body -->
+</div><!-- /app-screen -->
+
+<!-- ===================== MODAL: PRODUCT ===================== -->
+<div class="modal-overlay" id="modal-product">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-product-title">Tambah Produk</div>
+      <button class="modal-close" onclick="closeProductModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="alert alert-info" id="product-fixed-alert" style="display:none">
+        ℹ️ Produk ini adalah produk tetap sistem (is_fixed). Beberapa field tidak dapat diubah.
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Kode Produk <span class="req">*</span></label>
+        <input type="text" class="form-input" id="p-code" placeholder="Contoh: KRK-A-08, BNL-FD" style="text-transform:uppercase">
+        <div class="form-hint">Kode unik, huruf kapital & angka. Tidak bisa diubah setelah disimpan.</div>
+        <div class="form-error" id="p-code-err"></div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Nama Produk <span class="req">*</span></label>
+        <input type="text" class="form-input" id="p-nama" placeholder="Contoh: Karkas Grade A 0.8 kg">
+        <div class="form-error" id="p-nama-err"></div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Kategori <span class="req">*</span></label>
+        <select class="form-select" id="p-kategori" onchange="onKategoriChange()">
+          <option value="">— Pilih Kategori —</option>
+          <option value="KARKAS">Karkas</option>
+          <option value="CU">CU (Cut Up)</option>
+          <option value="PART">Part</option>
+          <option value="BONELESS">Boneless</option>
+          <option value="MARINASI">Marinasi</option>
+          <option value="BYPRODUCT_KARKAS">By-product Karkas</option>
+          <option value="BYPRODUCT_PARTING">By-product Parting</option>
+          <option value="BYPRODUCT_BONELESS">By-product Boneless</option>
+          <option value="EXT">EXT</option>
+        </select>
+        <div class="form-error" id="p-kategori-err"></div>
+      </div>
+
+      <!-- Grade (tampil hanya untuk KARKAS / CU) -->
+      <div id="p-grade-row" style="display:none">
+        <div class="form-group">
+          <label class="form-label">Grade</label>
+          <select class="form-select" id="p-grade">
+            <option value="">— Tidak ada —</option>
+            <option value="A">Grade A</option>
+            <option value="B">Grade B</option>
+            <option value="C">Grade C</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Sub Kategori</label>
+        <input type="text" class="form-input" id="p-sub-kategori" placeholder="Contoh: Fresh, Frozen, Premium...">
+        <div class="form-hint">Opsional. Label custom untuk pengelompokan tambahan.</div>
+      </div>
+
+      <!-- Satuan Qty: hidden, default kg -->
+      <select id="p-satuan" style="display:none">
+        <option value="kg" selected>Kg</option>
+      </select>
+
+      <!-- Validasi kg -->
+      <hr class="section-divider">
+      <div style="font-size:12px; font-weight:700; color:#6b7280; text-transform:uppercase; letter-spacing:.5px; margin-bottom:12px;">
+        Batas Validasi Berat (opsional)
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Kg Minimum</label>
+          <input type="number" class="form-input" id="p-kg-min" placeholder="0.000" step="0.001" min="0">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Kg Maksimum</label>
+          <input type="number" class="form-input" id="p-kg-max" placeholder="0.000" step="0.001" min="0">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Tipe Validasi <span class="req">*</span></label>
+        <select class="form-select" id="p-validation-type">
+          <option value="SOFT">SOFT — Peringatan saja, tetap bisa lanjut</option>
+          <option value="HARD">HARD — Blok submit jika tidak sesuai</option>
+        </select>
+        <div class="form-hint">HARD digunakan untuk Karkas. SOFT untuk produk lainnya.</div>
+      </div>
+
+      <hr class="section-divider">
+      <div class="form-group">
+        <label class="form-label">Status Produk</label>
+        <div class="toggle-wrap">
+          <div class="toggle on" id="p-aktif-toggle" onclick="toggleAktif()"></div>
+          <span id="p-aktif-label" style="font-size:14px; color:#374151;">Aktif</span>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeProductModal()">Batal</button>
+      <button class="btn-save" id="btn-save-product" onclick="saveProduct()">Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== MODAL: DELETE PRODUCT ===================== -->
+<div class="modal-overlay" id="modal-del-product">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-header">
+      <div class="modal-title">Hapus Produk</div>
+      <button class="modal-close" onclick="closeModal('modal-del-product')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="alert alert-warning">
+        ⚠️ Produk <strong id="del-product-name"></strong> akan dihapus permanen.<br>
+        Pastikan produk ini tidak digunakan di transaksi manapun.
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeModal('modal-del-product')">Batal</button>
+      <button class="btn-danger" id="btn-confirm-del-product" onclick="confirmDeleteProduct()">Ya, Hapus</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== MODAL: WORKSTATION ===================== -->
+<div class="modal-overlay" id="modal-ws">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-ws-title">Tambah Work Station</div>
+      <button class="modal-close" onclick="closeModal('modal-ws')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Kode Work Station <span class="req">*</span></label>
+        <input type="text" class="form-input" id="ws-kode" placeholder="Contoh: WS-P1, WS-B2" style="text-transform:uppercase">
+        <div class="form-hint">Kode unik, contoh: WS-P1 (Parting 1), WS-B1 (Boneless 1)</div>
+        <div class="form-error" id="ws-kode-err"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Nama Work Station <span class="req">*</span></label>
+        <input type="text" class="form-input" id="ws-nama" placeholder="Contoh: Meja Parting 1">
+        <div class="form-error" id="ws-nama-err"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Tipe <span class="req">*</span></label>
+        <select class="form-select" id="ws-tipe">
+          <option value="">— Pilih Tipe —</option>
+          <option value="PARTING">Parting</option>
+          <option value="BONELESS">Boneless</option>
+        </select>
+        <div class="form-error" id="ws-tipe-err"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Status</label>
+        <div class="toggle-wrap">
+          <div class="toggle on" id="ws-aktif-toggle" onclick="toggleWsAktif()"></div>
+          <span id="ws-aktif-label" style="font-size:14px; color:#374151;">Aktif</span>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeModal('modal-ws')">Batal</button>
+      <button class="btn-save" id="btn-save-ws" onclick="saveWorkstation()">Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== MODAL: DELETE WORKSTATION ===================== -->
+<div class="modal-overlay" id="modal-del-ws">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-header">
+      <div class="modal-title">Hapus Work Station</div>
+      <button class="modal-close" onclick="closeModal('modal-del-ws')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="alert alert-warning">
+        ⚠️ Work Station <strong id="del-ws-name"></strong> akan dihapus permanen.<br>
+        Pastikan tidak ada work order yang menggunakan work station ini.
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeModal('modal-del-ws')">Batal</button>
+      <button class="btn-danger" onclick="confirmDeleteWs()">Ya, Hapus</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<script>
+// =====================================================
+// SUPABASE INIT
+// =====================================================
+const SUPABASE_URL = 'https://dxixqyokuqrdprupsvic.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR4aXhxeW9rdXFyZHBydXBzdmljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5NjM3ODcsImV4cCI6MjA5MjUzOTc4N30.D_yaPwNbe4FFg_hmDeJ9cuxzbNvXZT8l1_TyZuq1t1M';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// =====================================================
+// STATE
+// =====================================================
+let currentUser = null;
+let products = [];
+let workstations = [];
+let editingProductId = null;
+let editingWsId = null;
+let deletingProductId = null;
+let deletingWsId = null;
+let pAktif = true;
+let wsAktif = true;
+
+// =====================================================
+// AUTH
+// =====================================================
+async function doLogin() {
+    const username = document.getElementById('login-username').value.trim();
+    const password = document.getElementById('login-password').value;
+    const errEl = document.getElementById('login-error');
+    const btn = document.getElementById('btn-login');
+    errEl.style.display = 'none';
+    if (!username || !password) { showLoginErr('Username dan password wajib diisi.'); return; }
+    btn.disabled = true; btn.textContent = 'Memuat...';
+    try {
+        const hashBuf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(password));
+        const hashHex = Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2,'0')).join('');
+        const { data, error } = await sb.from('users')
+            .select('id, nama, username, role, aktif, is_system_admin')
+            .eq('username', username).eq('password_hash', hashHex).single();
+        if (error || !data) { showLoginErr('Username atau password salah.'); return; }
+        if (!data.aktif) { showLoginErr('Akun Anda dinonaktifkan.'); return; }
+        // Load permissions
+        const { data: perms } = await sb.from('user_module_permissions').select('module, role').eq('user_id', data.id);
+        const permissions = {};
+        (perms || []).forEach(p => { permissions[p.module] = p.role; });
+        currentUser = { ...data, permissions };
+        localStorage.setItem('rpa_user', JSON.stringify(currentUser));
+        initApp();
+    } catch(e) {
+        showLoginErr('Terjadi kesalahan. Coba lagi.');
+    } finally {
+        btn.disabled = false; btn.textContent = 'Masuk';
+    }
+}
+
+function showLoginErr(msg) {
+    const el = document.getElementById('login-error');
+    el.textContent = msg; el.style.display = 'block';
+    document.getElementById('btn-login').disabled = false;
+    document.getElementById('btn-login').textContent = 'Masuk';
+}
+
+function doLogout() {
+    localStorage.removeItem('rpa_user');
+    location.reload();
+}
+
+document.getElementById('login-password').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+// =====================================================
+// INIT APP
+// =====================================================
+async function initApp() {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app-screen').style.display = 'flex';
+    document.getElementById('sidebar-name').textContent = currentUser.nama;
+    document.getElementById('sidebar-role').textContent = currentUser.is_system_admin ? 'System Admin' : currentUser.role;
+    document.getElementById('sidebar-avatar').textContent = currentUser.nama.charAt(0).toUpperCase();
+    if (currentUser.is_system_admin) {
+        document.getElementById('nav-user-mgmt').style.display = 'flex';
+    }
+    await Promise.all([loadProducts(), loadWorkstations()]);
+}
+
+function checkSession() {
+    const saved = sessionStorage.getItem('rpa_user') || localStorage.getItem('rpa_user');
+    if (saved) { try { currentUser = JSON.parse(saved); initApp(); } catch { localStorage.removeItem('rpa_user'); sessionStorage.removeItem('rpa_user'); } }
+}
+
+// =====================================================
+// NAVIGATION
+// =====================================================
+function navTo(page) {
+    if (currentUser) {
+        localStorage.setItem('rpa_user', JSON.stringify(currentUser));
+        sessionStorage.setItem('rpa_user', JSON.stringify(currentUser));
+    }
+    window.location.href = page;
+}
+function toggleSidebar() {
+    document.getElementById('sidebar').classList.toggle('open');
+    document.getElementById('sidebar-overlay').classList.toggle('open');
+}
+function switchTab(tab) {
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('tab-' + tab).classList.add('active');
+    document.getElementById('tab-' + tab + '-btn').classList.add('active');
+}
+
+// =====================================================
+// TOAST
+// =====================================================
+let toastTimer;
+function showToast(msg, type = 'success') {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.className = 'show ' + type;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { t.className = ''; }, 3000);
+}
+
+// =====================================================
+// HELPERS
+// =====================================================
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+function kategoriLabel(k) {
+    const map = {
+        'KARKAS': 'Karkas', 'CU': 'Cut Up', 'PART': 'Part',
+        'BONELESS': 'Boneless', 'MARINASI': 'Marinasi',
+        'BYPRODUCT_KARKAS': 'BP Karkas', 'BYPRODUCT_PARTING': 'BP Parting', 'BYPRODUCT_BONELESS': 'BP Boneless', 'EXT': 'EXT'
+    };
+    return map[k] || k;
+}
+function kategoriBadge(k) {
+    const map = {
+        'KARKAS': 'badge-blue', 'CU': 'badge-teal', 'PART': 'badge-orange',
+        'BONELESS': 'badge-purple', 'MARINASI': 'badge-yellow',
+        'BYPRODUCT_KARKAS': 'badge-gray', 'BYPRODUCT_PARTING': 'badge-gray', 'BYPRODUCT_BONELESS': 'badge-gray', 'EXT': 'badge-gray'
+    };
+    return map[k] || 'badge-gray';
+}
+
+// =====================================================
+// PRODUCT — LOAD & RENDER
+// =====================================================
+async function loadProducts() {
+    const { data, error } = await sb.from('product_master')
+        .select('*').order('kategori').order('product_code');
+    if (error) { showToast('Gagal memuat produk: ' + error.message, 'error'); return; }
+    products = data || [];
+    renderProductTable();
+}
+
+function renderProductTable() {
+    const search = document.getElementById('product-search').value.toLowerCase();
+    const filterKat = document.getElementById('product-filter-kategori').value;
+    const filterAktif = document.getElementById('product-filter-aktif').value;
+
+    let filtered = products.filter(p => {
+        const matchSearch = !search ||
+            p.product_code.toLowerCase().includes(search) ||
+            p.nama_produk.toLowerCase().includes(search);
+        const matchKat = !filterKat || p.kategori === filterKat;
+        const matchAktif = filterAktif === '' || String(p.aktif) === filterAktif;
+        return matchSearch && matchKat && matchAktif;
+    });
+
+    const tbody = document.getElementById('product-tbody');
+    if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="9" class="empty-state"><div class="empty-icon">📦</div>Tidak ada produk ditemukan</td></tr>`;
+        document.getElementById('product-count').textContent = '';
+        return;
+    }
+
+    tbody.innerHTML = filtered.map(p => {
+        const gradeHtml = p.grade ? `<span class="badge badge-blue">${p.grade}</span>` : '<span style="color:#d1d5db">—</span>';
+        const validBadge = p.validation_type === 'HARD'
+            ? `<span class="badge badge-red">HARD</span>`
+            : `<span class="badge badge-gray">SOFT</span>`;
+        const statusBadge = p.aktif
+            ? `<span class="badge badge-green">Aktif</span>`
+            : `<span class="badge badge-red">Non-aktif</span>`;
+        const canDelete = !p.is_fixed;
+        return `<tr>
+          <td><code style="font-size:12px; background:#f3f4f6; padding:3px 7px; border-radius:5px">${p.product_code}</code>${p.is_fixed ? ' <span title="Produk tetap sistem" style="font-size:11px">🔒</span>' : ''}</td>
+          <td style="font-weight:600">${p.nama_produk}</td>
+          <td><span class="badge ${kategoriBadge(p.kategori)}">${kategoriLabel(p.kategori)}</span></td>
+          <td>${gradeHtml}</td>
+          <td style="color:#6b7280;font-size:13px">${p.sub_kategori || '<span style="color:#d1d5db">—</span>'}</td>
+          <td style="color:#374151">${p.satuan_qty}</td>
+          <td>${validBadge}</td>
+          <td>${statusBadge}</td>
+          <td>
+            <div class="action-btns">
+              <button class="btn-icon btn-edit" title="Edit" onclick="openProductModal('${p.id}')">✏️</button>
+              <button class="btn-icon btn-del" title="${canDelete ? 'Hapus' : 'Produk tetap tidak bisa dihapus'}" ${canDelete ? '' : 'disabled'} onclick="${canDelete ? `confirmDelProduct('${p.id}')` : ''}">🗑️</button>
+            </div>
+          </td>
+        </tr>`;
+    }).join('');
+
+    document.getElementById('product-count').textContent =
+        `Menampilkan ${filtered.length} dari ${products.length} produk`;
+}
+
+// =====================================================
+// PRODUCT — MODAL
+// =====================================================
+function openProductModal(id = null) {
+    editingProductId = id;
+    const modal = document.getElementById('modal-product');
+    const isEdit = !!id;
+
+    // Reset form
+    ['p-code','p-nama','p-sub-kategori','p-kg-min','p-kg-max'].forEach(f => document.getElementById(f).value = '');
+    document.getElementById('p-kategori').value = '';
+    document.getElementById('p-grade').value = '';
+    document.getElementById('p-sub-kategori').value = '';
+    document.getElementById('p-satuan').value = 'ekor';
+    document.getElementById('p-validation-type').value = 'SOFT';
+    document.getElementById('p-grade-row').style.display = 'none';
+    document.getElementById('product-fixed-alert').style.display = 'none';
+    ['p-code-err','p-nama-err','p-kategori-err'].forEach(f => { document.getElementById(f).style.display = 'none'; });
+    setProductAktif(true);
+
+    if (isEdit) {
+        const p = products.find(x => x.id === id);
+        if (!p) return;
+        document.getElementById('modal-product-title').textContent = 'Edit Produk';
+        document.getElementById('p-code').value = p.product_code;
+        document.getElementById('p-code').disabled = true; // kode tidak bisa diubah
+        document.getElementById('p-nama').value = p.nama_produk;
+        document.getElementById('p-kategori').value = p.kategori;
+        document.getElementById('p-grade').value = p.grade || '';
+        document.getElementById('p-satuan').value = p.satuan_qty;
+        document.getElementById('p-sub-kategori').value = p.sub_kategori || '';
+        document.getElementById('p-kg-min').value = p.kg_min || '';
+        document.getElementById('p-kg-max').value = p.kg_max || '';
+        document.getElementById('p-validation-type').value = p.validation_type;
+        setProductAktif(p.aktif);
+        onKategoriChange();
+        if (p.is_fixed) {
+            document.getElementById('product-fixed-alert').style.display = 'block';
+            document.getElementById('p-kategori').disabled = true;
+            document.getElementById('p-satuan').disabled = true;
+            document.getElementById('p-validation-type').disabled = true;
+        }
+    } else {
+        document.getElementById('modal-product-title').textContent = 'Tambah Produk';
+        document.getElementById('p-code').disabled = false;
+        document.getElementById('p-kategori').disabled = false;
+        document.getElementById('p-satuan').disabled = false;
+        document.getElementById('p-validation-type').disabled = false;
+    }
+    modal.classList.add('open');
+    setTimeout(() => document.getElementById('p-code').focus(), 100);
+}
+
+function closeProductModal() {
+    document.getElementById('modal-product').classList.remove('open');
+    document.getElementById('p-code').disabled = false;
+    document.getElementById('p-kategori').disabled = false;
+    document.getElementById('p-satuan').disabled = false;
+    document.getElementById('p-validation-type').disabled = false;
+}
+
+function onKategoriChange() {
+    const kat = document.getElementById('p-kategori').value;
+    const showGrade = ['KARKAS', 'CU', 'EXT'].includes(kat);
+    document.getElementById('p-grade-row').style.display = showGrade ? 'block' : 'none';
+    // Auto-set validation type
+    if (!editingProductId) {
+        document.getElementById('p-validation-type').value = kat === 'KARKAS' ? 'HARD' : 'SOFT';
+    }
+}
+
+function setProductAktif(val) {
+    pAktif = val;
+    const t = document.getElementById('p-aktif-toggle');
+    t.className = 'toggle' + (val ? ' on' : '');
+    document.getElementById('p-aktif-label').textContent = val ? 'Aktif' : 'Non-aktif';
+}
+function toggleAktif() { setProductAktif(!pAktif); }
+
+async function saveProduct() {
+    // Validate
+    let valid = true;
+    const code = document.getElementById('p-code').value.trim().toUpperCase();
+    const nama = document.getElementById('p-nama').value.trim();
+    const kategori = document.getElementById('p-kategori').value;
+
+    if (!code) { showFieldErr('p-code-err', 'Kode produk wajib diisi.'); valid = false; }
+    else { hideFieldErr('p-code-err'); }
+    if (!nama) { showFieldErr('p-nama-err', 'Nama produk wajib diisi.'); valid = false; }
+    else { hideFieldErr('p-nama-err'); }
+    if (!kategori) { showFieldErr('p-kategori-err', 'Kategori wajib dipilih.'); valid = false; }
+    else { hideFieldErr('p-kategori-err'); }
+
+    if (!valid) return;
+
+    const payload = {
+        product_code: code,
+        nama_produk: nama,
+        kategori,
+        grade: document.getElementById('p-grade').value || null,
+        sub_kategori: document.getElementById('p-sub-kategori').value.trim() || null,
+        satuan_qty: 'kg',
+        kg_min: parseFloat(document.getElementById('p-kg-min').value) || null,
+        kg_max: parseFloat(document.getElementById('p-kg-max').value) || null,
+        validation_type: document.getElementById('p-validation-type').value,
+        aktif: pAktif,
+        updated_at: new Date().toISOString()
+    };
+
+    const btn = document.getElementById('btn-save-product');
+    btn.disabled = true; btn.textContent = 'Menyimpan...';
+
+    try {
+        let error;
+        if (editingProductId) {
+            ({ error } = await sb.from('product_master').update(payload).eq('id', editingProductId));
+        } else {
+            ({ error } = await sb.from('product_master').insert({ ...payload }));
+        }
+        if (error) {
+            if (error.code === '23505') showToast('Kode produk sudah digunakan.', 'error');
+            else showToast('Gagal menyimpan: ' + error.message, 'error');
+            return;
+        }
+        showToast(editingProductId ? 'Produk berhasil diperbarui.' : 'Produk berhasil ditambahkan.', 'success');
+        closeProductModal();
+        await loadProducts();
+    } finally {
+        btn.disabled = false; btn.textContent = 'Simpan';
+    }
+}
+
+function showFieldErr(id, msg) {
+    const el = document.getElementById(id);
+    el.textContent = msg; el.style.display = 'block';
+}
+function hideFieldErr(id) { document.getElementById(id).style.display = 'none'; }
+
+function confirmDelProduct(id) {
+    deletingProductId = id;
+    const p = products.find(x => x.id === id);
+    document.getElementById('del-product-name').textContent = p?.nama_produk || '';
+    document.getElementById('modal-del-product').classList.add('open');
+}
+
+async function confirmDeleteProduct() {
+    if (!deletingProductId) return;
+    const btn = document.getElementById('btn-confirm-del-product');
+    btn.disabled = true; btn.textContent = 'Menghapus...';
+    try {
+        const { error } = await sb.from('product_master').delete().eq('id', deletingProductId);
+        if (error) {
+            if (error.code === '23503') showToast('Produk tidak bisa dihapus karena sudah digunakan dalam transaksi.', 'error');
+            else showToast('Gagal menghapus: ' + error.message, 'error');
+            return;
+        }
+        showToast('Produk berhasil dihapus.', 'success');
+        closeModal('modal-del-product');
+        await loadProducts();
+    } finally {
+        btn.disabled = false; btn.textContent = 'Ya, Hapus';
+        deletingProductId = null;
+    }
+}
+
+// =====================================================
+// WORKSTATION — LOAD & RENDER
+// =====================================================
+async function loadWorkstations() {
+    const { data, error } = await sb.from('workstations')
+        .select('*').order('tipe').order('kode');
+    if (error) { showToast('Gagal memuat work station: ' + error.message, 'error'); return; }
+    workstations = data || [];
+    renderWsTable();
+}
+
+function renderWsTable() {
+    const search = document.getElementById('ws-search').value.toLowerCase();
+    const filterTipe = document.getElementById('ws-filter-tipe').value;
+    const filterAktif = document.getElementById('ws-filter-aktif').value;
+
+    let filtered = workstations.filter(w => {
+        const matchSearch = !search ||
+            w.kode.toLowerCase().includes(search) ||
+            w.nama.toLowerCase().includes(search);
+        const matchTipe = !filterTipe || w.tipe === filterTipe;
+        const matchAktif = filterAktif === '' || String(w.aktif) === filterAktif;
+        return matchSearch && matchTipe && matchAktif;
+    });
+
+    const tbody = document.getElementById('ws-tbody');
+    if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" class="empty-state"><div class="empty-icon">🏭</div>Tidak ada work station ditemukan</td></tr>`;
+        document.getElementById('ws-count').textContent = '';
+        return;
+    }
+
+    tbody.innerHTML = filtered.map(w => {
+        const tipeBadge = w.tipe === 'PARTING'
+            ? `<span class="badge badge-orange">Parting</span>`
+            : `<span class="badge badge-purple">Boneless</span>`;
+        const statusBadge = w.aktif
+            ? `<span class="badge badge-green">Aktif</span>`
+            : `<span class="badge badge-red">Non-aktif</span>`;
+        return `<tr>
+          <td><code style="font-size:12px; background:#f3f4f6; padding:3px 7px; border-radius:5px">${w.kode}</code></td>
+          <td style="font-weight:600">${w.nama}</td>
+          <td>${tipeBadge}</td>
+          <td>${statusBadge}</td>
+          <td>
+            <div class="action-btns">
+              <button class="btn-icon btn-edit" title="Edit" onclick="openWsModal('${w.id}')">✏️</button>
+              <button class="btn-icon btn-del" title="Hapus" onclick="confirmDelWs('${w.id}')">🗑️</button>
+            </div>
+          </td>
+        </tr>`;
+    }).join('');
+
+    document.getElementById('ws-count').textContent =
+        `Menampilkan ${filtered.length} dari ${workstations.length} work station`;
+}
+
+// =====================================================
+// WORKSTATION — MODAL
+// =====================================================
+function openWsModal(id = null) {
+    editingWsId = id;
+    ['ws-kode-err','ws-nama-err','ws-tipe-err'].forEach(f => { document.getElementById(f).style.display = 'none'; });
+    document.getElementById('ws-kode').value = '';
+    document.getElementById('ws-nama').value = '';
+    document.getElementById('ws-tipe').value = '';
+    setWsAktif(true);
+
+    if (id) {
+        const w = workstations.find(x => x.id === id);
+        if (!w) return;
+        document.getElementById('modal-ws-title').textContent = 'Edit Work Station';
+        document.getElementById('ws-kode').value = w.kode;
+        document.getElementById('ws-kode').disabled = true;
+        document.getElementById('ws-nama').value = w.nama;
+        document.getElementById('ws-tipe').value = w.tipe;
+        setWsAktif(w.aktif);
+    } else {
+        document.getElementById('modal-ws-title').textContent = 'Tambah Work Station';
+        document.getElementById('ws-kode').disabled = false;
+    }
+    document.getElementById('modal-ws').classList.add('open');
+    setTimeout(() => document.getElementById(id ? 'ws-nama' : 'ws-kode').focus(), 100);
+}
+
+function setWsAktif(val) {
+    wsAktif = val;
+    const t = document.getElementById('ws-aktif-toggle');
+    t.className = 'toggle' + (val ? ' on' : '');
+    document.getElementById('ws-aktif-label').textContent = val ? 'Aktif' : 'Non-aktif';
+}
+function toggleWsAktif() { setWsAktif(!wsAktif); }
+
+async function saveWorkstation() {
+    let valid = true;
+    const kode = document.getElementById('ws-kode').value.trim().toUpperCase();
+    const nama = document.getElementById('ws-nama').value.trim();
+    const tipe = document.getElementById('ws-tipe').value;
+
+    if (!kode) { showFieldErr('ws-kode-err', 'Kode work station wajib diisi.'); valid = false; }
+    else { hideFieldErr('ws-kode-err'); }
+    if (!nama) { showFieldErr('ws-nama-err', 'Nama work station wajib diisi.'); valid = false; }
+    else { hideFieldErr('ws-nama-err'); }
+    if (!tipe) { showFieldErr('ws-tipe-err', 'Tipe wajib dipilih.'); valid = false; }
+    else { hideFieldErr('ws-tipe-err'); }
+
+    if (!valid) return;
+
+    const payload = {
+        kode, nama, tipe, aktif: wsAktif,
+        updated_at: new Date().toISOString()
+    };
+
+    const btn = document.getElementById('btn-save-ws');
+    btn.disabled = true; btn.textContent = 'Menyimpan...';
+    try {
+        let error;
+        if (editingWsId) {
+            ({ error } = await sb.from('workstations').update(payload).eq('id', editingWsId));
+        } else {
+            ({ error } = await sb.from('workstations').insert({ ...payload }));
+        }
+        if (error) {
+            if (error.code === '23505') showToast('Kode work station sudah digunakan.', 'error');
+            else showToast('Gagal menyimpan: ' + error.message, 'error');
+            return;
+        }
+        showToast(editingWsId ? 'Work station diperbarui.' : 'Work station ditambahkan.', 'success');
+        closeModal('modal-ws');
+        await loadWorkstations();
+    } finally {
+        btn.disabled = false; btn.textContent = 'Simpan';
+        document.getElementById('ws-kode').disabled = false;
+    }
+}
+
+function confirmDelWs(id) {
+    deletingWsId = id;
+    const w = workstations.find(x => x.id === id);
+    document.getElementById('del-ws-name').textContent = w?.nama || '';
+    document.getElementById('modal-del-ws').classList.add('open');
+}
+
+async function confirmDeleteWs() {
+    if (!deletingWsId) return;
+    try {
+        const { error } = await sb.from('workstations').delete().eq('id', deletingWsId);
+        if (error) {
+            if (error.code === '23503') showToast('Work station tidak bisa dihapus karena sudah digunakan.', 'error');
+            else showToast('Gagal menghapus: ' + error.message, 'error');
+            return;
+        }
+        showToast('Work station berhasil dihapus.', 'success');
+        closeModal('modal-del-ws');
+        await loadWorkstations();
+    } finally {
+        deletingWsId = null;
+    }
+}
+
+
+// =====================================================
+// BOOT
+// =====================================================
+checkSession();
+</script>
+</body>
+</html>
+// =====================================================
+checkSession();
+</script>
+</body>
+</html>

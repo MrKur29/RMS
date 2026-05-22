@@ -1,0 +1,1384 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Work Order — Kurnia's Food</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f2f5;color:#111827;font-size:14px}
+button{cursor:pointer;font-family:inherit}
+a{text-decoration:none}
+
+/* LOGIN */
+#login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(135deg,#0f172a 0%,#1e3a8a 60%,#2563eb 100%)}
+.login-card{background:white;border-radius:16px;padding:44px 40px;width:400px;box-shadow:0 25px 60px rgba(0,0,0,.4)}
+.login-logo{text-align:center;margin-bottom:36px}
+.login-logo .icon{font-size:48px;display:block;margin-bottom:12px}
+.login-logo h1{font-size:22px;font-weight:800;color:#111827}
+.login-logo p{font-size:13px;color:#6b7280;margin-top:4px}
+.form-group{margin-bottom:20px}
+.form-group label{display:block;font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
+.form-group input,.form-group select,.form-group textarea{width:100%;padding:11px 14px;border:1.5px solid #d1d5db;border-radius:8px;font-size:15px;transition:border-color .2s,box-shadow .2s;color:#111827;background:white;font-family:inherit}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{outline:none;border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+.form-group textarea{resize:vertical;min-height:72px;font-size:14px}
+.btn-login{width:100%;padding:13px;background:#2563eb;color:white;border:none;border-radius:8px;font-size:15px;font-weight:700;transition:background .2s}
+.btn-login:hover{background:#1d4ed8}
+.btn-login:disabled{background:#93c5fd;cursor:not-allowed}
+.login-error{background:#fee2e2;color:#dc2626;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:18px;border:1px solid #fecaca;display:none}
+.login-version{text-align:center;margin-top:20px;font-size:11px;color:#9ca3af}
+
+/* APP LAYOUT */
+#app-screen{display:none;height:100vh;overflow:hidden}
+.app-layout{display:flex;height:100%}
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:90}
+.sidebar-overlay.visible{display:block}
+
+/* SIDEBAR */
+.sidebar{width:230px;flex-shrink:0;background:#0f172a;color:white;display:flex;flex-direction:column;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.1) transparent;transition:transform .28s cubic-bezier(.4,0,.2,1);z-index:100}
+.sidebar-brand{padding:20px 18px 16px;border-bottom:1px solid rgba(255,255,255,.08);flex-shrink:0}
+.sidebar-brand h2{font-size:15px;font-weight:800;color:#f8fafc;display:flex;align-items:center;gap:8px}
+.sidebar-brand p{font-size:11px;color:rgba(255,255,255,.4);margin-top:3px}
+.sidebar-nav{flex:1;padding:10px 0}
+.nav-section-label{font-size:10px;font-weight:700;color:rgba(255,255,255,.3);text-transform:uppercase;letter-spacing:1px;padding:12px 18px 4px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 18px;font-size:13px;color:rgba(255,255,255,.65);cursor:pointer;transition:all .15s;border-left:3px solid transparent}
+.nav-item:hover:not(.disabled){background:rgba(255,255,255,.07);color:white}
+.nav-item.active{background:rgba(37,99,235,.2);color:#93c5fd;border-left-color:#3b82f6}
+.nav-item.disabled{opacity:.3;cursor:not-allowed}
+.nav-icon{font-size:15px;width:22px;text-align:center;flex-shrink:0}
+.nav-label-text{flex:1}
+.nav-tag{font-size:9px;font-weight:700;padding:2px 5px;border-radius:4px;background:rgba(37,99,235,.3);color:#93c5fd}
+.sidebar-footer{padding:14px 18px;border-top:1px solid rgba(255,255,255,.08);flex-shrink:0}
+.user-card{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.user-avatar{width:34px;height:34px;border-radius:50%;background:#2563eb;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:white;flex-shrink:0}
+.user-info-text .user-name{font-size:13px;font-weight:700;color:#f8fafc}
+.user-info-text .user-role{font-size:11px;color:rgba(255,255,255,.45);margin-top:1px}
+.btn-logout{width:100%;padding:8px 12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.6);border-radius:6px;font-size:12px;font-weight:600;transition:all .15s}
+.btn-logout:hover{background:rgba(220,38,38,.25);border-color:rgba(220,38,38,.5);color:#fca5a5}
+
+/* MAIN */
+.main-area{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.topbar{background:white;height:58px;padding:0 20px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e5e7eb;box-shadow:0 1px 4px rgba(0,0,0,.05);gap:12px}
+.topbar-left{display:flex;align-items:center;gap:12px;min-width:0}
+.topbar-left h1{font-size:17px;font-weight:800;color:#111827;white-space:nowrap}
+.topbar-left p{font-size:12px;color:#9ca3af;margin-top:1px}
+.topbar-left-text{min-width:0}
+.topbar-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.btn-hamburger{display:none;align-items:center;justify-content:center;width:40px;height:40px;border-radius:8px;background:#f3f4f6;border:1.5px solid #e5e7eb;font-size:18px;color:#374151;flex-shrink:0}
+.btn-hamburger:hover{background:#e5e7eb}
+.clock-display{font-size:14px;font-weight:700;color:#374151;background:#f9fafb;padding:6px 10px;border-radius:6px;border:1px solid #e5e7eb;white-space:nowrap}
+.content-area{flex:1;overflow-y:auto;padding:20px 24px 32px}
+
+/* FILTER BAR */
+.filter-bar{background:white;border-radius:10px;padding:12px 18px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.06);display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.filter-bar label{font-size:12px;font-weight:700;color:#374151;white-space:nowrap}
+.filter-bar input[type=date],.filter-bar select{padding:7px 10px;border:1.5px solid #d1d5db;border-radius:7px;font-size:13px;color:#111827;background:white;font-family:inherit;transition:border-color .2s}
+.filter-bar input[type=date]:focus,.filter-bar select:focus{outline:none;border-color:#2563eb}
+.filter-spacer{flex:1}
+.btn-refresh{display:flex;align-items:center;gap:5px;padding:7px 14px;background:#f3f4f6;border:1.5px solid #e5e7eb;border-radius:7px;font-size:12px;font-weight:700;color:#374151;transition:all .15s}
+.btn-refresh:hover{background:#e5e7eb}
+
+/* SUMMARY CARDS */
+.cards-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;margin-bottom:16px}
+.summary-card{background:white;border-radius:10px;padding:14px;border-left:4px solid #e5e7eb;box-shadow:0 1px 3px rgba(0,0,0,.06);transition:transform .15s,box-shadow .15s}
+.summary-card:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.1)}
+.summary-card.c-blue{border-left-color:#2563eb}
+.summary-card.c-green{border-left-color:#16a34a}
+.summary-card.c-amber{border-left-color:#d97706}
+.summary-card.c-red{border-left-color:#dc2626}
+.summary-card.c-purple{border-left-color:#2563eb}
+.summary-card.c-warn{border-left-color:#dc2626;background:#fff5f5}
+.sc-label{font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.6px}
+.sc-value{font-size:26px;font-weight:900;color:#111827;line-height:1.1;margin:4px 0 2px}
+.sc-value.warn{color:#dc2626}
+.sc-sub{font-size:11px;color:#9ca3af}
+
+/* PANEL */
+.panel{background:white;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden;margin-bottom:14px}
+.panel-head{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:1px solid #f3f4f6;gap:8px;flex-wrap:wrap}
+.panel-title{font-size:14px;font-weight:800;color:#111827}
+.panel-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+
+/* TABLE */
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl thead th{text-align:left;padding:9px 14px;font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;background:#f9fafb;border-bottom:1px solid #f0f2f5;white-space:nowrap}
+.tbl tbody td{padding:10px 14px;border-bottom:1px solid #f9fafb;vertical-align:middle}
+.tbl tbody tr:last-child td{border-bottom:none}
+.tbl tbody tr:hover td{background:#fafafa}
+.tbl-sub{font-size:11px;color:#6b7280;margin-top:2px}
+
+/* SECTION TOOLBAR */
+.section-toolbar{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid #f3f4f6;flex-wrap:wrap;background:#fafafa}
+.search-wrap{position:relative;flex:1;min-width:160px}
+.search-wrap .s-icon{position:absolute;left:9px;top:50%;transform:translateY(-50%);font-size:13px;pointer-events:none;color:#9ca3af}
+.search-inp{width:100%;padding:6px 10px 6px 28px;border:1.5px solid #e5e7eb;border-radius:7px;font-size:13px;color:#111827;font-family:inherit;background:white;transition:border-color .2s}
+.search-inp:focus{outline:none;border-color:#2563eb}
+.search-inp::placeholder{color:#9ca3af}
+
+/* PROGRESS BAR */
+.prog-wrap{min-width:100px}
+.prog-bar{height:7px;background:#e5e7eb;border-radius:4px;overflow:hidden;margin-bottom:3px}
+.prog-fill{height:100%;border-radius:4px;transition:width .3s}
+.prog-fill.green{background:#16a34a}
+.prog-fill.blue{background:#2563eb}
+.prog-fill.red{background:#dc2626}
+.prog-fill.amber{background:#d97706}
+.prog-text{font-size:11px;color:#6b7280;white-space:nowrap}
+
+/* BADGES */
+.badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:12px;font-size:11px;font-weight:700;white-space:nowrap}
+.b-open{background:#f3f4f6;color:#374151}
+.b-inprog{background:#dbeafe;color:#1e40af}
+.b-pending{background:#fef3c7;color:#92400e}
+.b-approved{background:#d1fae5;color:#065f46}
+.b-cancelled{background:#fee2e2;color:#991b1b}
+.b-parting{background:#dbeafe;color:#1e40af}
+.b-boneless{background:#fce7f3;color:#9d174d}
+.b-marinasi{background:#fef9c3;color:#854d0e}
+
+/* WS CHIPS */
+.ws-chips{display:flex;flex-wrap:wrap;gap:4px}
+.ws-chip{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:10px;font-size:11px;font-weight:700;background:#dbeafe;color:#1e40af}
+.ws-chip.boneless{background:#fce7f3;color:#9d174d}
+
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 12px;border-radius:6px;border:none;font-size:12px;font-weight:700;transition:all .15s;min-height:34px;touch-action:manipulation;white-space:nowrap}
+.btn-primary{background:#2563eb;color:white}
+.btn-primary:hover{background:#1d4ed8}
+.btn-green{background:#16a34a;color:white}
+.btn-green:hover{background:#15803d}
+.btn-amber{background:#d97706;color:white}
+.btn-amber:hover{background:#b45309}
+.btn-red{background:#dc2626;color:white}
+.btn-red:hover{background:#b91c1c}
+.btn-purple{background:#2563eb;color:white}
+.btn-purple:hover{background:#1d4ed8}
+.btn-ghost{background:#f3f4f6;color:#374151}
+.btn-ghost:hover{background:#e5e7eb}
+.btn-outline{background:white;color:#374151;border:1.5px solid #d1d5db}
+.btn-outline:hover{background:#f9fafb;border-color:#9ca3af}
+.btn-sm{padding:5px 9px;font-size:11px;min-height:28px}
+.btn:disabled{opacity:.45;cursor:not-allowed;pointer-events:none}
+
+/* WORKSTATION CHECKBOX GRID */
+.ws-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;max-height:260px;overflow-y:auto;padding:4px}
+.ws-check-item{display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:8px;cursor:pointer;transition:all .15s;user-select:none}
+.ws-check-item:hover{border-color:#2563eb;background:#f0f7ff}
+.ws-check-item.checked{border-color:#2563eb;background:#dbeafe}
+.ws-check-item.checked.boneless{border-color:#db2777;background:#fce7f3}
+.ws-check-item input[type=checkbox]{accent-color:#2563eb;width:16px;height:16px;flex-shrink:0;pointer-events:none}
+.ws-check-item .ws-name{font-size:13px;font-weight:700;color:#111827}
+.ws-check-item .ws-kode{font-size:11px;color:#6b7280}
+
+/* MODAL */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;align-items:flex-start;justify-content:center;padding:32px 16px;overflow-y:auto}
+.modal-overlay.open{display:flex}
+.modal-box{background:white;border-radius:14px;padding:28px;width:520px;max-width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);animation:modal-in .2s ease;margin:auto}
+.modal-box.modal-sm{width:420px}
+.modal-box.modal-lg{width:680px}
+@keyframes modal-in{from{transform:scale(.92);opacity:0}to{transform:scale(1);opacity:1}}
+.modal-title{font-size:16px;font-weight:800;margin-bottom:4px;color:#111827}
+.modal-desc{font-size:13px;color:#6b7280;margin-bottom:20px}
+.modal-info-box{background:#f9fafb;border-radius:8px;padding:14px;border:1px solid #e5e7eb;margin-bottom:16px}
+.modal-info-row{display:flex;justify-content:space-between;align-items:flex-start;padding:5px 0;border-bottom:1px solid #f0f2f5;font-size:13px;gap:8px}
+.modal-info-row:last-child{border-bottom:none}
+.modal-info-label{color:#6b7280;flex-shrink:0}
+.modal-info-val{font-weight:700;color:#111827;text-align:right}
+.modal-footer{display:flex;justify-content:flex-end;gap:10px;margin-top:22px;padding-top:18px;border-top:1px solid #f0f2f5;flex-wrap:wrap}
+.modal-section-title{font-size:12px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:.5px;margin:16px 0 8px}
+
+/* PIN INPUT */
+.pin-input{width:100%;padding:14px;border:2px solid #d1d5db;border-radius:8px;font-size:22px;font-weight:800;letter-spacing:6px;text-align:center;color:#111827;font-family:monospace;transition:border-color .2s}
+.pin-input:focus{outline:none;border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.15)}
+.pin-error{color:#dc2626;font-size:12px;font-weight:700;margin-top:6px;display:none}
+
+/* OUTPUT TABLE dalam detail */
+.output-tbl{width:100%;border-collapse:collapse;font-size:12px}
+.output-tbl th{text-align:left;padding:6px 10px;font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;background:#f9fafb;border-bottom:1px solid #e5e7eb}
+.output-tbl td{padding:7px 10px;border-bottom:1px solid #f3f4f6}
+.output-tbl tr:last-child td{border-bottom:none}
+
+/* PAGINATION */
+.pagination{display:flex;align-items:center;justify-content:space-between;padding:9px 14px;border-top:1px solid #f3f4f6;font-size:12px;color:#6b7280;flex-wrap:wrap;gap:8px;background:#fafafa}
+.pag-info{font-weight:600}
+.pag-btns{display:flex;gap:4px}
+.btn-pag{padding:4px 12px;border:1.5px solid #e5e7eb;border-radius:6px;background:white;font-size:12px;font-weight:700;color:#374151;cursor:pointer;transition:all .15s}
+.btn-pag:hover:not(:disabled){background:#f3f4f6}
+.btn-pag:disabled{opacity:.35;cursor:not-allowed}
+
+/* EMPTY */
+.empty{text-align:center;padding:28px 16px;color:#9ca3af;font-size:13px}
+.empty .e-icon{font-size:28px;margin-bottom:8px}
+
+/* FORM ROW 2-COL */
+.form-row-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+
+/* TOAST */
+#toast{position:fixed;bottom:28px;right:28px;padding:13px 20px;border-radius:10px;font-size:13px;font-weight:700;box-shadow:0 8px 24px rgba(0,0,0,.2);display:none;z-index:999;animation:toast-in .25s ease}
+#toast.show{display:block}
+#toast.success{background:#065f46;color:white}
+#toast.error{background:#991b1b;color:white}
+#toast.warning{background:#92400e;color:white}
+@keyframes toast-in{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+
+/* RESPONSIVE */
+@media(max-width:1023px){
+  .sidebar{position:fixed;top:0;left:0;height:100vh;transform:translateX(-100%)}
+  .sidebar.open{transform:translateX(0)}
+  .btn-hamburger{display:flex}
+  .cards-row{grid-template-columns:repeat(auto-fill,minmax(130px,1fr))}
+  .ws-grid{grid-template-columns:1fr}
+  .form-row-2{grid-template-columns:1fr}
+}
+@media(max-width:600px){
+  .content-area{padding:14px 14px 24px}
+  .topbar{padding:0 14px}
+  .modal-box{padding:20px}
+}
+</style>
+</head>
+<body>
+
+<!-- ==================== LOGIN ==================== -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <span class="icon">📋</span>
+      <h1>RPA Management System</h1>
+      <p>Work Order — Login</p>
+    </div>
+    <div class="login-error" id="login-error"></div>
+    <div class="form-group">
+      <label>Username</label>
+      <input type="text" id="inp-username" placeholder="Masukkan username" autocomplete="username"
+             onkeydown="if(event.key==='Enter')document.getElementById('inp-password').focus()">
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input type="password" id="inp-password" placeholder="Masukkan password" autocomplete="current-password"
+             onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button class="btn-login" id="btn-login" onclick="doLogin()">Masuk →</button>
+    <p class="login-version">v1.0 — RPA System</p>
+  </div>
+</div>
+
+<!-- ==================== APP ==================== -->
+<div id="app-screen">
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+<div class="app-layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <div style="display:flex;align-items:center;gap:10px;"><img src="logo.png" style="height:36px;width:auto;object-fit:contain;"><span style="font-size:15px;font-weight:800;color:#f8fafc;">Kurnia's Food</span></div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section-label">Utama</div>
+      <div class="nav-item" onclick="navTo('Dashboard.html')">
+        <span class="nav-icon">🏠</span><span class="nav-label-text">Dashboard</span>
+      </div>
+      <div class="nav-section-label">Produksi</div>
+      <div class="nav-item" onclick="navTo('BatchAyamHidup.html')">
+        <span class="nav-icon">🐔</span><span class="nav-label-text">Batch Ayam Hidup</span>
+      </div>
+      <div class="nav-item" onclick="navTo('ProduksiKarkas.html')"><span class="nav-icon">⚙️</span><span class="nav-label-text">Produksi Karkas</span></div>
+      <div class="nav-item" onclick="navTo('Thawing.html')"><span class="nav-icon">🧊</span><span class="nav-label-text">Thawing</span></div>
+      <div class="nav-item" onclick="navTo('Chiller.html')">
+        <span class="nav-icon">❄️</span><span class="nav-label-text">Chiller</span>
+      </div>
+      <div class="nav-item active">
+        <span class="nav-icon">📋</span><span class="nav-label-text">Work Order</span>
+        <span class="nav-tag">Aktif</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Parting.html')">
+        <span class="nav-icon">✂️</span><span class="nav-label-text">Parting</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Boneless.html')">
+        <span class="nav-icon">🥩</span><span class="nav-label-text">Boneless</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Marinasi.html')">
+        <span class="nav-icon">🌶️</span><span class="nav-label-text">Marinasi</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Blasting.html')"><span class="nav-icon">🧊</span><span class="nav-label-text">Blasting</span></div>
+      <div class="nav-item" onclick="navTo('ByProductKarkas.html')"><span class="nav-icon">📦</span><span class="nav-label-text">By-product Karkas</span></div>
+      <div class="nav-section-label">Penjualan</div>
+      <div class="nav-item disabled"><span class="nav-icon">🛒</span><span class="nav-label-text">Penjualan</span></div>
+      <div class="nav-section-label">Manajemen</div>
+      <div class="nav-item disabled"><span class="nav-icon">✅</span><span class="nav-label-text">Koreksi &amp; Approval</span></div>
+      <div class="nav-item disabled"><span class="nav-icon">📊</span><span class="nav-label-text">Traceability</span></div>
+      <div class="nav-item" onclick="navTo('MasterData.html')"><span class="nav-icon">🗂️</span><span class="nav-label-text">Master Data</span></div>
+      <div class="nav-item" id="nav-user-mgmt" style="display:none" onclick="navTo('UserManagement.html')"><span class="nav-icon">👥</span><span class="nav-label-text">Manajemen User</span></div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-card">
+        <div class="user-avatar" id="user-avatar">?</div>
+        <div class="user-info-text">
+          <div class="user-name" id="sidebar-name">—</div>
+          <div class="user-role" id="sidebar-role">—</div>
+        </div>
+      </div>
+      <button class="btn-logout" onclick="doLogout()">⬅ Keluar</button>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="main-area">
+    <div class="topbar">
+      <div class="topbar-left">
+        <button class="btn-hamburger" id="btn-hamburger" onclick="toggleSidebar()">☰</button>
+        <div class="topbar-left-text">
+          <h1>📋 Work Order</h1>
+          <p id="topbar-date">—</p>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <div class="clock-display" id="clock">—</div>
+      </div>
+    </div>
+
+    <div class="content-area" id="content-area">
+
+      <!-- FILTER BAR -->
+      <div class="filter-bar">
+        <label>Dari</label>
+        <input type="date" id="flt-date-from" onchange="applyFilter()">
+        <label>s/d</label>
+        <input type="date" id="flt-date-to" onchange="applyFilter()">
+        <label>Tipe</label>
+        <select id="flt-tipe" onchange="applyFilter()">
+          <option value="ALL">Semua Tipe</option>
+          <option value="PARTING">Parting</option>
+          <option value="BONELESS">Boneless</option>
+          <option value="MARINASI">Marinasi</option>
+        </select>
+        <label>Status</label>
+        <select id="flt-status" onchange="applyFilter()">
+          <option value="ALL">Semua Status</option>
+          <option value="OPEN">Open</option>
+          <option value="IN_PROGRESS">In Progress</option>
+          <option value="DRAFT">Draft</option>
+          <option value="COMPLETED">Completed</option>
+          <option value="CANCELLED">Cancelled</option>
+        </select>
+        <div class="filter-spacer"></div>
+        <button class="btn-refresh" onclick="loadAll()">🔄 Refresh</button>
+      </div>
+
+      <!-- SUMMARY CARDS -->
+      <div class="cards-row">
+        <div class="summary-card c-blue">
+          <div class="sc-label">Open</div>
+          <div class="sc-value" id="sc-open">—</div>
+          <div class="sc-sub">work order</div>
+        </div>
+        <div class="summary-card c-purple">
+          <div class="sc-label">In Progress</div>
+          <div class="sc-value" id="sc-inprog">—</div>
+          <div class="sc-sub">sedang dikerjakan</div>
+        </div>
+        <div class="summary-card c-green" id="sc-card-pending">
+          <div class="sc-label">✅ Completed Hari Ini</div>
+          <div class="sc-value" id="sc-pending">0</div>
+          <div class="sc-sub">selesai dikerjakan</div>
+        </div>
+        <div class="summary-card c-amber">
+          <div class="sc-label">❌ Cancelled</div>
+          <div class="sc-value" id="sc-approved">0</div>
+          <div class="sc-sub">dibatalkan</div>
+        </div>
+        <div class="summary-card c-amber">
+          <div class="sc-label">Total WO Hari Ini</div>
+          <div class="sc-value" id="sc-total">—</div>
+          <div class="sc-sub">semua status</div>
+        </div>
+      </div>
+
+      <!-- WO LIST PANEL -->
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title">📋 Daftar Work Order</div>
+          <div class="panel-actions">
+            <button class="btn btn-primary" onclick="openCreateWO()">＋ Buat WO Baru</button>
+          </div>
+        </div>
+        <div class="section-toolbar">
+          <div class="search-wrap">
+            <span class="s-icon">🔍</span>
+            <input type="text" class="search-inp" id="wo-search" placeholder="Cari kode WO, produk…"
+                   oninput="renderWOList()">
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="exportWOExcel()">📥 Export Excel</button>
+        </div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>Kode WO</th>
+                <th>Tipe</th>
+                <th>Produk Target</th>
+                <th>Target</th>
+                <th>Progress</th>
+                <th>Status</th>
+                <th>Workstation</th>
+                <th>Tgl Dibuat</th>
+                <th>Tgl Selesai</th>
+                <th>Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="wo-tbody">
+              <tr><td colspan="10"><div class="empty"><div class="e-icon">📋</div>Memuat data…</div></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pagination" id="wo-pag" style="display:none">
+          <span class="pag-info" id="wo-pag-info"></span>
+          <div class="pag-btns">
+            <button class="btn-pag" id="wo-prev" onclick="woPage--;renderWOList()">‹ Prev</button>
+            <button class="btn-pag" id="wo-next" onclick="woPage++;renderWOList()">Next ›</button>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /content-area -->
+  </div><!-- /main-area -->
+</div><!-- /app-layout -->
+</div><!-- /app-screen -->
+
+
+<!-- ==================== MODAL: BUAT WO ==================== -->
+<div class="modal-overlay" id="modal-create">
+  <div class="modal-box">
+    <div class="modal-title">＋ Buat Work Order Baru</div>
+    <div class="modal-desc">Buat WO untuk proses Parting, Boneless, atau Marinasi.</div>
+    <div class="form-row-2">
+      <div class="form-group">
+        <label>Tipe <span style="color:#dc2626">*</span></label>
+        <select id="crt-tipe" onchange="onCreateTipeChange()">
+          <option value="">— Pilih Tipe —</option>
+          <option value="PARTING">Parting</option>
+          <option value="BONELESS">Boneless</option>
+          <option value="MARINASI">Marinasi</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Produk Target <span style="color:#dc2626">*</span></label>
+        <select id="crt-produk">
+          <option value="">— Pilih tipe dulu —</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row-2">
+      <div class="form-group">
+        <label>Target Ekor / Qty <span style="color:#dc2626">*</span></label>
+        <input type="number" id="crt-target-qty" placeholder="cth: 100" min="1">
+      </div>
+      <div class="form-group">
+        <label>Target Kg <span style="color:#dc2626">*</span></label>
+        <input type="number" id="crt-target-kg" placeholder="cth: 50" min="0.1" step="0.1">
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:0">
+      <label>Catatan (Opsional)</label>
+      <input type="text" id="crt-catatan" placeholder="Catatan tambahan…">
+    </div>
+    <div id="crt-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-top:12px;display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-create')">Batal</button>
+      <button class="btn btn-primary" id="crt-btn-ok" onclick="doCreateWO()">＋ Buat Work Order</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ==================== MODAL: DETAIL WO ==================== -->
+<div class="modal-overlay" id="modal-detail">
+  <div class="modal-box modal-lg">
+    <div class="modal-title">🔍 Detail Work Order</div>
+    <div class="modal-desc" id="det-subtitle">—</div>
+    <div class="modal-info-box">
+      <div class="modal-info-row"><span class="modal-info-label">Kode WO</span><span class="modal-info-val" id="det-code">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Tipe</span><span class="modal-info-val" id="det-tipe">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Produk Target</span><span class="modal-info-val" id="det-produk">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Target</span><span class="modal-info-val" id="det-target">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Actual Output (Primary)</span><span class="modal-info-val" id="det-actual">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Selisih</span><span class="modal-info-val" id="det-selisih">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Status</span><span class="modal-info-val" id="det-status">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Tanggal</span><span class="modal-info-val" id="det-tanggal">—</span></div>
+    </div>
+
+    <!-- WORKSTATIONS -->
+    <div class="modal-section-title">🏭 Workstation yang Mengerjakan</div>
+    <div id="det-ws-list" style="margin-bottom:12px">—</div>
+
+    <!-- OUTPUT BREAKDOWN -->
+    <div class="modal-section-title">📤 Output per Worker</div>
+    <div style="max-height:200px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px">
+      <table class="output-tbl">
+        <thead>
+          <tr>
+            <th>Worker</th>
+            <th>Workstation</th>
+            <th>Produk</th>
+            <th>Tipe</th>
+            <th>Ekor</th>
+            <th>Kg</th>
+            <th>Tgl Produksi</th>
+          </tr>
+        </thead>
+        <tbody id="det-output-tbody">
+          <tr><td colspan="7"><div class="empty" style="padding:12px">—</div></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div id="det-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-top:10px;display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-detail')">Tutup</button>
+      <button class="btn btn-outline btn-sm" id="det-btn-ws" onclick="openAssignWS()">🏭 Assign Workstation</button>
+      <button class="btn btn-red btn-sm" id="det-btn-cancel" onclick="openCancelWO()">✗ Batalkan WO</button>
+      <button class="btn btn-green" id="det-btn-approve" onclick="openApproveWO()" style="display:none">✅ Selesaikan WO</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ==================== MODAL: ASSIGN WORKSTATION ==================== -->
+<div class="modal-overlay" id="modal-assign-ws">
+  <div class="modal-box">
+    <div class="modal-title">🏭 Assign Workstation</div>
+    <div class="modal-desc" id="aws-subtitle">Pilih workstation yang akan mengerjakan WO ini.</div>
+    <!-- Target WO reference -->
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px;display:flex;gap:24px">
+      <span>🎯 Target WO: <strong id="aws-wo-ekor">—</strong> ekor &nbsp;|&nbsp; <strong id="aws-wo-kg">—</strong> kg</span>
+    </div>
+    <div class="ws-grid" id="aws-ws-grid"><!-- diisi JS --></div>
+    <!-- Running total -->
+    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 14px;margin-top:10px;font-size:12px;display:flex;justify-content:space-between;align-items:center">
+      <span>✅ Teralokasi: <strong id="aws-alloc-ekor">0</strong> ekor &nbsp;|&nbsp; <strong id="aws-alloc-kg">0.0</strong> kg</span>
+      <span id="aws-sisa-wrap">Sisa: <strong id="aws-sisa-ekor" style="color:#dc2626">—</strong> ekor &nbsp;|&nbsp; <strong id="aws-sisa-kg" style="color:#dc2626">—</strong> kg</span>
+    </div>
+    <div id="aws-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-top:10px;display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-assign-ws')">Batal</button>
+      <button class="btn btn-primary" id="aws-btn-ok" onclick="doAssignWS()">💾 Simpan Workstation</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ==================== MODAL: SELESAIKAN WO (PIN) ==================== -->
+<div class="modal-overlay" id="modal-approve">
+  <div class="modal-box modal-sm">
+    <div class="modal-title">✅ Selesaikan Work Order</div>
+    <div class="modal-desc" id="apr-subtitle">Masukkan PIN Supervisor untuk menutup WO ini sebagai COMPLETED.</div>
+    <div class="modal-info-box" id="apr-info-box">
+      <div class="modal-info-row"><span class="modal-info-label">Kode WO</span><span class="modal-info-val" id="apr-code">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Selisih dari Target</span><span class="modal-info-val" id="apr-selisih">—</span></div>
+    </div>
+    <div class="form-group" style="margin-bottom:0">
+      <label>PIN Supervisor <span style="color:#dc2626">*</span></label>
+      <input type="password" class="pin-input" id="apr-pin" placeholder="••••••" maxlength="6"
+             onkeydown="if(event.key==='Enter')doApproveWO()">
+      <div class="pin-error" id="apr-pin-err">PIN salah atau bukan Supervisor.</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-approve')">Batal</button>
+      <button class="btn btn-green" id="apr-btn-ok" onclick="doApproveWO()">✅ Selesaikan WO</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ==================== MODAL: CANCEL WO ==================== -->
+<div class="modal-overlay" id="modal-cancel">
+  <div class="modal-box modal-sm">
+    <div class="modal-title">✗ Batalkan Work Order</div>
+    <div class="modal-desc">WO <strong id="can-code">—</strong> akan dibatalkan. Masukkan alasan.</div>
+    <div class="form-group" style="margin-bottom:0">
+      <label>Alasan Pembatalan <span style="color:#dc2626">*</span></label>
+      <textarea id="can-alasan" placeholder="Contoh: Target berubah, bahan tidak cukup…" rows="3"></textarea>
+    </div>
+    <div id="can-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-top:8px;display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-cancel')">Kembali</button>
+      <button class="btn btn-red" id="can-btn-ok" onclick="doCancelWO()">✗ Ya, Batalkan</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ==================== TOAST ==================== -->
+<div id="toast"></div>
+
+
+<!-- ==================== SCRIPT ==================== -->
+<script>
+const SUPABASE_URL = 'https://dxixqyokuqrdprupsvic.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR4aXhxeW9rdXFyZHBydXBzdmljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5NjM3ODcsImV4cCI6MjA5MjUzOTc4N30.D_yaPwNbe4FFg_hmDeJ9cuxzbNvXZT8l1_TyZuq1t1M';
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ============================================================
+// STATE
+// ============================================================
+let currentUser    = null;
+let allWOs         = [];
+let allWorkstations= [];
+let allProducts    = [];
+let filteredWOs    = [];
+let woPage         = 0;
+let currentWOId    = null;   // for detail / approve / cancel
+let currentWOData  = null;
+const ROWS         = 15;
+
+// ============================================================
+// UTILITY
+// ============================================================
+async function sha256(str) {
+  const buf  = new TextEncoder().encode(str);
+  const hash = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+function fmt(n,d=0){if(n==null||n==='')return'—';return Number(n).toLocaleString('id-ID',{minimumFractionDigits:d,maximumFractionDigits:d})}
+function fmtKg(n){if(n==null)return'—';return Number(n).toLocaleString('id-ID',{minimumFractionDigits:1,maximumFractionDigits:1})+' kg'}
+function fmtDate(s){if(!s)return'—';return new Date(s).toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'})}
+function fmtDT(s){if(!s)return'—';return new Date(s).toLocaleString('id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}
+function todayISO(){return new Date().toLocaleString('sv-SE',{timeZone:'Asia/Jakarta'}).split(' ')[0]}
+function showToast(msg,type='success'){const t=document.getElementById('toast');t.textContent=msg;t.className=`show ${type}`;setTimeout(()=>{t.className=''},3500)}
+function setEl(id,val){const e=document.getElementById(id);if(e)e.textContent=val}
+function navTo(url) {
+  closeSidebar();
+  if (currentUser) {
+        localStorage.setItem('rpa_user', JSON.stringify(currentUser));
+        sessionStorage.setItem('rpa_user', JSON.stringify(currentUser));
+    }
+  window.location.href = url;
+}
+function openModal(id){document.getElementById(id).classList.add('open')}
+function closeModal(id){document.getElementById(id).classList.remove('open')}
+function showErr(id,msg){const e=document.getElementById(id);if(e){e.textContent=msg;e.style.display=msg?'block':'none'}}
+
+function getActualKg(wo) {
+  return (wo.processing_outputs||[]).filter(o=>o.output_type==='PRIMARY').reduce((s,o)=>s+(Number(o.kg_output)||0),0);
+}
+function getActualQty(wo) {
+  return (wo.processing_outputs||[]).filter(o=>o.output_type==='PRIMARY').reduce((s,o)=>s+(Number(o.qty_output)||0),0);
+}
+function getSelisihPct(wo) {
+  const actual = getActualKg(wo);
+  const target = Number(wo.target_kg);
+  if (!target) return null;
+  return (Math.abs(actual - target) / target) * 100;
+}
+
+function statusBadge(s) {
+  const map = {
+    'OPEN':            '<span class="badge b-open">Open</span>',
+    'IN_PROGRESS':     '<span class="badge b-inprog">In Progress</span>',
+    'DRAFT':           '<span class="badge b-pending">📝 Draft</span>',
+    'COMPLETED':       '<span class="badge b-approved">✅ Completed</span>',
+    'CANCELLED':       '<span class="badge b-cancelled">✗ Cancelled</span>'
+  };
+  return map[s] || `<span class="badge">${s}</span>`;
+}
+
+function tipeBadge(t) {
+  if (t === 'PARTING')   return '<span class="badge b-parting">✂️ Parting</span>';
+  if (t === 'BONELESS')  return '<span class="badge b-boneless">🥩 Boneless</span>';
+  if (t === 'MARINASI')  return '<span class="badge b-marinasi">🌶️ Marinasi</span>';
+  return `<span class="badge">${t}</span>`;
+}
+
+function progressBar(wo) {
+  const actual = getActualKg(wo);
+  const target = Number(wo.target_kg) || 0;
+  if (!target) return '<span style="font-size:11px;color:#9ca3af">—</span>';
+  const pct = Math.min((actual / target) * 100, 100);
+  const selPct = getSelisihPct(wo);
+  let colorClass = 'blue';
+  if (wo.status === 'COMPLETED') colorClass = 'green';
+  else if (wo.status === 'IN_PROGRESS') colorClass = 'amber';
+  else if (pct >= 100) colorClass = 'amber';
+  return `<div class="prog-wrap">
+    <div class="prog-bar"><div class="prog-fill ${colorClass}" style="width:${pct}%"></div></div>
+    <div class="prog-text">${fmtKg(actual)} / ${fmtKg(target)}${selPct!=null?' ('+selPct.toFixed(1)+'%)':''}</div>
+  </div>`;
+}
+
+function wsList(wo) {
+  const wss = (wo.wo_workstations||[]).map(w => w.workstations);
+  if (!wss.length) return '<span style="font-size:11px;color:#9ca3af">Belum assign</span>';
+  const tipe = (wo.tipe||'').toLowerCase();
+  return `<div class="ws-chips">${wss.map(w=>w?`<span class="ws-chip ${tipe==='boneless'?'boneless':''}">${w.kode}</span>`:'').join('')}</div>`;
+}
+
+// ============================================================
+// AUTH
+// ============================================================
+async function doLogin() {
+  const username = document.getElementById('inp-username').value.trim();
+  const password = document.getElementById('inp-password').value;
+  const errEl    = document.getElementById('login-error');
+  const btn      = document.getElementById('btn-login');
+  errEl.style.display = 'none';
+  if (!username || !password) { showLoginErr('Username dan password wajib diisi.'); return; }
+  btn.disabled = true; btn.textContent = 'Memproses…';
+  try {
+    const hash = await sha256(password);
+    const { data, error } = await db.from('users')
+      .select('id, nama, username, role, aktif, pin, is_system_admin')
+      .eq('username', username).eq('password_hash', hash).eq('aktif', true).maybeSingle();
+    if (error) throw error;
+    if (!data) { showLoginErr('Username atau password salah.'); return; }
+    currentUser = data;
+    localStorage.setItem('rpa_user', JSON.stringify(data));
+    startApp();
+  } catch(e) {
+    console.error(e);
+    showLoginErr('Gagal terhubung ke server. Periksa koneksi internet.');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Masuk →';
+  }
+}
+function showLoginErr(msg) {
+  const el = document.getElementById('login-error');
+  el.textContent = msg; el.style.display = 'block';
+}
+function doLogout() {
+  localStorage.removeItem('rpa_user');
+  currentUser = null;
+  document.getElementById('app-screen').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+}
+
+// ============================================================
+// APP START
+// ============================================================
+function startApp() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app-screen').style.display = 'block';
+  const av = document.getElementById('user-avatar');
+  if (av) av.textContent = (currentUser.nama||'?')[0].toUpperCase();
+  setEl('sidebar-name', currentUser.nama);
+  setEl('sidebar-role', currentUser.role + (currentUser.is_system_admin ? ' (Admin)' : ''));
+  if (currentUser.is_system_admin) {
+    const umEl = document.getElementById('nav-user-mgmt');
+    if (umEl) umEl.style.display = 'flex';
+  }
+  startClock();
+  document.getElementById('flt-date-from').value = todayISO();
+  document.getElementById('flt-date-to').value   = todayISO();
+  loadAll();
+}
+
+function startClock() {
+  function tick() {
+    const now = new Date();
+    setEl('clock', now.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit'}));
+    setEl('topbar-date', now.toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'}));
+  }
+  tick();
+  setInterval(tick, 1000);
+}
+
+// ============================================================
+// DATA LOADING
+// ============================================================
+async function loadAll() {
+  await Promise.all([loadWOs(), loadWorkstations(), loadProducts()]);
+  renderSummary();
+  applyFilter();
+}
+
+async function loadWOs() {
+  const { data, error } = await db
+    .from('processing_orders')
+    .select(`
+      id, order_code, tipe, tanggal, status,
+      target_kg, target_qty_ekor, catatan, created_at, approved_at, reject_alasan,
+      produk_id,
+      product_master ( product_code, nama_produk, kategori ),
+      wo_workstations (
+        id, workstation_id,
+        workstations ( kode, nama, tipe )
+      ),
+      processing_outputs (
+        id, output_type, kg_output, qty_output,
+        tanggal_produksi, worker_id,
+        users!processing_outputs_worker_id_fkey ( nama ),
+        product_master!processing_outputs_product_id_fkey ( nama_produk )
+      )
+    `)
+    .order('created_at', { ascending: false });
+  if (error) { console.error(error); showToast('Gagal memuat WO', 'error'); return; }
+  allWOs = data || [];
+}
+
+async function loadWorkstations() {
+  const { data } = await db.from('workstations').select('*').eq('aktif', true).order('kode');
+  allWorkstations = data || [];
+}
+
+async function loadProducts() {
+  const { data } = await db.from('product_master').select('id, product_code, nama_produk, kategori').eq('aktif', true).order('nama_produk');
+  allProducts = data || [];
+}
+
+// ============================================================
+// FILTER & RENDER SUMMARY
+// ============================================================
+function applyFilter() {
+  const from   = document.getElementById('flt-date-from').value;
+  const to     = document.getElementById('flt-date-to').value;
+  const tipe   = document.getElementById('flt-tipe').value;
+  const status = document.getElementById('flt-status').value;
+  filteredWOs  = allWOs.filter(wo => {
+    if (from && wo.tanggal < from) return false;
+    if (to   && wo.tanggal > to)   return false;
+    if (tipe !== 'ALL' && wo.tipe !== tipe) return false;
+    if (status !== 'ALL' && wo.status !== status) return false;
+    return true;
+  });
+  woPage = 0;
+  renderSummary();
+  renderWOList();
+}
+
+function renderSummary() {
+  const from = document.getElementById('flt-date-from').value || todayISO();
+  const to   = document.getElementById('flt-date-to').value   || todayISO();
+  const todayWOs = allWOs.filter(w => w.tanggal >= from && w.tanggal <= to);
+  setEl('sc-open',     todayWOs.filter(w=>w.status==='OPEN').length);
+  setEl('sc-inprog',   todayWOs.filter(w=>w.status==='IN_PROGRESS').length);
+  setEl('sc-pending',  todayWOs.filter(w=>w.status==='COMPLETED').length);
+  setEl('sc-approved', todayWOs.filter(w=>w.status==='CANCELLED').length);
+  setEl('sc-total',    todayWOs.length);
+}
+
+function renderWOList() {
+  const search  = (document.getElementById('wo-search').value||'').trim().toLowerCase();
+  let list = filteredWOs;
+  if (search) {
+    list = list.filter(wo => {
+      const code = (wo.order_code||'').toLowerCase();
+      const prod = (wo.product_master?.nama_produk||'').toLowerCase();
+      return code.includes(search) || prod.includes(search);
+    });
+  }
+  const total = list.length;
+  const slice = list.slice(woPage * ROWS, (woPage + 1) * ROWS);
+  const tbody = document.getElementById('wo-tbody');
+
+  if (!total) {
+    tbody.innerHTML = `<tr><td colspan="10"><div class="empty"><div class="e-icon">📋</div>Tidak ada work order.</div></td></tr>`;
+    document.getElementById('wo-pag').style.display = 'none';
+    return;
+  }
+
+  tbody.innerHTML = slice.map(wo => {
+    const pm = wo.product_master;
+    const produkName = pm ? `${pm.nama_produk}<div class="tbl-sub">${pm.product_code}</div>` : '—';
+    const target = `${fmtKg(wo.target_kg)}<div class="tbl-sub">${fmt(wo.target_qty_ekor)} ekor</div>`;
+    const canCancel   = ['OPEN','IN_PROGRESS'].includes(wo.status);
+    const canComplete = ['OPEN','IN_PROGRESS'].includes(wo.status);
+    return `<tr>
+      <td style="font-family:monospace;font-weight:800;font-size:12px">${wo.order_code}</td>
+      <td>${tipeBadge(wo.tipe)}</td>
+      <td>${produkName}</td>
+      <td>${target}</td>
+      <td>${progressBar(wo)}</td>
+      <td>${statusBadge(wo.status)}</td>
+      <td>${wsList(wo)}</td>
+      <td style="font-size:12px;white-space:nowrap">${fmtDate(wo.tanggal)}<div class="tbl-sub">${fmtDT(wo.created_at)}</div></td>
+      <td style="font-size:12px;white-space:nowrap">${wo.approved_at ? fmtDate(wo.approved_at) + '<div class="tbl-sub">' + fmtDT(wo.approved_at) + '</div>' : '<span style="color:#9ca3af">—</span>'}</td>
+      <td>
+        <div style="display:flex;gap:4px;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-sm" onclick="openDetailWO('${wo.id}')">🔍 Detail</button>
+          ${canComplete ? `<button class="btn btn-green btn-sm" onclick="openApproveFromList('${wo.id}')">✅ Selesai</button>` : ''}
+          ${canCancel ? `<button class="btn btn-red btn-sm" onclick="openCancelFromList('${wo.id}')">✗</button>` : ''}
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  // Pagination
+  const pagEl = document.getElementById('wo-pag');
+  const totalPages = Math.ceil(total / ROWS) || 1;
+  pagEl.style.display = total > ROWS ? '' : 'none';
+  setEl('wo-pag-info', `${woPage*ROWS+1}–${Math.min((woPage+1)*ROWS,total)} dari ${total}`);
+  document.getElementById('wo-prev').disabled = woPage === 0;
+  document.getElementById('wo-next').disabled = woPage >= totalPages - 1;
+}
+
+// ============================================================
+// CREATE WO
+// ============================================================
+function openCreateWO() {
+  document.getElementById('crt-tipe').value = '';
+  document.getElementById('crt-produk').innerHTML = '<option value="">— Pilih tipe dulu —</option>';
+  document.getElementById('crt-target-kg').value  = '';
+  document.getElementById('crt-target-qty').value = '';
+  document.getElementById('crt-catatan').value    = '';
+  showErr('crt-err', '');
+  openModal('modal-create');
+}
+
+function onCreateTipeChange() {
+  const tipe = document.getElementById('crt-tipe').value;
+  const sel  = document.getElementById('crt-produk');
+  if (!tipe) { sel.innerHTML = '<option value="">— Pilih tipe dulu —</option>'; return; }
+  // Filter produk berdasarkan tipe
+  const validKat = tipe === 'PARTING'
+    ? ['CU', 'EXT', 'PART', 'BYPRODUCT_PARTING', 'BYPRODUCT_BONELESS']
+    : tipe === 'MARINASI'
+    ? ['MARINASI']
+    : ['BONELESS', 'EXT', 'PART', 'BYPRODUCT_BONELESS', 'BYPRODUCT_PARTING'];
+  const filtered = allProducts.filter(p => validKat.includes(p.kategori));
+  sel.innerHTML = '<option value="">— Pilih Produk —</option>'
+    + filtered.map(p => `<option value="${p.id}">${p.nama_produk} (${p.product_code})</option>`).join('');
+}
+
+async function doCreateWO() {
+  const tipe      = document.getElementById('crt-tipe').value;
+  const produkId  = document.getElementById('crt-produk').value;
+  const targetKg  = parseFloat(document.getElementById('crt-target-kg').value);
+  const targetQty = parseInt(document.getElementById('crt-target-qty').value);
+  const catatan   = document.getElementById('crt-catatan').value.trim();
+  showErr('crt-err', '');
+
+  if (!tipe)            { showErr('crt-err', 'Pilih tipe WO.'); return; }
+  if (!produkId)        { showErr('crt-err', 'Pilih produk target.'); return; }
+  if (!targetKg || targetKg <= 0) { showErr('crt-err', 'Target Kg harus lebih dari 0.'); return; }
+  if (!targetQty || targetQty <= 0) { showErr('crt-err', 'Target Ekor harus lebih dari 0.'); return; }
+
+  const btn = document.getElementById('crt-btn-ok');
+  btn.disabled = true; btn.textContent = 'Menyimpan…';
+  try {
+    // Generate WO code
+    const { data: woCode, error: codeErr } = await db.rpc('generate_wo_code', { p_tipe: tipe });
+    if (codeErr) throw codeErr;
+
+    const { data: wo, error: insertErr } = await db.from('processing_orders').insert({
+      order_code:      woCode,
+      tipe:            tipe,
+      tanggal:         todayISO(),
+      produk_id:       produkId,
+      target_kg:       targetKg,
+      target_qty_ekor: targetQty,
+      catatan:         catatan || null,
+      status:          'OPEN',
+      created_by:      currentUser.id
+    }).select().single();
+    if (insertErr) throw insertErr;
+
+    showToast(`WO ${woCode} berhasil dibuat!`, 'success');
+    closeModal('modal-create');
+    await loadAll();
+  } catch(e) {
+    console.error(e);
+    showErr('crt-err', 'Gagal membuat WO: ' + (e.message||''));
+  } finally {
+    btn.disabled = false; btn.textContent = '＋ Buat Work Order';
+  }
+}
+
+// ============================================================
+// DETAIL WO
+// ============================================================
+async function openDetailWO(woId) {
+  currentWOId   = woId;
+  currentWOData = allWOs.find(w => w.id === woId);
+  if (!currentWOData) { showToast('Data WO tidak ditemukan', 'error'); return; }
+  const wo = currentWOData;
+  const pm = wo.product_master;
+  const actualKg  = getActualKg(wo);
+  const actualQty = getActualQty(wo);
+  const selPct    = getSelisihPct(wo);
+  const canCancel   = ['OPEN','IN_PROGRESS'].includes(wo.status);
+  const needApprove = ['OPEN','IN_PROGRESS'].includes(wo.status);
+
+  setEl('det-subtitle', `${wo.order_code} — ${wo.tipe}`);
+  setEl('det-code', wo.order_code);
+  document.getElementById('det-tipe').innerHTML = tipeBadge(wo.tipe);
+  setEl('det-produk', pm ? `${pm.nama_produk} (${pm.product_code})` : '—');
+  setEl('det-target', `${fmtKg(wo.target_kg)} / ${fmt(wo.target_qty_ekor)} ekor`);
+  setEl('det-actual', `${fmtKg(actualKg)} / ${fmt(actualQty)} ekor`);
+
+  const selHtml = selPct != null
+    ? `<span style="color:${selPct>10?'#dc2626':'#16a34a'};font-weight:800">${selPct.toFixed(1)}% ${actualKg>Number(wo.target_kg)?'(lebih)':'(kurang)'}</span>`
+    : '—';
+  document.getElementById('det-selisih').innerHTML = selHtml;
+  document.getElementById('det-status').innerHTML  = statusBadge(wo.status);
+  setEl('det-tanggal', fmtDate(wo.tanggal));
+
+  // Workstations
+  const wss = (wo.wo_workstations||[]).map(w=>w.workstations).filter(Boolean);
+  const tipeL = (wo.tipe||'').toLowerCase();
+  document.getElementById('det-ws-list').innerHTML = wss.length
+    ? `<div class="ws-chips">${wss.map(w=>`<span class="ws-chip ${tipeL==='boneless'?'boneless':''}">${w.kode} — ${w.nama}</span>`).join('')}</div>`
+    : '<span style="font-size:12px;color:#9ca3af">Belum ada workstation yang di-assign.</span>';
+
+  // Output per worker
+  const outputs = wo.processing_outputs || [];
+  const detTbody = document.getElementById('det-output-tbody');
+  if (!outputs.length) {
+    detTbody.innerHTML = `<tr><td colspan="7"><div class="empty" style="padding:12px">Belum ada output yang dicatat.</div></td></tr>`;
+  } else {
+    detTbody.innerHTML = outputs.map(o => {
+      const workerName = o.users?.nama || '—';
+      const wsName     = (wo.wo_workstations||[]).find(w=>w.workstation_id === o.workstation_id)?.workstations?.kode || '—';
+      const prodName   = o.product_master?.nama_produk || '—';
+      const typeBadge  = o.output_type === 'PRIMARY'
+        ? '<span class="badge b-approved" style="font-size:10px">Primary</span>'
+        : '<span class="badge b-pending" style="font-size:10px">Byproduct</span>';
+      return `<tr>
+        <td style="font-weight:700">${workerName}</td>
+        <td>${wsName}</td>
+        <td>${prodName}</td>
+        <td>${typeBadge}</td>
+        <td>${fmt(o.qty_output)}</td>
+        <td>${fmtKg(o.kg_output)}</td>
+        <td>${fmtDate(o.tanggal_produksi)}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  showErr('det-err', '');
+  // Buttons
+  document.getElementById('det-btn-cancel').style.display  = canCancel   ? '' : 'none';
+  document.getElementById('det-btn-approve').style.display = needApprove ? '' : 'none';
+  // Only allow assign WS when not closed
+  document.getElementById('det-btn-ws').disabled = ['COMPLETED','CANCELLED'].includes(wo.status);
+
+  openModal('modal-detail');
+}
+
+// ============================================================
+// ASSIGN WORKSTATION
+// ============================================================
+function openAssignWS() {
+  if (!currentWOData) return;
+  const wo         = currentWOData;
+  const tipeFilter = wo.tipe;
+  const wsForType  = allWorkstations.filter(ws => ws.tipe === tipeFilter);
+  const assignedMap = {};
+  (wo.wo_workstations||[]).forEach(w => { assignedMap[w.workstation_id] = w; });
+
+  setEl('aws-subtitle', `Assign workstation untuk WO ${wo.order_code} (${wo.tipe})`);
+  setEl('aws-wo-ekor', fmt(wo.target_qty_ekor) + ' ekor');
+  setEl('aws-wo-kg',   fmtKg(wo.target_kg));
+
+  const grid = document.getElementById('aws-ws-grid');
+  if (!wsForType.length) {
+    grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:16px;color:#9ca3af">Tidak ada workstation tipe ${tipeFilter}.</div>`;
+  } else {
+    grid.innerHTML = wsForType.map(ws => {
+      const existing = assignedMap[ws.id];
+      const checked  = !!existing;
+      const boneCls  = tipeFilter === 'BONELESS' ? 'boneless' : '';
+      const prevQty  = existing?.target_qty_ekor || '';
+      const prevKg   = existing?.target_kg       || '';
+      return `
+        <div class="ws-check-item ${checked ? `checked ${boneCls}` : ''}" id="wsitem-${ws.id}" style="flex-direction:column;align-items:stretch;gap:8px">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="toggleWsCheck('${ws.id}','${boneCls}')">
+            <input type="checkbox" id="wscb-${ws.id}" ${checked ? 'checked' : ''} onclick="event.stopPropagation();toggleWsCheck('${ws.id}','${boneCls}')">
+            <div><div class="ws-name">${ws.nama}</div><div class="ws-kode">${ws.kode}</div></div>
+          </label>
+          <div id="wsalloc-${ws.id}" style="display:${checked?'grid':'none'};grid-template-columns:1fr 1fr;gap:6px;padding-top:4px;border-top:1px solid rgba(0,0,0,.08)">
+            <div>
+              <div style="font-size:10px;color:#6b7280;margin-bottom:2px">Target Ekor</div>
+              <input type="number" id="wsqty-${ws.id}" value="${prevQty}" min="0" placeholder="ekor"
+                style="width:100%;padding:5px 8px;border:1.5px solid #d1d5db;border-radius:6px;font-size:13px"
+                oninput="recalcAlokasi()">
+            </div>
+            <div>
+              <div style="font-size:10px;color:#6b7280;margin-bottom:2px">Target Kg</div>
+              <input type="number" id="wskg-${ws.id}" value="${prevKg}" min="0" step="0.1" placeholder="kg"
+                style="width:100%;padding:5px 8px;border:1.5px solid #d1d5db;border-radius:6px;font-size:13px"
+                oninput="recalcAlokasi()">
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+  }
+  recalcAlokasi();
+  showErr('aws-err', '');
+  openModal('modal-assign-ws');
+}
+
+function toggleWsCheck(wsId, boneCls) {
+  const cb    = document.getElementById(`wscb-${wsId}`);
+  const item  = document.getElementById(`wsitem-${wsId}`);
+  const alloc = document.getElementById(`wsalloc-${wsId}`);
+  cb.checked = !cb.checked;
+  if (cb.checked) {
+    item.classList.add('checked');
+    if (boneCls) item.classList.add(boneCls);
+    if (alloc) alloc.style.display = 'grid';
+  } else {
+    item.classList.remove('checked', boneCls);
+    if (alloc) alloc.style.display = 'none';
+    // Reset nilai saat uncheck
+    const qtyEl = document.getElementById(`wsqty-${wsId}`);
+    const kgEl  = document.getElementById(`wskg-${wsId}`);
+    if (qtyEl) qtyEl.value = '';
+    if (kgEl)  kgEl.value  = '';
+  }
+  recalcAlokasi();
+}
+
+function recalcAlokasi() {
+  if (!currentWOData) return;
+  const wo         = currentWOData;
+  const wsForType  = allWorkstations.filter(ws => ws.tipe === wo.tipe);
+  const checked    = wsForType.filter(ws => document.getElementById(`wscb-${ws.id}`)?.checked);
+
+  let totalEkor = 0, totalKg = 0;
+  checked.forEach(ws => {
+    totalEkor += Number(document.getElementById(`wsqty-${ws.id}`)?.value || 0);
+    totalKg   += Number(document.getElementById(`wskg-${ws.id}`)?.value  || 0);
+  });
+
+  setEl('aws-alloc-ekor', fmt(totalEkor));
+  setEl('aws-alloc-kg',   fmtKg(totalKg));
+
+  const targetEkor = Number(wo.target_qty_ekor) || 0;
+  const targetKg   = Number(wo.target_kg)       || 0;
+
+  const sisaEkor = targetEkor - totalEkor;
+  const sisaKg   = targetKg   - totalKg;
+
+  const sisaEkorEl = document.getElementById('aws-sisa-ekor');
+  const sisaKgEl   = document.getElementById('aws-sisa-kg');
+  if (sisaEkorEl) {
+    sisaEkorEl.textContent = (sisaEkor >= 0 ? '+' : '') + fmt(sisaEkor * -1 === 0 ? 0 : sisaEkor);
+    sisaEkorEl.style.color = sisaEkor === 0 ? '#16a34a' : '#dc2626';
+  }
+  if (sisaKgEl) {
+    sisaKgEl.textContent = (sisaKg >= 0 ? '+' : '') + Number(sisaKg.toFixed(1)) + ' kg';
+    sisaKgEl.style.color = Math.abs(sisaKg) < 0.1 ? '#16a34a' : '#dc2626';
+  }
+}
+
+async function doAssignWS() {
+  if (!currentWOId) return;
+  const wo         = currentWOData;
+  const tipeFilter = wo.tipe;
+  const wsForType  = allWorkstations.filter(ws => ws.tipe === tipeFilter);
+  const selected   = wsForType.filter(ws => document.getElementById(`wscb-${ws.id}`)?.checked);
+  showErr('aws-err','');
+  if (!selected.length) { showErr('aws-err','Pilih minimal 1 workstation.'); return; }
+
+  // Baca target per WS
+  const rows = selected.map(ws => ({
+    order_id:        currentWOId,
+    workstation_id:  ws.id,
+    assigned_by:     currentUser.id,
+    target_qty_ekor: Number(document.getElementById(`wsqty-${ws.id}`)?.value) || null,
+    target_kg:       Number(document.getElementById(`wskg-${ws.id}`)?.value)  || null,
+  }));
+
+  // Validasi: total alokasi harus sama dengan target WO
+  const targetEkor = Number(wo.target_qty_ekor) || 0;
+  const targetKg   = Number(wo.target_kg)       || 0;
+  const totalEkor  = rows.reduce((s,r) => s + (r.target_qty_ekor||0), 0);
+  const totalKg    = rows.reduce((s,r) => s + (r.target_kg||0), 0);
+
+  if (targetEkor > 0 && totalEkor !== targetEkor) {
+    showErr('aws-err', `Total ekor (${fmt(totalEkor)}) harus sama dengan target WO (${fmt(targetEkor)} ekor).`);
+    return;
+  }
+  if (targetKg > 0 && Math.abs(totalKg - targetKg) > 0.1) {
+    showErr('aws-err', `Total kg (${fmtKg(totalKg)}) harus sama dengan target WO (${fmtKg(targetKg)}).`);
+    return;
+  }
+
+  const btn = document.getElementById('aws-btn-ok');
+  btn.disabled = true; btn.textContent = 'Menyimpan…';
+  try {
+    await db.from('wo_workstations').delete().eq('order_id', currentWOId);
+    const { error } = await db.from('wo_workstations').insert(rows);
+    if (error) throw error;
+
+    if (wo.status === 'OPEN') {
+      await db.from('processing_orders').update({ status: 'IN_PROGRESS' }).eq('id', currentWOId);
+    }
+
+    showToast('Workstation berhasil di-assign!', 'success');
+    closeModal('modal-assign-ws');
+    closeModal('modal-detail');
+    await loadAll();
+  } catch(e) {
+    console.error(e);
+    showErr('aws-err', 'Gagal menyimpan: ' + (e.message||''));
+  } finally {
+    btn.disabled = false; btn.textContent = '💾 Simpan Workstation';
+  }
+}
+
+// ============================================================
+// APPROVE WO
+// ============================================================
+function openApproveWO() {
+  if (!currentWOData) return;
+  prepareApproveModal(currentWOData);
+  openModal('modal-approve');
+}
+
+function openApproveFromList(woId) {
+  currentWOId   = woId;
+  currentWOData = allWOs.find(w => w.id === woId);
+  if (!currentWOData) return;
+  prepareApproveModal(currentWOData);
+  openModal('modal-approve');
+}
+
+function prepareApproveModal(wo) {
+  const selPct = getSelisihPct(wo);
+  setEl('apr-code', wo.order_code);
+  const selText = selPct != null
+    ? `${selPct.toFixed(1)}% ${getActualKg(wo)>Number(wo.target_kg)?'(kelebihan)':'(kekurangan)'}`
+    : '—';
+  setEl('apr-selisih', selText);
+  document.getElementById('apr-pin').value = '';
+  const pinErr = document.getElementById('apr-pin-err');
+  if (pinErr) pinErr.style.display = 'none';
+}
+
+async function doApproveWO() {
+  const pin    = document.getElementById('apr-pin').value.trim();
+  const pinErr = document.getElementById('apr-pin-err');
+  pinErr.style.display = 'none';
+  if (!pin || pin.length < 4) { pinErr.textContent = 'PIN minimal 4 digit.'; pinErr.style.display = 'block'; return; }
+
+  const btn = document.getElementById('apr-btn-ok');
+  btn.disabled = true; btn.textContent = 'Memverifikasi…';
+  try {
+    // Cek PIN supervisor
+    const { data: sup, error: supErr } = await db.from('users')
+      .select('id, nama, role, is_system_admin')
+      .eq('pin', pin).eq('aktif', true)
+      .or('role.eq.SUPERVISOR,is_system_admin.eq.true')
+      .maybeSingle();
+    if (supErr) throw supErr;
+    if (!sup) { pinErr.textContent = 'PIN salah atau bukan Supervisor.'; pinErr.style.display = 'block'; return; }
+
+    const { error: updErr } = await db.from('processing_orders').update({
+      status:      'COMPLETED',
+      approved_by: sup.id,
+      approved_at: new Date().toISOString()
+    }).eq('id', currentWOId);
+    if (updErr) throw updErr;
+
+    showToast(`WO ${currentWOData?.order_code} berhasil diselesaikan oleh ${sup.nama}!`, 'success');
+    closeModal('modal-approve');
+    closeModal('modal-detail');
+    await loadAll();
+  } catch(e) {
+    console.error(e);
+    pinErr.textContent = 'Terjadi kesalahan: ' + (e.message||'');
+    pinErr.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = '✅ Selesaikan WO';
+  }
+}
+
+// ============================================================
+// CANCEL WO
+// ============================================================
+function openCancelWO() {
+  if (!currentWOData) return;
+  setEl('can-code', currentWOData.order_code);
+  document.getElementById('can-alasan').value = '';
+  showErr('can-err', '');
+  openModal('modal-cancel');
+}
+
+function openCancelFromList(woId) {
+  currentWOId   = woId;
+  currentWOData = allWOs.find(w => w.id === woId);
+  setEl('can-code', currentWOData?.order_code || '—');
+  document.getElementById('can-alasan').value = '';
+  showErr('can-err', '');
+  openModal('modal-cancel');
+}
+
+async function doCancelWO() {
+  const alasan = document.getElementById('can-alasan').value.trim();
+  showErr('can-err', '');
+  if (!alasan) { showErr('can-err', 'Alasan pembatalan wajib diisi.'); return; }
+  const btn = document.getElementById('can-btn-ok');
+  btn.disabled = true; btn.textContent = 'Memproses…';
+  try {
+    const { error } = await db.from('processing_orders').update({
+      status:        'CANCELLED',
+      reject_alasan: alasan
+    }).eq('id', currentWOId);
+    if (error) throw error;
+    showToast('Work order berhasil dibatalkan.', 'warning');
+    closeModal('modal-cancel');
+    closeModal('modal-detail');
+    await loadAll();
+  } catch(e) {
+    console.error(e);
+    showErr('can-err', 'Gagal membatalkan: ' + (e.message||''));
+  } finally {
+    btn.disabled = false; btn.textContent = '✗ Ya, Batalkan';
+  }
+}
+
+// ============================================================
+// EXPORT EXCEL
+// ============================================================
+function exportWOExcel() {
+  if (typeof XLSX === 'undefined') { showToast('Library Excel belum siap. Coba refresh.', 'error'); return; }
+  const headers = ['Kode WO','Tipe','Produk Target','Target Kg','Target Ekor','Actual Kg','Actual Ekor','Selisih %','Status','Workstations','Tanggal'];
+  const rows = filteredWOs.map(wo => [
+    wo.order_code,
+    wo.tipe,
+    wo.product_master?.nama_produk || '—',
+    wo.target_kg,
+    wo.target_qty_ekor,
+    getActualKg(wo).toFixed(1),
+    getActualQty(wo),
+    getSelisihPct(wo)?.toFixed(1) || '—',
+    wo.status,
+    (wo.wo_workstations||[]).map(w=>w.workstations?.kode).filter(Boolean).join(', '),
+    wo.tanggal
+  ]);
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Work Order');
+  const wb2 = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb2, ws, 'Work Order');
+  const today = new Date().toISOString().split('T')[0].replace(/-/g,'');
+  XLSX.writeFile(wb2, 'work_order_' + today + '.xlsx');
+}
+
+// ============================================================
+// SIDEBAR TOGGLE
+// ============================================================
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sidebar-overlay').classList.toggle('visible');
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-overlay').classList.remove('visible');
+}
+
+// ============================================================
+// INIT
+// ============================================================
+window.addEventListener('DOMContentLoaded', () => {
+  const saved = localStorage.getItem('rpa_user');
+  if (saved) {
+    try { currentUser = JSON.parse(saved); startApp(); } catch(e) {}
+  }
+});
+</script>
+</body>
+</html>

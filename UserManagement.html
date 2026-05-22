@@ -1,0 +1,1400 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Manajemen User — Kurnia's Food</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+/* =====================================================
+   RESET & BASE
+   ===================================================== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f3f4f6; color: #111827; }
+button { cursor: pointer; font-family: inherit; }
+input, select, textarea { font-family: inherit; }
+
+/* =====================================================
+   LOGIN SCREEN
+   ===================================================== */
+#login-screen {
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh; background: linear-gradient(135deg, #1e3a5f 0%, #1d4ed8 100%);
+    padding: 20px;
+}
+.login-card {
+    background: white; border-radius: 20px; padding: 44px 40px;
+    width: 100%; max-width: 400px; box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+}
+.login-logo { text-align: center; margin-bottom: 36px; }
+.login-logo .icon { font-size: 48px; display: block; margin-bottom: 12px; }
+.login-logo h1 { font-size: 22px; font-weight: 800; color: #111827; }
+.login-logo p { font-size: 13px; color: #6b7280; margin-top: 4px; }
+.login-card label { display: block; font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px; margin-top: 16px; }
+.login-card input { width: 100%; padding: 12px 14px; border: 1.5px solid #d1d5db; border-radius: 10px; font-size: 15px; outline: none; transition: border-color .2s; }
+.login-card input:focus { border-color: #2563eb; }
+.btn-login { width: 100%; margin-top: 24px; padding: 14px; background: #2563eb; color: white; border: none; border-radius: 10px; font-size: 16px; font-weight: 700; transition: background .2s; }
+.btn-login:hover { background: #1d4ed8; }
+.btn-login:disabled { background: #93c5fd; cursor: not-allowed; }
+.login-error { margin-top: 12px; padding: 10px 14px; background: #fef2f2; border: 1px solid #fca5a5; border-radius: 8px; color: #dc2626; font-size: 13px; display: none; }
+.login-version { text-align: center; margin-top: 20px; font-size: 11px; color: #9ca3af; }
+
+/* =====================================================
+   APP LAYOUT
+   ===================================================== */
+#app-screen { display: none; height: 100vh; flex-direction: column; }
+
+/* Topbar */
+.topbar {
+    height: 56px; background: white; border-bottom: 1px solid #e5e7eb;
+    display: flex; align-items: center; padding: 0 16px; gap: 12px;
+    flex-shrink: 0; position: sticky; top: 0; z-index: 100;
+}
+.topbar-menu-btn {
+    width: 36px; height: 36px; border: none; background: none;
+    border-radius: 8px; font-size: 18px; display: flex; align-items: center; justify-content: center;
+}
+.topbar-menu-btn:hover { background: #f3f4f6; }
+.topbar-title { font-weight: 700; font-size: 16px; color: #111827; flex: 1; }
+.topbar-right { display: flex; align-items: center; gap: 10px; }
+.topbar-date { font-size: 12px; color: #6b7280; }
+
+/* Sidebar */
+.sidebar {
+    width: 230px; flex-shrink: 0; background: #0f172a; color: white;
+    display: flex; flex-direction: column;
+    position: fixed; top: 0; left: 0; height: 100vh; z-index: 200;
+    transition: transform 0.28s cubic-bezier(0.4,0,0.2,1); overflow-y: auto;
+    scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.1) transparent;
+}
+.sidebar-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5);
+    z-index: 199;
+}
+.sidebar-brand {
+    padding: 20px 18px 16px; border-bottom: 1px solid rgba(255,255,255,0.08);
+    flex-shrink: 0;
+}
+.sidebar-brand h2 { font-size: 15px; font-weight: 800; color: #f8fafc; display: flex; align-items: center; gap: 8px; }
+.sidebar-brand p { font-size: 11px; color: rgba(255,255,255,0.4); margin-top: 3px; }
+.sidebar-nav { flex: 1; padding: 10px 0; }
+.nav-section-label {
+    font-size: 10px; font-weight: 700; color: rgba(255,255,255,0.3);
+    text-transform: uppercase; letter-spacing: 1px;
+    padding: 12px 18px 4px;
+}
+.nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 18px; font-size: 13px; color: rgba(255,255,255,0.65);
+    cursor: pointer; transition: all 0.15s;
+    border-left: 3px solid transparent; position: relative;
+}
+.nav-item:hover:not(.disabled) { background: rgba(255,255,255,0.07); color: white; }
+.nav-item.active {
+    background: rgba(37,99,235,0.2); color: #93c5fd;
+    border-left-color: #3b82f6;
+}
+.nav-item.disabled { opacity: 0.3; cursor: not-allowed; }
+.nav-icon { font-size: 15px; width: 22px; text-align: center; flex-shrink: 0; }
+.nav-label-text { flex: 1; }
+.nav-tag {
+    font-size: 9px; font-weight: 700; padding: 2px 5px; border-radius: 4px;
+    background: rgba(37,99,235,0.3); color: #93c5fd;
+}
+.sidebar-footer { padding: 14px 18px; border-top: 1px solid rgba(255,255,255,0.08); flex-shrink: 0; }
+.user-card { display: flex; align-items: center; gap: 10px; }
+.user-avatar {
+    width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,.2);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 14px; color: white; flex-shrink: 0;
+}
+.user-name { font-size: 13px; font-weight: 600; color: white; }
+.user-role { font-size: 11px; color: rgba(255,255,255,.45); margin-top: 1px; }
+.btn-logout {
+    margin-top: 10px; width: 100%; padding: 9px; background: rgba(255,255,255,.08);
+    border: 1px solid rgba(255,255,255,.15); border-radius: 8px;
+    color: rgba(255,255,255,.7); font-size: 13px; font-weight: 600;
+}
+.btn-logout:hover { background: rgba(255,255,255,.12); color: white; }
+
+/* Content area */
+.app-body { display: flex; flex: 1; overflow: hidden; }
+.content-area { flex: 1; overflow-y: auto; padding: 20px 16px 40px; margin-left: 0; }
+@media (min-width: 1024px) {
+    .sidebar { position: relative; top: auto; left: auto; height: auto; }
+    .content-area { margin-left: 0; padding: 24px; }
+    #app-screen { flex-direction: row; }
+    .topbar { display: none; }
+    .app-body { display: flex; height: 100vh; }
+}
+@media (max-width: 1023px) {
+    .sidebar { transform: translateX(-100%); }
+    .sidebar.open { transform: translateX(0); }
+    .sidebar-overlay.open { display: block; }
+}
+
+/* =====================================================
+   PAGE CONTENT
+   ===================================================== */
+.page-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 20px; gap: 12px; flex-wrap: wrap;
+}
+.page-title { font-size: 22px; font-weight: 800; color: #111827; }
+.page-subtitle { font-size: 13px; color: #6b7280; margin-top: 2px; }
+
+/* Filter bar */
+.filter-bar {
+    display: flex; gap: 10px; margin-bottom: 18px; flex-wrap: wrap;
+}
+.search-input {
+    flex: 1; min-width: 200px; padding: 10px 14px;
+    border: 1.5px solid #d1d5db; border-radius: 10px; font-size: 14px; outline: none;
+}
+.search-input:focus { border-color: #2563eb; }
+.filter-tabs { display: flex; gap: 0; border: 1.5px solid #d1d5db; border-radius: 10px; overflow: hidden; }
+.filter-tab {
+    padding: 9px 16px; font-size: 13px; font-weight: 500;
+    background: white; border: none; color: #6b7280; cursor: pointer;
+    border-right: 1px solid #d1d5db; transition: background .15s;
+}
+.filter-tab:last-child { border-right: none; }
+.filter-tab.active { background: #2563eb; color: white; font-weight: 600; }
+.filter-tab:hover:not(.active) { background: #f3f4f6; }
+
+/* User cards */
+.user-list { display: flex; flex-direction: column; gap: 12px; }
+.user-card-item {
+    background: white; border-radius: 14px; padding: 16px 18px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.07); border: 1.5px solid #e5e7eb;
+    transition: border-color .15s, box-shadow .15s;
+}
+.user-card-item:hover { border-color: #93c5fd; box-shadow: 0 2px 8px rgba(37,99,235,.1); }
+.user-card-top { display: flex; align-items: center; gap: 14px; }
+.uc-avatar {
+    width: 44px; height: 44px; border-radius: 50%; background: #dbeafe;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 17px; color: #2563eb; flex-shrink: 0;
+}
+.uc-avatar.admin { background: #fef3c7; color: #d97706; }
+.uc-avatar.inactive { background: #f3f4f6; color: #9ca3af; }
+.uc-info { flex: 1; min-width: 0; }
+.uc-name { font-size: 15px; font-weight: 700; color: #111827; }
+.uc-username { font-size: 12px; color: #6b7280; margin-top: 1px; }
+.uc-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.badge-admin {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600;
+    background: #fef3c7; color: #b45309; border: 1px solid #fcd34d;
+}
+.badge-module {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 500;
+    border: 1px solid;
+}
+.badge-module.supervisor { background: #fdf4ff; color: #2563eb; border-color: #e9d5ff; }
+.badge-module.operator   { background: #eff6ff; color: #2563eb; border-color: #bfdbfe; }
+.badge-module.viewer     { background: #f0fdf4; color: #15803d; border-color: #bbf7d0; }
+.badge-inactive { padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 600; background: #f3f4f6; color: #9ca3af; border: 1px solid #e5e7eb; }
+.uc-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.btn-icon {
+    width: 36px; height: 36px; border-radius: 8px; border: 1.5px solid #e5e7eb;
+    background: white; font-size: 15px; display: flex; align-items: center; justify-content: center;
+    transition: background .15s, border-color .15s;
+}
+.btn-icon:hover { background: #f3f4f6; border-color: #93c5fd; }
+.btn-icon.danger:hover { background: #fef2f2; border-color: #fca5a5; }
+
+/* Empty state */
+.empty-state { text-align: center; padding: 60px 20px; color: #9ca3af; }
+.empty-state .icon { font-size: 48px; display: block; margin-bottom: 12px; }
+.empty-state p { font-size: 14px; }
+
+/* Buttons */
+.btn-primary {
+    padding: 11px 20px; background: #2563eb; color: white;
+    border: none; border-radius: 10px; font-size: 14px; font-weight: 600;
+    display: inline-flex; align-items: center; gap: 7px; transition: background .2s;
+}
+.btn-primary:hover { background: #1d4ed8; }
+.btn-secondary {
+    padding: 10px 18px; background: white; color: #374151;
+    border: 1.5px solid #d1d5db; border-radius: 10px; font-size: 14px; font-weight: 500;
+}
+.btn-secondary:hover { background: #f9fafb; }
+.btn-danger {
+    padding: 10px 18px; background: white; color: #dc2626;
+    border: 1.5px solid #fca5a5; border-radius: 10px; font-size: 14px; font-weight: 500;
+}
+.btn-danger:hover { background: #fef2f2; }
+.btn-sm {
+    padding: 7px 12px; font-size: 12px; border-radius: 8px;
+    font-weight: 600; border: none; cursor: pointer;
+}
+.btn-sm.primary { background: #2563eb; color: white; }
+.btn-sm.primary:hover { background: #1d4ed8; }
+.btn-sm.danger { background: #fef2f2; color: #dc2626; border: 1px solid #fca5a5; }
+.btn-sm.danger:hover { background: #fee2e2; }
+
+/* =====================================================
+   MODAL
+   ===================================================== */
+.modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5);
+    z-index: 300; align-items: center; justify-content: center; padding: 16px;
+}
+.modal-overlay.open { display: flex; }
+.modal {
+    background: white; border-radius: 18px; width: 100%; max-width: 520px;
+    max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.25);
+}
+.modal-header {
+    padding: 22px 24px 0; display: flex; align-items: center; justify-content: space-between;
+    position: sticky; top: 0; background: white; z-index: 1; padding-bottom: 16px;
+    border-bottom: 1px solid #f3f4f6;
+}
+.modal-title { font-size: 18px; font-weight: 800; color: #111827; }
+.modal-close { background: none; border: none; font-size: 20px; color: #9ca3af; padding: 4px 8px; border-radius: 6px; }
+.modal-close:hover { background: #f3f4f6; color: #374151; }
+.modal-body { padding: 20px 24px; }
+.modal-footer {
+    padding: 16px 24px; border-top: 1px solid #f3f4f6;
+    display: flex; justify-content: flex-end; gap: 10px;
+    position: sticky; bottom: 0; background: white;
+}
+
+/* Form elements */
+.form-group { margin-bottom: 16px; }
+.form-group label { display: block; font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px; }
+.form-group input, .form-group select {
+    width: 100%; padding: 11px 14px; border: 1.5px solid #d1d5db;
+    border-radius: 10px; font-size: 14px; outline: none; transition: border-color .2s;
+    background: white;
+}
+.form-group input:focus, .form-group select:focus { border-color: #2563eb; }
+.form-group input:disabled { background: #f9fafb; color: #6b7280; }
+.form-hint { font-size: 11px; color: #9ca3af; margin-top: 4px; }
+.form-error { font-size: 11px; color: #dc2626; margin-top: 4px; }
+
+/* Toggle switch */
+.toggle-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px; background: #f9fafb; border-radius: 10px;
+    border: 1.5px solid #e5e7eb; margin-bottom: 16px;
+}
+.toggle-label { font-size: 14px; font-weight: 600; color: #374151; }
+.toggle-desc { font-size: 12px; color: #6b7280; margin-top: 2px; }
+.toggle-switch { position: relative; width: 44px; height: 24px; flex-shrink: 0; }
+.toggle-switch input { opacity: 0; width: 0; height: 0; }
+.toggle-slider {
+    position: absolute; inset: 0; background: #d1d5db; border-radius: 24px;
+    cursor: pointer; transition: background .2s;
+}
+.toggle-slider::before {
+    content: ''; position: absolute; width: 18px; height: 18px;
+    left: 3px; top: 3px; background: white; border-radius: 50%;
+    transition: transform .2s; box-shadow: 0 1px 3px rgba(0,0,0,.2);
+}
+.toggle-switch input:checked + .toggle-slider { background: #2563eb; }
+.toggle-switch input:checked + .toggle-slider::before { transform: translateX(20px); }
+
+/* Section divider */
+.section-divider {
+    display: flex; align-items: center; gap: 10px; margin: 20px 0 16px;
+}
+.section-divider-title { font-size: 13px; font-weight: 700; color: #374151; white-space: nowrap; }
+.section-divider-line { flex: 1; height: 1px; background: #e5e7eb; }
+
+/* Permission table */
+.perm-table { width: 100%; border-collapse: collapse; }
+.perm-table th {
+    text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .5px; color: #6b7280; padding: 6px 10px; border-bottom: 1px solid #e5e7eb;
+}
+.perm-table td { padding: 9px 10px; border-bottom: 1px solid #f3f4f6; font-size: 13px; }
+.perm-table tr:last-child td { border-bottom: none; }
+.perm-add-row {
+    display: flex; gap: 8px; margin-top: 12px; align-items: center;
+}
+.perm-add-row select {
+    flex: 1; padding: 9px 10px; border: 1.5px solid #d1d5db;
+    border-radius: 8px; font-size: 13px; outline: none; background: white;
+}
+.perm-add-row select:focus { border-color: #2563eb; }
+.admin-note {
+    display: flex; align-items: flex-start; gap: 10px;
+    background: #fffbeb; border: 1px solid #fcd34d; border-radius: 10px;
+    padding: 12px 14px; font-size: 13px; color: #92400e;
+}
+
+/* Alert/toast */
+.toast {
+    position: fixed; bottom: 24px; right: 24px; padding: 14px 20px;
+    border-radius: 12px; font-size: 14px; font-weight: 600;
+    box-shadow: 0 8px 24px rgba(0,0,0,.15); z-index: 999;
+    transform: translateY(100px); opacity: 0;
+    transition: transform .3s, opacity .3s;
+    max-width: 320px;
+}
+.toast.show { transform: translateY(0); opacity: 1; }
+.toast.success { background: #022c22; color: #4ade80; }
+.toast.error { background: #450a0a; color: #f87171; }
+
+/* Modal alert */
+.modal-alert {
+    padding: 10px 14px; border-radius: 8px; font-size: 13px;
+    margin-bottom: 14px; display: none;
+}
+.modal-alert.error { background: #fef2f2; color: #dc2626; border: 1px solid #fca5a5; }
+.modal-alert.success { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
+
+/* Access denied */
+.access-denied {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    height: 100vh; text-align: center; padding: 40px;
+}
+.access-denied .icon { font-size: 56px; margin-bottom: 16px; }
+.access-denied h2 { font-size: 20px; font-weight: 700; color: #111827; margin-bottom: 8px; }
+.access-denied p { font-size: 14px; color: #6b7280; margin-bottom: 24px; }
+
+/* Responsive */
+@media (max-width: 640px) {
+    .page-header { flex-direction: column; align-items: flex-start; }
+    .btn-primary { width: 100%; justify-content: center; }
+    .modal { max-height: 95vh; }
+}
+</style>
+</head>
+<body>
+
+<!-- ===== LOGIN SCREEN ===== -->
+<div id="login-screen">
+    <div class="login-card">
+        <div class="login-logo">
+            <span class="icon">🐔</span>
+            <h1>RPA Management</h1>
+            <p>Rumah Potong Ayam — Sistem Manajemen Produksi</p>
+        </div>
+        <div class="login-error" id="login-error"></div>
+        <label>Username</label>
+        <input type="text" id="inp-username" placeholder="Masukkan username" autocomplete="username">
+        <label>Password</label>
+        <input type="password" id="inp-password" placeholder="Masukkan password" autocomplete="current-password">
+        <button class="btn-login" id="btn-login" onclick="doLogin()">Masuk →</button>
+        <p class="login-version">v1.0 — April 2026</p>
+    </div>
+</div>
+
+<!-- ===== APP SCREEN ===== -->
+<div id="app-screen" style="display:none">
+
+    <!-- Topbar (mobile) -->
+    <div class="topbar">
+        <button class="topbar-menu-btn" onclick="toggleSidebar()">☰</button>
+        <span class="topbar-title">Manajemen User</span>
+        <div class="topbar-right">
+            <span class="topbar-date" id="topbar-date"></span>
+        </div>
+    </div>
+
+    <div class="app-body">
+        <!-- Sidebar overlay -->
+        <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-brand">
+                <div style="display:flex;align-items:center;gap:10px;"><img src="logo.png" style="height:36px;width:auto;object-fit:contain;"><span style="font-size:15px;font-weight:800;color:#f8fafc;">Kurnia's Food</span></div>
+            </div>
+            <nav class="sidebar-nav">
+                <div class="nav-section-label">Utama</div>
+                <div class="nav-item" onclick="navTo('Dashboard.html')">
+                    <span class="nav-icon">🏠</span>
+                    <span class="nav-label-text">Dashboard</span>
+                </div>
+
+                <div class="nav-section-label">Produksi</div>
+                <div class="nav-item" onclick="navTo('BatchAyamHidup.html')">
+                    <span class="nav-icon">🐔</span>
+                    <span class="nav-label-text">Batch Ayam Hidup</span>
+                </div>
+                <div class="nav-item" onclick="navTo('ProduksiKarkas.html')">
+                    <span class="nav-icon">⚙️</span>
+                    <span class="nav-label-text">Produksi Karkas</span>
+                </div>
+                <div class="nav-item" onclick="navTo('Thawing.html')">
+                    <span class="nav-icon">🧊</span>
+                    <span class="nav-label-text">Thawing</span>
+                </div>
+                <div class="nav-item" onclick="navTo('Chiller.html')">
+                    <span class="nav-icon">❄️</span>
+                    <span class="nav-label-text">Chiller</span>
+                </div>
+                <div class="nav-item" onclick="navTo('WorkOrder.html')">
+                    <span class="nav-icon">📋</span>
+                    <span class="nav-label-text">Work Order</span>
+                </div>
+                <div class="nav-item" onclick="navTo('Parting.html')">
+                    <span class="nav-icon">✂️</span>
+                    <span class="nav-label-text">Parting</span>
+                </div>
+                <div class="nav-item" onclick="navTo('Boneless.html')">
+                    <span class="nav-icon">🥩</span>
+                    <span class="nav-label-text">Boneless</span>
+                </div>
+                <div class="nav-item" onclick="navTo('Marinasi.html')">
+                    <span class="nav-icon">🌶️</span>
+                    <span class="nav-label-text">Marinasi</span>
+                </div>
+                <div class="nav-item" onclick="navTo('Blasting.html')">
+    <span class="nav-icon">🧊</span>
+    <span class="nav-label-text">Blasting</span>
+</div>
+                <div class="nav-item" onclick="navTo('ByProductKarkas.html')">
+                    <span class="nav-icon">📦</span>
+                    <span class="nav-label-text">By-product Karkas</span>
+                </div>
+
+                <div class="nav-section-label">Penjualan</div>
+                <div class="nav-item disabled">
+                    <span class="nav-icon">🛒</span>
+                    <span class="nav-label-text">Penjualan</span>
+                </div>
+
+                <div class="nav-section-label">Manajemen</div>
+                <div class="nav-item disabled">
+                    <span class="nav-icon">✅</span>
+                    <span class="nav-label-text">Koreksi & Approval</span>
+                </div>
+                <div class="nav-item disabled">
+                    <span class="nav-icon">📊</span>
+                    <span class="nav-label-text">Traceability</span>
+                </div>
+                <div class="nav-item" onclick="navTo('MasterData.html')">
+                    <span class="nav-icon">🗂️</span>
+                    <span class="nav-label-text">Master Data</span>
+                </div>
+                <div class="nav-item active">
+                    <span class="nav-icon">👥</span>
+                    <span class="nav-label-text">Manajemen User</span>
+                    <span class="nav-tag">Aktif</span>
+                </div>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="user-card">
+                    <div class="user-avatar" id="user-avatar">?</div>
+                    <div class="user-info-text">
+                        <div class="user-name" id="sidebar-name">—</div>
+                        <div class="user-role" id="sidebar-role">—</div>
+                    </div>
+                </div>
+                <button class="btn-logout" onclick="doLogout()">Keluar ↩</button>
+            </div>
+        </aside>
+
+        <!-- Main content -->
+        <div class="content-area">
+
+            <!-- Page header -->
+            <div class="page-header">
+                <div>
+                    <div class="page-title">👥 Manajemen User</div>
+                    <div class="page-subtitle">Kelola akun dan akses modul untuk setiap pengguna</div>
+                </div>
+                <button class="btn-primary" onclick="openCreateModal()">
+                    ＋ Tambah User
+                </button>
+            </div>
+
+            <!-- Filter bar -->
+            <div class="filter-bar">
+                <input type="text" class="search-input" id="search-input"
+                    placeholder="🔍  Cari nama atau username…"
+                    oninput="filterUsers()">
+                <div class="filter-tabs">
+                    <button class="filter-tab active" id="tab-semua" onclick="setFilter('semua')">Semua</button>
+                    <button class="filter-tab" id="tab-aktif" onclick="setFilter('aktif')">Aktif</button>
+                    <button class="filter-tab" id="tab-nonaktif" onclick="setFilter('nonaktif')">Nonaktif</button>
+                </div>
+            </div>
+
+            <!-- User list -->
+            <div class="user-list" id="user-list">
+                <div class="empty-state">
+                    <span class="icon">⏳</span>
+                    <p>Memuat data user…</p>
+                </div>
+            </div>
+
+        </div><!-- /content-area -->
+    </div><!-- /app-body -->
+</div><!-- /app-screen -->
+
+<!-- ===== MODAL: CREATE / EDIT USER ===== -->
+<div class="modal-overlay" id="modal-user">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title" id="modal-title">Tambah User</div>
+            <button class="modal-close" onclick="closeModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <div class="modal-alert" id="modal-alert"></div>
+
+            <!-- Info User -->
+            <div class="form-group">
+                <label>Nama Lengkap <span style="color:#dc2626">*</span></label>
+                <input type="text" id="f-nama" placeholder="Contoh: Budi Santoso" maxlength="100">
+            </div>
+            <div class="form-group">
+                <label>Username <span style="color:#dc2626">*</span></label>
+                <input type="text" id="f-username" placeholder="Contoh: budi.santoso" maxlength="50"
+                    oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9._]/g,'')">
+                <div class="form-hint">Huruf kecil, angka, titik, atau underscore. Tidak bisa diubah setelah dibuat.</div>
+            </div>
+            <div class="form-group" id="grp-password">
+                <label id="lbl-password">Password <span style="color:#dc2626">*</span></label>
+                <input type="password" id="f-password" placeholder="Minimal 6 karakter">
+                <div class="form-hint" id="hint-password"></div>
+            </div>
+
+            <!-- System Admin toggle -->
+            <div class="toggle-row">
+                <div>
+                    <div class="toggle-label">⚙️ System Admin</div>
+                    <div class="toggle-desc">Akses semua modul, bisa approve, kelola user</div>
+                </div>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="f-is-admin" onchange="onAdminToggle()">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+
+            <!-- Aktif toggle (edit mode only) -->
+            <div class="toggle-row" id="grp-aktif" style="display:none">
+                <div>
+                    <div class="toggle-label">✅ Status Aktif</div>
+                    <div class="toggle-desc">User yang nonaktif tidak bisa login</div>
+                </div>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="f-aktif" checked>
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+
+            <!-- Permissions section -->
+            <div class="section-divider">
+                <div class="section-divider-title">Akses Modul</div>
+                <div class="section-divider-line"></div>
+            </div>
+
+            <!-- Admin note (shown when is_system_admin = true) -->
+            <div class="admin-note" id="admin-note" style="display:none">
+                <span style="font-size:18px;flex-shrink:0">ℹ️</span>
+                <div>System Admin otomatis dapat mengakses dan meng-approve semua modul. Tidak perlu assign permission per modul.</div>
+            </div>
+
+            <!-- Permission table (shown when is_system_admin = false) -->
+            <div id="perm-section">
+                <table class="perm-table" id="perm-table">
+                    <thead>
+                        <tr>
+                            <th>Modul</th>
+                            <th>Role</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="perm-tbody">
+                        <tr id="perm-empty-row">
+                            <td colspan="3" style="text-align:center;color:#9ca3af;font-style:italic;padding:16px">
+                                Belum ada akses modul
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+                <!-- Add permission row -->
+                <div class="perm-add-row">
+                    <select id="perm-add-module">
+                        <option value="">— Pilih Modul —</option>
+                        <option value="karkas">Produksi Karkas</option>
+                        <option value="parting">Parting</option>
+                        <option value="boneless">Boneless</option>
+                        <option value="chiller">Chiller</option>
+                        <option value="blasting">Blasting</option>
+                        <option value="byproduct">By-product Karkas</option>
+                        <option value="penjualan">Penjualan</option>
+                        <option value="koreksi">Koreksi & Approval</option>
+                        <option value="laporan">Laporan</option>
+                    </select>
+                    <select id="perm-add-role">
+                        <option value="">— Pilih Role —</option>
+                        <option value="supervisor">Supervisor (approve)</option>
+                        <option value="operator">Operator (input)</option>
+                        <option value="viewer">Viewer (lihat saja)</option>
+                    </select>
+                    <button class="btn-sm primary" onclick="addPermissionRow()">＋ Tambah</button>
+                </div>
+            </div>
+
+            <!-- PIN section (shown when any supervisor role exists) -->
+            <div id="grp-pin" style="display:none">
+                <div class="section-divider" style="margin-top:20px">
+                    <div class="section-divider-title">PIN Supervisor</div>
+                    <div class="section-divider-line"></div>
+                </div>
+                <div class="form-group">
+                    <label id="lbl-pin">PIN 6 Digit <span style="color:#dc2626">*</span></label>
+                    <input type="password" id="f-pin" placeholder="Masukkan PIN 6 digit"
+                        maxlength="6" inputmode="numeric" pattern="[0-9]*"
+                        oninput="this.value=this.value.replace(/\D/g,'')">
+                    <div class="form-hint" id="hint-pin">PIN dipakai untuk aksi approve/override di modul yang memiliki role Supervisor.</div>
+                </div>
+            </div>
+
+        </div><!-- /modal-body -->
+        <div class="modal-footer">
+            <button class="btn-secondary" onclick="closeModal()">Batal</button>
+            <button class="btn-primary" id="btn-save" onclick="saveUser()">Simpan</button>
+        </div>
+    </div>
+</div>
+
+<!-- ===== MODAL: KONFIRMASI HAPUS PERMISSION ===== -->
+<div class="modal-overlay" id="modal-confirm">
+    <div class="modal" style="max-width:380px">
+        <div class="modal-header">
+            <div class="modal-title">Konfirmasi</div>
+            <button class="modal-close" onclick="closeConfirm()">×</button>
+        </div>
+        <div class="modal-body" id="confirm-body">
+            Yakin ingin menghapus akses ini?
+        </div>
+        <div class="modal-footer">
+            <button class="btn-secondary" onclick="closeConfirm()">Batal</button>
+            <button class="btn-danger" id="btn-confirm-ok" onclick="">Ya, Hapus</button>
+        </div>
+    </div>
+</div>
+
+<!-- ===== TOAST ===== -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ============================================================
+// SUPABASE
+// ============================================================
+const SUPABASE_URL = 'https://dxixqyokuqrdprupsvic.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR4aXhxeW9rdXFyZHBydXBzdmljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5NjM3ODcsImV4cCI6MjA5MjUzOTc4N30.D_yaPwNbe4FFg_hmDeJ9cuxzbNvXZT8l1_TyZuq1t1M';
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ============================================================
+// STATE
+// ============================================================
+let currentUser  = null;
+let allUsers     = [];      // [{...user, permissions:[{module,role}]}]
+let filterStatus = 'semua'; // semua | aktif | nonaktif
+let editingUserId = null;   // null = create mode, uuid = edit mode
+let modalPerms   = [];      // [{module, role, id?}] — in-modal working copy
+
+// Map modul ke label tampilan
+const MODULE_LABELS = {
+    karkas:    'Produksi Karkas',
+    parting:   'Parting',
+    boneless:  'Boneless',
+    chiller:   'Chiller',
+    blasting:  'Blasting',
+    byproduct: 'By-product',
+    penjualan: 'Penjualan',
+    koreksi:   'Koreksi',
+    laporan:   'Laporan',
+};
+const ROLE_LABELS = {
+    supervisor: '👑 Supervisor',
+    operator:   '🔧 Operator',
+    viewer:     '👁️ Viewer',
+};
+
+// ============================================================
+// UTILS
+// ============================================================
+async function sha256(message) {
+    const msgBuffer  = new TextEncoder().encode(message);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+    const hashArray  = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function showToast(msg, type = 'success') {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className   = `toast ${type} show`;
+    setTimeout(() => { el.className = 'toast'; }, 3200);
+}
+
+function showModalAlert(msg, type = 'error') {
+    const el = document.getElementById('modal-alert');
+    el.textContent  = msg;
+    el.className    = `modal-alert ${type}`;
+    el.style.display = 'block';
+}
+
+function hideModalAlert() {
+    document.getElementById('modal-alert').style.display = 'none';
+}
+
+function navTo(page) {
+    localStorage.setItem('rpa_user', JSON.stringify(currentUser));
+    sessionStorage.setItem('rpa_user', JSON.stringify(currentUser));
+    window.location.href = page;
+}
+
+// ============================================================
+// AUTH
+// ============================================================
+async function doLogin() {
+    const username = document.getElementById('inp-username').value.trim();
+    const password = document.getElementById('inp-password').value;
+    const errEl    = document.getElementById('login-error');
+    const btn      = document.getElementById('btn-login');
+
+    errEl.style.display = 'none';
+    if (!username || !password) {
+        showLoginErr('Username dan password wajib diisi.');
+        return;
+    }
+
+    btn.disabled    = true;
+    btn.textContent = 'Memproses…';
+
+    try {
+        const hash = await sha256(password);
+        const { data, error } = await db
+            .from('users')
+            .select('id, nama, username, role, aktif, is_system_admin')
+            .eq('username', username)
+            .eq('password_hash', hash)
+            .eq('aktif', true)
+            .maybeSingle();
+
+        if (error) throw error;
+        if (!data) { showLoginErr('Username atau password salah.'); return; }
+
+        // Hanya system admin atau supervisor yang bisa akses
+        const isAllowed = data.is_system_admin || data.role === 'SUPERVISOR';
+        if (!isAllowed) {
+            showLoginErr('Akses ditolak. Halaman ini hanya untuk Supervisor / System Admin.');
+            return;
+        }
+
+        // Load permissions (even admin might have explicit ones)
+        const { data: permsData } = await db
+            .from('user_module_permissions')
+            .select('module, role')
+            .eq('user_id', data.id);
+
+        const permissions = {};
+        if (permsData) permsData.forEach(p => { permissions[p.module] = p.role; });
+        data.permissions = permissions;
+
+        currentUser = data;
+        localStorage.setItem('rpa_user', JSON.stringify(data));
+        startApp();
+
+    } catch (e) {
+        console.error(e);
+        showLoginErr('Gagal terhubung ke server. Periksa koneksi internet.');
+    } finally {
+        btn.disabled    = false;
+        btn.textContent = 'Masuk →';
+    }
+}
+
+function showLoginErr(msg) {
+    const el = document.getElementById('login-error');
+    el.textContent   = msg;
+    el.style.display = 'block';
+}
+
+function doLogout() {
+    currentUser = null;
+    localStorage.removeItem('rpa_user');
+    document.getElementById('app-screen').style.display   = 'none';
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('inp-username').value = '';
+    document.getElementById('inp-password').value = '';
+    document.getElementById('login-error').style.display  = 'none';
+}
+
+document.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && document.getElementById('login-screen').style.display !== 'none') doLogin();
+});
+
+// ============================================================
+// START APP
+// ============================================================
+function startApp() {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app-screen').style.display   = 'flex';
+
+    // Sidebar user info
+    document.getElementById('user-avatar').textContent  = currentUser.nama.charAt(0).toUpperCase();
+    document.getElementById('sidebar-name').textContent = currentUser.nama;
+    document.getElementById('sidebar-role').textContent = '⚙️ System Admin';
+
+    // Topbar date
+    document.getElementById('topbar-date').textContent =
+        new Date().toLocaleDateString('id-ID', { weekday:'short', day:'numeric', month:'short' });
+
+    loadUsers();
+}
+
+// Restore session
+window.addEventListener('DOMContentLoaded', () => {
+    const saved = localStorage.getItem('rpa_user');
+    console.log('[UM] localStorage rpa_user:', saved ? JSON.parse(saved) : 'KOSONG');
+    if (saved) {
+        try {
+            const user = JSON.parse(saved);
+            console.log('[UM] user.id:', user?.id, '| is_system_admin:', user?.is_system_admin, '| aktif:', user?.aktif);
+            const isAllowed = user && user.id && (user.is_system_admin || user.role === 'SUPERVISOR');
+            console.log('[UM] isAllowed:', isAllowed, '| role:', user?.role, '| is_system_admin:', user?.is_system_admin);
+            if (isAllowed) {
+                currentUser = user;
+                startApp();
+            } else {
+                console.log('[UM] Kondisi gagal → tampilkan login form');
+            }
+        } catch(e) {
+            console.log('[UM] Parse error:', e);
+            localStorage.removeItem('rpa_user');
+        }
+    } else {
+        console.log('[UM] Tidak ada sesi → tampilkan login form');
+    }
+});
+
+// ============================================================
+// SIDEBAR
+// ============================================================
+function toggleSidebar() {
+    document.getElementById('sidebar').classList.toggle('open');
+    document.getElementById('sidebar-overlay').classList.toggle('open');
+}
+
+// ============================================================
+// LOAD USERS
+// ============================================================
+async function loadUsers() {
+    try {
+        const { data: users, error } = await db
+            .from('users')
+            .select('id, nama, username, role, aktif, is_system_admin, created_at')
+            .order('nama');
+
+        if (error) throw error;
+
+        // Load all permissions in one query
+        const { data: allPerms } = await db
+            .from('user_module_permissions')
+            .select('id, user_id, module, role')
+            .order('module');
+
+        // Map permissions to users
+        allUsers = (users || []).map(u => ({
+            ...u,
+            permissions: (allPerms || []).filter(p => p.user_id === u.id)
+        }));
+
+        renderUsers();
+
+    } catch (e) {
+        console.error(e);
+        document.getElementById('user-list').innerHTML = `
+            <div class="empty-state">
+                <span class="icon">⚠️</span>
+                <p>Gagal memuat data. ${e.message}</p>
+            </div>`;
+    }
+}
+
+// ============================================================
+// RENDER USERS
+// ============================================================
+function renderUsers() {
+    const q      = document.getElementById('search-input').value.toLowerCase().trim();
+    const status = filterStatus;
+
+    let filtered = allUsers.filter(u => {
+        const matchQ = !q || u.nama.toLowerCase().includes(q) || u.username.toLowerCase().includes(q);
+        const matchS = status === 'semua' ? true :
+                       status === 'aktif' ? u.aktif :
+                       !u.aktif;
+        return matchQ && matchS;
+    });
+
+    const container = document.getElementById('user-list');
+    if (filtered.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <span class="icon">🔍</span>
+                <p>Tidak ada user yang sesuai filter.</p>
+            </div>`;
+        return;
+    }
+
+    container.innerHTML = filtered.map(u => renderUserCard(u)).join('');
+}
+
+function renderUserCard(u) {
+    const avatarClass = !u.aktif ? 'inactive' : u.is_system_admin ? 'admin' : '';
+    const initial     = u.nama.charAt(0).toUpperCase();
+
+    let badgesHtml = '';
+    if (!u.aktif) {
+        badgesHtml += `<span class="badge-inactive">⛔ Nonaktif</span>`;
+    }
+    if (u.is_system_admin) {
+        badgesHtml += `<span class="badge-admin">⚙️ System Admin</span>`;
+    }
+    if (u.permissions && u.permissions.length > 0) {
+        u.permissions.forEach(p => {
+            const label = MODULE_LABELS[p.module] || p.module;
+            badgesHtml += `<span class="badge-module ${p.role}">${label} · ${p.role === 'supervisor' ? '👑' : p.role === 'operator' ? '🔧' : '👁️'}</span>`;
+        });
+    }
+    if (!u.is_system_admin && (!u.permissions || u.permissions.length === 0)) {
+        badgesHtml += `<span class="badge-inactive">Belum ada akses</span>`;
+    }
+
+    const toggleLabel = u.aktif ? '⛔ Nonaktifkan' : '✅ Aktifkan';
+    const toggleTitle = u.aktif ? 'Nonaktifkan user' : 'Aktifkan user';
+
+    return `
+        <div class="user-card-item" id="uc-${u.id}">
+            <div class="user-card-top">
+                <div class="uc-avatar ${avatarClass}">${initial}</div>
+                <div class="uc-info">
+                    <div class="uc-name">${escHtml(u.nama)}</div>
+                    <div class="uc-username">@${escHtml(u.username)}</div>
+                    <div class="uc-badges">${badgesHtml}</div>
+                </div>
+                <div class="uc-actions">
+                    <button class="btn-icon" title="Edit user" onclick="openEditModal('${u.id}')">✏️</button>
+                    <button class="btn-icon ${u.aktif ? 'danger' : ''}" title="${toggleTitle}"
+                        onclick="toggleAktif('${u.id}', ${u.aktif})">${u.aktif ? '⛔' : '✅'}</button>
+                </div>
+            </div>
+        </div>`;
+}
+
+function escHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ============================================================
+// FILTER
+// ============================================================
+function setFilter(f) {
+    filterStatus = f;
+    ['semua','aktif','nonaktif'].forEach(t => {
+        document.getElementById(`tab-${t}`).classList.toggle('active', t === f);
+    });
+    renderUsers();
+}
+
+function filterUsers() { renderUsers(); }
+
+// ============================================================
+// TOGGLE AKTIF
+// ============================================================
+async function toggleAktif(userId, currentAktif) {
+    const newVal  = !currentAktif;
+    const label   = newVal ? 'diaktifkan' : 'dinonaktifkan';
+    const u       = allUsers.find(x => x.id === userId);
+    if (!u) return;
+
+    // Prevent self-deactivation
+    if (userId === currentUser.id && !newVal) {
+        showToast('Tidak bisa menonaktifkan akun sendiri.', 'error');
+        return;
+    }
+
+    try {
+        const { error } = await db
+            .from('users')
+            .update({ aktif: newVal, updated_at: new Date().toISOString() })
+            .eq('id', userId);
+
+        if (error) throw error;
+
+        u.aktif = newVal;
+        renderUsers();
+        showToast(`User @${u.username} berhasil ${label}.`);
+
+    } catch (e) {
+        console.error(e);
+        showToast('Gagal mengubah status user.', 'error');
+    }
+}
+
+// ============================================================
+// MODAL: CREATE
+// ============================================================
+function openCreateModal() {
+    editingUserId = null;
+    modalPerms    = [];
+
+    document.getElementById('modal-title').textContent = 'Tambah User Baru';
+    document.getElementById('f-nama').value     = '';
+    document.getElementById('f-username').value = '';
+    document.getElementById('f-password').value = '';
+    document.getElementById('f-pin').value      = '';
+    document.getElementById('f-is-admin').checked = false;
+    document.getElementById('f-aktif').checked    = true;
+
+    document.getElementById('f-username').disabled  = false;
+    document.getElementById('lbl-password').innerHTML = 'Password <span style="color:#dc2626">*</span>';
+    document.getElementById('hint-password').textContent = '';
+    document.getElementById('grp-aktif').style.display = 'none';
+
+    onAdminToggle();
+    renderPermTable();
+    hideModalAlert();
+    checkPinVisibility();
+
+    document.getElementById('modal-user').classList.add('open');
+}
+
+// ============================================================
+// MODAL: EDIT
+// ============================================================
+async function openEditModal(userId) {
+    const u = allUsers.find(x => x.id === userId);
+    if (!u) return;
+
+    editingUserId = userId;
+    modalPerms    = (u.permissions || []).map(p => ({ id: p.id, module: p.module, role: p.role }));
+
+    document.getElementById('modal-title').textContent = `Edit User — ${u.nama}`;
+    document.getElementById('f-nama').value     = u.nama;
+    document.getElementById('f-username').value = u.username;
+    document.getElementById('f-password').value = '';
+    document.getElementById('f-pin').value      = u.pin || '';
+    document.getElementById('f-is-admin').checked = !!u.is_system_admin;
+    document.getElementById('f-aktif').checked    = !!u.aktif;
+
+    document.getElementById('f-username').disabled = true;
+    document.getElementById('lbl-password').innerHTML = 'Password Baru';
+    document.getElementById('hint-password').textContent = 'Kosongkan jika tidak ingin mengubah password.';
+    document.getElementById('grp-aktif').style.display = 'flex';
+
+    onAdminToggle();
+    renderPermTable();
+    hideModalAlert();
+    checkPinVisibility();
+
+    document.getElementById('modal-user').classList.add('open');
+}
+
+function closeModal() {
+    document.getElementById('modal-user').classList.remove('open');
+}
+
+// ============================================================
+// CONFIRM MODAL
+// ============================================================
+function openConfirm(message, onOk) {
+    document.getElementById('confirm-body').textContent = message;
+    document.getElementById('btn-confirm-ok').onclick = () => { closeConfirm(); onOk(); };
+    document.getElementById('modal-confirm').classList.add('open');
+}
+function closeConfirm() {
+    document.getElementById('modal-confirm').classList.remove('open');
+    document.getElementById('btn-confirm-ok').onclick = '';
+}
+
+// ============================================================
+// ADMIN TOGGLE
+// ============================================================
+function onAdminToggle() {
+    const isAdmin = document.getElementById('f-is-admin').checked;
+    document.getElementById('admin-note').style.display  = isAdmin ? 'flex' : 'none';
+    document.getElementById('perm-section').style.display = isAdmin ? 'none' : 'block';
+    checkPinVisibility();
+}
+
+// ============================================================
+// PIN VISIBILITY
+// ============================================================
+function checkPinVisibility() {
+    const isAdmin     = document.getElementById('f-is-admin').checked;
+    const hasSupervisor = isAdmin || modalPerms.some(p => p.role === 'supervisor');
+    document.getElementById('grp-pin').style.display = hasSupervisor ? 'block' : 'none';
+
+    if (editingUserId) {
+        document.getElementById('lbl-pin').innerHTML = 'PIN 6 Digit';
+        document.getElementById('hint-pin').textContent = 'Kosongkan jika tidak ingin mengubah PIN.';
+    } else {
+        document.getElementById('lbl-pin').innerHTML = 'PIN 6 Digit <span style="color:#dc2626">*</span>';
+        document.getElementById('hint-pin').textContent = 'PIN dipakai untuk aksi approve/override.';
+    }
+}
+
+// ============================================================
+// PERMISSION TABLE
+// ============================================================
+function renderPermTable() {
+    const tbody = document.getElementById('perm-tbody');
+    if (modalPerms.length === 0) {
+        tbody.innerHTML = `
+            <tr id="perm-empty-row">
+                <td colspan="3" style="text-align:center;color:#9ca3af;font-style:italic;padding:16px">
+                    Belum ada akses modul
+                </td>
+            </tr>`;
+        return;
+    }
+
+    tbody.innerHTML = modalPerms.map((p, idx) => `
+        <tr>
+            <td><strong>${MODULE_LABELS[p.module] || p.module}</strong></td>
+            <td>
+                <select class="badge-module ${p.role}" style="border:none;background:transparent;font-size:13px;font-weight:600;cursor:pointer"
+                    onchange="changePermRole(${idx}, this.value)">
+                    <option value="supervisor" ${p.role==='supervisor'?'selected':''}>👑 Supervisor</option>
+                    <option value="operator"   ${p.role==='operator'  ?'selected':''}>🔧 Operator</option>
+                    <option value="viewer"     ${p.role==='viewer'    ?'selected':''}>👁️ Viewer</option>
+                </select>
+            </td>
+            <td style="text-align:right">
+                <button class="btn-sm danger" onclick="removePermRow(${idx})">✕ Hapus</button>
+            </td>
+        </tr>`).join('');
+}
+
+function addPermissionRow() {
+    const modEl  = document.getElementById('perm-add-module');
+    const roleEl = document.getElementById('perm-add-role');
+    const mod    = modEl.value;
+    const role   = roleEl.value;
+
+    if (!mod)  { showModalAlert('Pilih modul terlebih dahulu.'); return; }
+    if (!role) { showModalAlert('Pilih role terlebih dahulu.'); return; }
+
+    if (modalPerms.find(p => p.module === mod)) {
+        showModalAlert(`Modul ${MODULE_LABELS[mod]} sudah ada. Ubah role dari tabel di atas.`);
+        return;
+    }
+
+    hideModalAlert();
+    modalPerms.push({ module: mod, role: role });
+    modEl.value  = '';
+    roleEl.value = '';
+    renderPermTable();
+    checkPinVisibility();
+
+    // Disable used module in dropdown
+    refreshModuleDropdown();
+}
+
+function removePermRow(idx) {
+    const mod = modalPerms[idx]?.module || 'akses ini';
+    openConfirm(`Yakin ingin menghapus akses "${mod}"?`, () => {
+        modalPerms.splice(idx, 1);
+        renderPermTable();
+        checkPinVisibility();
+        refreshModuleDropdown();
+    });
+}
+
+function changePermRole(idx, newRole) {
+    modalPerms[idx].role = newRole;
+    checkPinVisibility();
+}
+
+function refreshModuleDropdown() {
+    const sel  = document.getElementById('perm-add-module');
+    const used = new Set(modalPerms.map(p => p.module));
+    Array.from(sel.options).forEach(opt => {
+        opt.disabled = used.has(opt.value);
+    });
+}
+
+// ============================================================
+// SAVE USER
+// ============================================================
+async function saveUser() {
+    hideModalAlert();
+
+    const nama     = document.getElementById('f-nama').value.trim();
+    const username = document.getElementById('f-username').value.trim();
+    const password = document.getElementById('f-password').value;
+    const pin      = document.getElementById('f-pin').value.trim();
+    const isAdmin  = document.getElementById('f-is-admin').checked;
+    const aktif    = document.getElementById('f-aktif').checked;
+
+    const isCreate = !editingUserId;
+
+    // Validation
+    if (!nama)     { showModalAlert('Nama lengkap wajib diisi.'); return; }
+    if (!username) { showModalAlert('Username wajib diisi.'); return; }
+    if (isCreate && !password) { showModalAlert('Password wajib diisi untuk user baru.'); return; }
+    if (password && password.length < 6) { showModalAlert('Password minimal 6 karakter.'); return; }
+
+    // PIN validation: required if supervisor role or admin
+    const hasSupervisorRole = isAdmin || modalPerms.some(p => p.role === 'supervisor');
+    if (hasSupervisorRole && isCreate && !pin) {
+        showModalAlert('PIN wajib diisi untuk user dengan role Supervisor atau System Admin.'); return;
+    }
+    if (pin && !/^\d{6}$/.test(pin)) {
+        showModalAlert('PIN harus tepat 6 digit angka.'); return;
+    }
+
+    const btn = document.getElementById('btn-save');
+    btn.disabled    = true;
+    btn.textContent = 'Menyimpan…';
+
+    try {
+        if (isCreate) {
+            await createUser(nama, username, password, pin, isAdmin);
+        } else {
+            await updateUser(editingUserId, nama, password, pin, isAdmin, aktif);
+        }
+    } finally {
+        btn.disabled    = false;
+        btn.textContent = 'Simpan';
+    }
+}
+
+async function createUser(nama, username, password, pin, isAdmin) {
+    // Check username availability
+    const { data: existing } = await db
+        .from('users')
+        .select('id')
+        .eq('username', username)
+        .maybeSingle();
+
+    if (existing) { showModalAlert('Username sudah digunakan.'); return; }
+
+    const hash = await sha256(password);
+    const newRole = isAdmin ? 'SUPERVISOR' : 'OPERATOR'; // backward compat
+
+    const { data: newUser, error } = await db
+        .from('users')
+        .insert({
+            nama,
+            username,
+            password_hash: hash,
+            role: newRole,
+            pin: pin || null,
+            aktif: true,
+            is_system_admin: isAdmin,
+        })
+        .select('id, nama, username, role, aktif, is_system_admin')
+        .single();
+
+    if (error) throw error;
+
+    // Save permissions
+    if (!isAdmin && modalPerms.length > 0) {
+        const permsToInsert = modalPerms.map(p => ({
+            user_id: newUser.id,
+            module:  p.module,
+            role:    p.role,
+        }));
+        const { error: permErr } = await db
+            .from('user_module_permissions')
+            .insert(permsToInsert);
+        if (permErr) throw permErr;
+    }
+
+    closeModal();
+    showToast(`User @${username} berhasil dibuat.`);
+    await loadUsers();
+}
+
+async function updateUser(userId, nama, password, pin, isAdmin, aktif) {
+    const updateData = {
+        nama,
+        is_system_admin: isAdmin,
+        role: isAdmin ? 'SUPERVISOR' : 'OPERATOR', // backward compat
+        aktif,
+        updated_at: new Date().toISOString(),
+    };
+    if (password) {
+        updateData.password_hash = await sha256(password);
+    }
+    if (pin) {
+        updateData.pin = pin;
+    } else if (!pin && !document.getElementById('f-pin').value) {
+        // If field is empty on edit, keep existing (don't overwrite)
+    }
+
+    const { error } = await db
+        .from('users')
+        .update(updateData)
+        .eq('id', userId);
+
+    if (error) throw error;
+
+    // Sync permissions: delete all existing, re-insert current modalPerms
+    if (!isAdmin) {
+        await db.from('user_module_permissions').delete().eq('user_id', userId);
+
+        if (modalPerms.length > 0) {
+            const permsToInsert = modalPerms.map(p => ({
+                user_id: userId,
+                module:  p.module,
+                role:    p.role,
+            }));
+            const { error: permErr } = await db
+                .from('user_module_permissions')
+                .insert(permsToInsert);
+            if (permErr) throw permErr;
+        }
+    }
+
+    // If switched to admin, remove explicit module permissions (not needed)
+    if (isAdmin) {
+        await db.from('user_module_permissions').delete().eq('user_id', userId);
+    }
+
+    const u = allUsers.find(x => x.id === userId);
+    closeModal();
+    showToast(`User @${u?.username} berhasil diperbarui.`);
+    await loadUsers();
+
+    // Update session if editing self
+    if (userId === currentUser.id) {
+        currentUser.nama           = nama;
+        currentUser.is_system_admin = isAdmin;
+        localStorage.setItem('rpa_user', JSON.stringify(currentUser));
+    sessionStorage.setItem('rpa_user', JSON.stringify(currentUser));
+        document.getElementById('user-avatar').textContent  = nama.charAt(0).toUpperCase();
+        document.getElementById('sidebar-name').textContent = nama;
+    }
+}
+
+function toggleSidebar() {
+    document.getElementById('sidebar').classList.toggle('open');
+    document.getElementById('sidebar-overlay').classList.toggle('open');
+}
+
+function doLogout() {
+    localStorage.removeItem('rpa_user');
+    sessionStorage.removeItem('rpa_user');
+    location.reload();
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+    const saved = sessionStorage.getItem('rpa_user') || localStorage.getItem('rpa_user');
+    if (saved) {
+        try {
+            const user = JSON.parse(saved);
+            const ok = user && user.id && (user.is_system_admin || user.role === 'SUPERVISOR');
+            if (ok) { currentUser = user; startApp(); }
+        } catch(e) {}
+    }
+});
+</script>
+</body>
+</html>

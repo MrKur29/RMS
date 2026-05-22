@@ -1,0 +1,2186 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Batch Ayam Hidup — Kurnia's Food</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+/* ===== RESET & BASE ===== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; color: #111827; font-size: 14px; }
+button { cursor: pointer; font-family: inherit; }
+a { text-decoration: none; }
+
+/* ===== LOGIN ===== */
+#login-screen {
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh;
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 60%, #2563eb 100%);
+}
+.login-card {
+    background: white; border-radius: 16px; padding: 44px 40px;
+    width: 400px; box-shadow: 0 25px 60px rgba(0,0,0,0.4);
+}
+.login-logo { text-align: center; margin-bottom: 36px; }
+.login-logo .icon { font-size: 48px; display: block; margin-bottom: 12px; }
+.login-logo h1 { font-size: 22px; font-weight: 800; color: #111827; }
+.login-logo p { font-size: 13px; color: #6b7280; margin-top: 4px; }
+.form-group { margin-bottom: 20px; }
+.form-group label { display: block; font-size: 12px; font-weight: 700; color: #374151; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+.form-group input, .form-group select, .form-group textarea {
+    width: 100%; padding: 11px 14px; border: 1.5px solid #d1d5db;
+    border-radius: 8px; font-size: 15px; transition: border-color 0.2s, box-shadow 0.2s;
+    color: #111827; background: white; font-family: inherit;
+}
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+    outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.12);
+}
+.form-group textarea { resize: vertical; min-height: 72px; font-size: 14px; }
+.btn-login {
+    width: 100%; padding: 13px; background: #2563eb; color: white;
+    border: none; border-radius: 8px; font-size: 15px; font-weight: 700;
+    transition: background 0.2s, transform 0.1s;
+}
+.btn-login:hover { background: #1d4ed8; }
+.btn-login:active { transform: scale(0.98); }
+.btn-login:disabled { background: #93c5fd; cursor: not-allowed; }
+.login-error {
+    background: #fee2e2; color: #dc2626; padding: 10px 14px;
+    border-radius: 8px; font-size: 13px; margin-bottom: 18px;
+    border: 1px solid #fecaca; display: none;
+}
+.login-version { text-align: center; margin-top: 20px; font-size: 11px; color: #9ca3af; }
+
+/* ===== APP LAYOUT ===== */
+#app-screen { display: none; height: 100vh; overflow: hidden; }
+.app-layout { display: flex; height: 100%; }
+
+/* ===== SIDEBAR OVERLAY ===== */
+.sidebar-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.5); z-index: 90;
+}
+.sidebar-overlay.visible { display: block; }
+
+/* ===== SIDEBAR ===== */
+.sidebar {
+    width: 230px; flex-shrink: 0; background: #0f172a; color: white;
+    display: flex; flex-direction: column; overflow-y: auto;
+    scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.1) transparent;
+    transition: transform 0.28s cubic-bezier(0.4,0,0.2,1);
+    z-index: 100;
+}
+.sidebar-brand {
+    padding: 20px 18px 16px; border-bottom: 1px solid rgba(255,255,255,0.08);
+    flex-shrink: 0;
+}
+.sidebar-brand h2 { font-size: 15px; font-weight: 800; color: #f8fafc; display: flex; align-items: center; gap: 8px; }
+.sidebar-brand p { font-size: 11px; color: rgba(255,255,255,0.4); margin-top: 3px; }
+
+.sidebar-nav { flex: 1; padding: 10px 0; }
+.nav-section-label {
+    font-size: 10px; font-weight: 700; color: rgba(255,255,255,0.3);
+    text-transform: uppercase; letter-spacing: 1px;
+    padding: 12px 18px 4px;
+}
+.nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 18px; font-size: 13px; color: rgba(255,255,255,0.65);
+    cursor: pointer; transition: all 0.15s;
+    border-left: 3px solid transparent; position: relative;
+}
+.nav-item:hover:not(.disabled) { background: rgba(255,255,255,0.07); color: white; }
+.nav-item.active {
+    background: rgba(37,99,235,0.2); color: #93c5fd;
+    border-left-color: #3b82f6;
+}
+.nav-item.disabled { opacity: 0.3; cursor: not-allowed; }
+.nav-icon { font-size: 15px; width: 22px; text-align: center; flex-shrink: 0; }
+.nav-label-text { flex: 1; }
+.nav-badge {
+    background: #dc2626; color: white; font-size: 10px; font-weight: 800;
+    padding: 1px 6px; border-radius: 10px; min-width: 18px; text-align: center;
+}
+.nav-tag {
+    font-size: 9px; font-weight: 700; padding: 2px 5px; border-radius: 4px;
+    background: rgba(37,99,235,0.3); color: #93c5fd;
+}
+
+.sidebar-footer {
+    padding: 14px 18px; border-top: 1px solid rgba(255,255,255,0.08); flex-shrink: 0;
+}
+.user-card { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.user-avatar {
+    width: 34px; height: 34px; border-radius: 50%; background: #2563eb;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 800; color: white; flex-shrink: 0;
+}
+.user-info-text .user-name { font-size: 13px; font-weight: 700; color: #f8fafc; }
+.user-info-text .user-role { font-size: 11px; color: rgba(255,255,255,0.45); margin-top: 1px; }
+.btn-logout {
+    width: 100%; padding: 8px 12px; background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12); color: rgba(255,255,255,0.6);
+    border-radius: 6px; font-size: 12px; font-weight: 600; transition: all 0.15s;
+}
+.btn-logout:hover { background: rgba(220,38,38,0.25); border-color: rgba(220,38,38,0.5); color: #fca5a5; }
+
+/* ===== MAIN AREA ===== */
+.main-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+/* ===== TOP BAR ===== */
+.topbar {
+    background: white; height: 58px; padding: 0 20px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid #e5e7eb; box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+    gap: 12px;
+}
+.topbar-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.topbar-left h1 { font-size: 17px; font-weight: 800; color: #111827; white-space: nowrap; }
+.topbar-left p { font-size: 12px; color: #9ca3af; margin-top: 1px; white-space: nowrap; }
+.topbar-left-text { min-width: 0; }
+.topbar-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.btn-hamburger {
+    display: none; align-items: center; justify-content: center;
+    width: 40px; height: 40px; border-radius: 8px;
+    background: #f3f4f6; border: 1.5px solid #e5e7eb;
+    font-size: 18px; color: #374151; flex-shrink: 0;
+    transition: background 0.15s;
+}
+.btn-hamburger:hover { background: #e5e7eb; }
+.clock-display {
+    font-size: 14px; font-weight: 700; color: #374151;
+    background: #f9fafb; padding: 6px 10px; border-radius: 6px;
+    border: 1px solid #e5e7eb; white-space: nowrap;
+}
+.last-updated-text { font-size: 11px; color: #9ca3af; white-space: nowrap; }
+.btn-refresh {
+    display: flex; align-items: center; gap: 5px;
+    padding: 8px 14px; background: white; border: 1.5px solid #d1d5db;
+    border-radius: 7px; font-size: 12px; font-weight: 700; color: #374151;
+    transition: all 0.15s; white-space: nowrap; min-height: 40px;
+}
+.btn-refresh:hover { background: #f3f4f6; border-color: #9ca3af; }
+.btn-refresh.loading { opacity: 0.5; pointer-events: none; }
+.refresh-icon { display: inline-block; transition: transform 0.5s; }
+.btn-refresh.loading .refresh-icon { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ===== CONTENT AREA ===== */
+.content-area { flex: 1; overflow-y: auto; padding: 20px 24px 32px; }
+
+/* ===== SUMMARY CARDS ===== */
+.cards-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 12px; margin-bottom: 20px;
+}
+.summary-card {
+    background: white; border-radius: 10px; padding: 16px 14px;
+    border-left: 4px solid #e5e7eb;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    transition: transform 0.15s, box-shadow 0.15s;
+}
+.summary-card:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+.summary-card.c-blue   { border-left-color: #2563eb; }
+.summary-card.c-green  { border-left-color: #16a34a; }
+.summary-card.c-amber  { border-left-color: #d97706; }
+.summary-card.c-red    { border-left-color: #dc2626; }
+.summary-card.c-purple { border-left-color: #2563eb; }
+.summary-card.c-teal   { border-left-color: #2563eb; }
+.sc-label { font-size: 10px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.6px; }
+.sc-value { font-size: 28px; font-weight: 900; color: #111827; line-height: 1.1; margin: 5px 0 3px; }
+.sc-value.small { font-size: 20px; }
+.sc-sub { font-size: 11px; color: #9ca3af; }
+
+/* ===== FILTER BAR ===== */
+.filter-bar {
+    display: flex; align-items: center; gap: 10px;
+    background: white; border-radius: 10px; padding: 12px 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06); margin-bottom: 14px;
+    flex-wrap: wrap;
+}
+.filter-bar label { font-size: 12px; font-weight: 700; color: #374151; white-space: nowrap; }
+.filter-bar input[type="date"], .filter-bar select {
+    padding: 7px 10px; border: 1.5px solid #d1d5db; border-radius: 7px;
+    font-size: 13px; color: #111827; background: white; font-family: inherit;
+    transition: border-color 0.2s;
+}
+.filter-bar input[type="date"]:focus, .filter-bar select:focus {
+    outline: none; border-color: #2563eb;
+}
+.filter-bar .spacer { flex: 1; }
+.btn-baru {
+    display: flex; align-items: center; gap: 6px;
+    padding: 9px 16px; background: #2563eb; color: white;
+    border: none; border-radius: 7px; font-size: 13px; font-weight: 700;
+    transition: background 0.15s; white-space: nowrap; min-height: 38px;
+    touch-action: manipulation;
+}
+.btn-baru:hover { background: #1d4ed8; }
+.btn-baru:active { transform: scale(0.98); }
+
+/* ===== PANEL ===== */
+.panel { background: white; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); overflow: hidden; margin-bottom: 14px; }
+.panel-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 13px 16px; border-bottom: 1px solid #f3f4f6;
+}
+.panel-title { font-size: 14px; font-weight: 800; color: #111827; }
+.panel-pill {
+    font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px;
+    background: #f3f4f6; color: #374151;
+}
+.panel-pill.alert { background: #fee2e2; color: #dc2626; }
+.panel-pill.ok { background: #d1fae5; color: #065f46; }
+
+/* ===== TABLE ===== */
+.tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.tbl { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 820px; }
+.tbl thead th {
+    text-align: left; padding: 9px 14px; font-size: 10px; font-weight: 700;
+    color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;
+    background: #f9fafb; border-bottom: 1px solid #f0f2f5; white-space: nowrap;
+}
+.tbl tbody td { padding: 10px 14px; border-bottom: 1px solid #f9fafb; vertical-align: middle; }
+.tbl tbody tr:last-child td { border-bottom: none; }
+.tbl tbody tr:hover td { background: #fafafa; }
+.tbl-sub { font-size: 11px; color: #6b7280; margin-top: 2px; }
+
+/* ===== BADGES ===== */
+.badge {
+    display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 12px;
+    font-size: 11px; font-weight: 700; white-space: nowrap;
+}
+.b-draft    { background: #f3f4f6;  color: #6b7280; }
+.b-active   { background: #d1fae5;  color: #065f46; }
+.b-complete { background: #dbeafe;  color: #1e40af; }
+
+/* Selisih color */
+.selisih-ok   { color: #16a34a; font-weight: 700; }
+.selisih-warn { color: #d97706; font-weight: 700; }
+.selisih-bad  { color: #dc2626; font-weight: 700; }
+.selisih-na   { color: #9ca3af; }
+
+/* ===== BUTTONS ===== */
+.btn {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 7px 12px; border-radius: 6px; border: none;
+    font-size: 12px; font-weight: 700; transition: all 0.15s;
+    min-height: 34px; touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent; white-space: nowrap;
+}
+.btn-edit  { background: #f3f4f6; color: #374151; }
+.btn-edit:hover { background: #e5e7eb; }
+.btn-aktif { background: #d1fae5; color: #065f46; }
+.btn-aktif:hover { background: #16a34a; color: white; }
+.btn-done  { background: #dbeafe; color: #1e40af; }
+.btn-done:hover { background: #2563eb; color: white; }
+.btn-sm { padding: 5px 10px; font-size: 11px; min-height: 28px; }
+
+/* ===== EMPTY STATE ===== */
+.empty {
+    text-align: center; padding: 40px 16px; color: #9ca3af; font-size: 13px;
+}
+.empty .e-icon { font-size: 32px; margin-bottom: 10px; }
+
+/* ===== LOADING SKELETON ===== */
+.skeleton {
+    background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.4s infinite;
+    border-radius: 4px; display: inline-block;
+}
+@keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+/* ===== MODAL ===== */
+.modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.55); z-index: 200;
+    align-items: flex-start; justify-content: center;
+    padding: 32px 16px; overflow-y: auto;
+}
+.modal-overlay.open { display: flex; }
+.modal-box {
+    background: white; border-radius: 14px; padding: 28px;
+    width: 560px; max-width: 100%;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    animation: modal-in 0.2s ease;
+    margin: auto;
+}
+.modal-box.modal-sm { width: 420px; }
+@keyframes modal-in { from{transform:scale(0.92);opacity:0} to{transform:scale(1);opacity:1} }
+.modal-title { font-size: 16px; font-weight: 800; margin-bottom: 4px; }
+.modal-desc  { font-size: 13px; color: #6b7280; margin-bottom: 20px; }
+.modal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px; }
+.modal-grid .full { grid-column: 1 / -1; }
+.form-group.modal-fg { margin-bottom: 0; }
+.form-group.modal-fg input, .form-group.modal-fg select, .form-group.modal-fg textarea {
+    font-size: 14px; padding: 9px 12px;
+}
+.form-group.modal-fg label { font-size: 11px; margin-bottom: 5px; }
+.modal-divider {
+    grid-column: 1 / -1; border: none; border-top: 1px solid #f0f2f5;
+    margin: 4px 0;
+}
+.modal-section-label {
+    grid-column: 1 / -1; font-size: 10px; font-weight: 800; color: #6b7280;
+    text-transform: uppercase; letter-spacing: 0.8px; padding-top: 4px;
+}
+.modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 22px; flex-wrap: wrap; }
+.btn-modal-cancel {
+    padding: 9px 20px; background: #f3f4f6; border: none;
+    border-radius: 7px; font-size: 13px; font-weight: 600; color: #374151;
+}
+.btn-modal-cancel:hover { background: #e5e7eb; }
+.btn-modal-draft {
+    padding: 9px 20px; background: #f3f4f6; border: 1.5px solid #d1d5db;
+    border-radius: 7px; font-size: 13px; font-weight: 700; color: #374151;
+}
+.btn-modal-draft:hover { background: #e5e7eb; }
+.btn-modal-primary {
+    padding: 9px 20px; background: #2563eb; border: none;
+    border-radius: 7px; font-size: 13px; font-weight: 700; color: white;
+}
+.btn-modal-primary:hover { background: #1d4ed8; }
+.btn-modal-primary:disabled { background: #93c5fd; cursor: not-allowed; }
+.btn-modal-danger {
+    padding: 9px 20px; background: #dc2626; border: none;
+    border-radius: 7px; font-size: 13px; font-weight: 700; color: white;
+}
+.btn-modal-danger:hover { background: #b91c1c; }
+.modal-info-box {
+    background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px;
+    padding: 10px 14px; font-size: 12px; color: #1e40af;
+    grid-column: 1 / -1; margin-top: 4px;
+}
+.modal-warn-box {
+    background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px;
+    padding: 10px 14px; font-size: 12px; color: #92400e;
+    grid-column: 1 / -1; margin-top: 4px;
+}
+.selisih-preview {
+    grid-column: 1 / -1; background: #f9fafb; border: 1px solid #e5e7eb;
+    border-radius: 8px; padding: 10px 14px; font-size: 13px;
+}
+.selisih-preview strong { font-size: 20px; }
+
+/* ===== PIN MODAL ===== */
+.pin-input {
+    width: 100%; padding: 12px; text-align: center; font-size: 24px;
+    font-weight: 800; letter-spacing: 10px; border: 1.5px solid #d1d5db;
+    border-radius: 8px; margin-bottom: 16px;
+}
+.pin-input:focus { outline: none; border-color: #2563eb; }
+.pin-error { color: #dc2626; font-size: 12px; font-weight: 700; margin-bottom: 12px; display: none; }
+
+/* ===== SUPERVISOR BADGE ===== */
+.supervisor-section { display: none; }
+.is-supervisor .supervisor-section { display: block; }
+
+/* ===== COMBOBOX ===== */
+.combobox-wrap { position: relative; }
+.combobox-input {
+    width: 100%; padding: 9px 12px; border: 1.5px solid #d1d5db;
+    border-radius: 8px; font-size: 14px; font-family: inherit; color: #111827;
+    background: white; transition: border-color 0.2s, box-shadow 0.2s;
+}
+.combobox-input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.12); }
+.combobox-list {
+    display: none; position: absolute; top: calc(100% + 3px); left: 0; right: 0;
+    background: white; border: 1.5px solid #e5e7eb; border-radius: 8px;
+    max-height: 230px; overflow-y: auto; z-index: 250;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.13);
+}
+.combobox-list.open { display: block; }
+.cb-group {
+    padding: 5px 12px 3px; font-size: 10px; font-weight: 800; color: #6b7280;
+    text-transform: uppercase; letter-spacing: 0.8px;
+    background: #f9fafb; border-bottom: 1px solid #f0f2f5; position: sticky; top: 0;
+}
+.cb-item {
+    padding: 9px 14px; cursor: pointer; font-size: 13px; color: #111827;
+    border-bottom: 1px solid #f9fafb; transition: background 0.1s;
+}
+.cb-item:last-of-type { border-bottom: none; }
+.cb-item:hover, .cb-item.cb-hi { background: #eff6ff; color: #1e40af; }
+.cb-item mark { background: #fef08a; color: inherit; border-radius: 2px; padding: 0 1px; font-style: normal; }
+.cb-add {
+    padding: 9px 14px; cursor: pointer; font-size: 12px; font-weight: 700;
+    color: #2563eb; border-top: 1px solid #e5e7eb; transition: background 0.1s;
+}
+.cb-add:hover { background: #eff6ff; }
+.cb-empty { padding: 16px 14px; text-align: center; color: #9ca3af; font-size: 13px; }
+
+/* ===== TOAST ===== */
+.toast {
+    position: fixed; bottom: 24px; right: 24px; z-index: 300;
+    padding: 12px 20px; border-radius: 10px; font-size: 13px; font-weight: 600;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.2); animation: toast-in 0.3s ease; display: none;
+}
+.toast.show { display: block; }
+.toast.success { background: #065f46; color: white; }
+.toast.error   { background: #991b1b; color: white; }
+.toast.warning { background: #92400e; color: white; }
+@keyframes toast-in { from{transform:translateY(20px);opacity:0} to{transform:translateY(0);opacity:1} }
+
+/* ===== RESPONSIVE: LAPTOP (< 1280px) ===== */
+@media (max-width: 1279px) { .last-updated-text { display: none; } }
+
+/* ===== RESPONSIVE: TABLET LANDSCAPE (< 1200px) ===== */
+@media (max-width: 1199px) {
+    .cards-row { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+}
+
+/* ===== RESPONSIVE: TABLET PORTRAIT (< 1024px) ===== */
+@media (max-width: 1023px) {
+    .sidebar { position: fixed; top: 0; left: 0; height: 100%; transform: translateX(-100%); }
+    .sidebar.open { transform: translateX(0); }
+    .btn-hamburger { display: flex; }
+    .main-area { width: 100%; }
+    .content-area { padding: 16px 16px 32px; }
+    .topbar { padding: 0 16px; }
+    .nav-item { padding: 13px 18px; font-size: 14px; }
+    .btn-logout { padding: 11px 14px; font-size: 13px; }
+}
+
+/* ===== RESPONSIVE: SMALL TABLET / LARGE PHONE (< 768px) ===== */
+@media (max-width: 767px) {
+    .login-card { width: 92vw; padding: 32px 24px; }
+    .cards-row { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .sc-value { font-size: 22px; }
+    .topbar { height: 54px; }
+    .topbar-left h1 { font-size: 15px; }
+    .topbar-left p { display: none; }
+    .clock-display { font-size: 13px; padding: 5px 8px; }
+    .content-area { padding: 12px 12px 32px; }
+    .filter-bar { gap: 8px; }
+    .filter-bar label { display: none; }
+    .panel-head { padding: 11px 13px; }
+    .panel-title { font-size: 13px; }
+    .tbl { font-size: 12px; }
+    .tbl thead th { padding: 8px 10px; }
+    .tbl tbody td { padding: 9px 10px; }
+    .summary-card { padding: 13px 12px; }
+    .modal-grid { grid-template-columns: 1fr; }
+    .modal-box { padding: 20px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ==================== LOGIN ==================== -->
+<div id="login-screen">
+    <div class="login-card">
+        <div class="login-logo">
+            <span class="icon">🐔</span>
+            <h1>RPA Management System</h1>
+            <p>Rumah Potong Ayam — Sistem Manajemen Produksi</p>
+        </div>
+        <div class="login-error" id="login-error"></div>
+        <div class="form-group">
+            <label>Username</label>
+            <input type="text" id="inp-username" placeholder="Masukkan username" autocomplete="username">
+        </div>
+        <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="inp-password" placeholder="Masukkan password" autocomplete="current-password">
+        </div>
+        <button class="btn-login" id="btn-login" onclick="doLogin()">Masuk →</button>
+        <p class="login-version">v1.0 — April 2025</p>
+    </div>
+</div>
+
+<!-- ==================== APP ==================== -->
+<div id="app-screen">
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+<div class="app-layout">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-brand">
+            <div style="display:flex;align-items:center;gap:10px;"><img src="logo.png" style="height:36px;width:auto;object-fit:contain;"><span style="font-size:15px;font-weight:800;color:#f8fafc;">Kurnia's Food</span></div>
+        </div>
+
+        <nav class="sidebar-nav">
+            <div class="nav-section-label">Utama</div>
+            <div class="nav-item" onclick="navTo('Dashboard.html')">
+                <span class="nav-icon">🏠</span>
+                <span class="nav-label-text">Dashboard</span>
+            </div>
+
+            <div class="nav-section-label">Produksi</div>
+            <div class="nav-item active">
+                <span class="nav-icon">🐔</span>
+                <span class="nav-label-text">Batch Ayam Hidup</span>
+                <span class="nav-tag">Aktif</span>
+            </div>
+            <div class="nav-item" onclick="navTo('ProduksiKarkas.html')">
+                <span class="nav-icon">⚙️</span>
+                <span class="nav-label-text">Produksi Karkas</span>
+            </div>
+            <div class="nav-item" onclick="navTo('Thawing.html')">
+                <span class="nav-icon">🧊</span>
+                <span class="nav-label-text">Thawing</span>
+            </div>
+            <div class="nav-item" onclick="navTo('Chiller.html')">
+                <span class="nav-icon">❄️</span>
+                <span class="nav-label-text">Chiller</span>
+            </div>
+            <div class="nav-item" onclick="navTo('WorkOrder.html')">
+                <span class="nav-icon">📋</span>
+                <span class="nav-label-text">Work Order</span>
+            </div>
+            <div class="nav-item" onclick="navTo('Parting.html')">
+                <span class="nav-icon">✂️</span>
+                <span class="nav-label-text">Parting</span>
+            </div>
+            <div class="nav-item" onclick="navTo('Boneless.html')">
+                <span class="nav-icon">🥩</span>
+                <span class="nav-label-text">Boneless</span>
+            </div>
+            <div class="nav-item" onclick="navTo('Marinasi.html')">
+                <span class="nav-icon">🌶️</span>
+                <span class="nav-label-text">Marinasi</span>
+            </div>
+            <div class="nav-item" onclick="navTo('Blasting.html')">
+    <span class="nav-icon">🧊</span>
+    <span class="nav-label-text">Blasting</span>
+</div>
+            <div class="nav-item" onclick="navTo('ByProductKarkas.html')">
+                <span class="nav-icon">📦</span>
+                <span class="nav-label-text">By-product Karkas</span>
+            </div>
+
+            <div class="nav-section-label">Penjualan</div>
+            <div class="nav-item disabled">
+                <span class="nav-icon">🛒</span>
+                <span class="nav-label-text">Penjualan</span>
+            </div>
+
+            <div class="nav-section-label">Manajemen</div>
+            <div class="nav-item disabled supervisor-section">
+                <span class="nav-icon">✅</span>
+                <span class="nav-label-text">Koreksi &amp; Approval</span>
+            </div>
+            <div class="nav-item disabled">
+                <span class="nav-icon">📊</span>
+                <span class="nav-label-text">Traceability</span>
+            </div>
+            <div class="nav-item" onclick="navTo('MasterData.html')">
+                <span class="nav-icon">🗂️</span>
+                <span class="nav-label-text">Master Data</span>
+            </div>
+            <div class="nav-item" id="nav-user-mgmt" style="display:none" onclick="navTo('UserManagement.html')">
+                <span class="nav-icon">👥</span>
+                <span class="nav-label-text">Manajemen User</span>
+            </div>
+        </nav>
+
+        <div class="sidebar-footer">
+            <div class="user-card">
+                <div class="user-avatar" id="user-avatar">?</div>
+                <div class="user-info-text">
+                    <div class="user-name" id="sidebar-name">—</div>
+                    <div class="user-role" id="sidebar-role">—</div>
+                </div>
+            </div>
+            <button class="btn-logout" onclick="doLogout()">⬅ Keluar</button>
+        </div>
+    </aside>
+
+    <!-- MAIN -->
+    <div class="main-area">
+        <!-- TOP BAR -->
+        <div class="topbar">
+            <div class="topbar-left">
+                <button class="btn-hamburger" id="btn-hamburger" onclick="toggleSidebar()" aria-label="Buka menu">☰</button>
+                <div class="topbar-left-text">
+                    <h1>🐔 Batch Ayam Hidup</h1>
+                    <p id="topbar-date">—</p>
+                </div>
+            </div>
+            <div class="topbar-right">
+                <span class="last-updated-text" id="last-updated">—</span>
+                <span class="clock-display" id="clock">--:--:--</span>
+                <button class="btn-refresh" id="btn-refresh" onclick="loadPage()">
+                    <span class="refresh-icon">↻</span> Refresh
+                </button>
+            </div>
+        </div>
+
+        <!-- CONTENT -->
+        <div class="content-area">
+
+            <!-- SUMMARY CARDS -->
+            <div class="cards-row" id="cards-row">
+                <div class="summary-card c-blue">
+                    <div class="sc-label">Batch Hari Ini</div>
+                    <div class="sc-value skeleton" style="width:50px;height:32px"></div>
+                </div>
+                <div class="summary-card c-green">
+                    <div class="sc-label">Status Aktif</div>
+                    <div class="sc-value skeleton" style="width:50px;height:32px"></div>
+                </div>
+                <div class="summary-card c-teal">
+                    <div class="sc-label">Total Ekor Timbang</div>
+                    <div class="sc-value skeleton" style="width:70px;height:32px"></div>
+                </div>
+                <div class="summary-card c-purple">
+                    <div class="sc-label">Total Kg Timbang</div>
+                    <div class="sc-value skeleton" style="width:80px;height:32px"></div>
+                </div>
+                <div class="summary-card c-amber">
+                    <div class="sc-label">Total Mati</div>
+                    <div class="sc-value skeleton" style="width:50px;height:32px"></div>
+                </div>
+            </div>
+
+            <!-- FILTER BAR -->
+            <div class="filter-bar">
+                <label>Tanggal:</label>
+                <input type="date" id="inp-filter-date" onchange="loadPage()">
+                <label>Status:</label>
+                <select id="inp-filter-status" onchange="loadPage()">
+                    <option value="">Semua Status</option>
+                    <option value="DRAFT">Draft</option>
+                    <option value="ACTIVE">Aktif</option>
+                    <option value="COMPLETE">Selesai</option>
+                </select>
+                <div class="spacer"></div>
+                <button class="btn-baru" onclick="openModalBaru()">
+                    ＋ Batch Baru
+                </button>
+            </div>
+
+            <!-- TABLE BATCH -->
+            <div class="panel">
+                <div class="panel-head">
+                    <span class="panel-title">Daftar Batch</span>
+                    <span class="panel-pill" id="pill-batch">—</span>
+                </div>
+                <div class="tbl-wrap">
+                    <table class="tbl">
+                        <thead>
+                            <tr>
+                                <th>Kode Batch</th>
+                                <th>Status</th>
+                                <th>Kandang</th>
+                                <th>Kendaraan / Supir</th>
+                                <th>Kandang (Ekor / Kg)</th>
+                                <th>Timbang Ulang (Ekor / Kg)</th>
+                                <th>Mati (Ekor)</th>
+                                <th>Selisih Ekor</th>
+                                <th>Jam Gantung</th>
+                                <th>Catatan Medis</th>
+                                <th style="min-width:160px">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-batch">
+                            <tr><td colspan="9"><div class="empty"><div class="e-icon">⏳</div>Memuat data…</div></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div><!-- end content-area -->
+    </div><!-- end main-area -->
+</div><!-- end app-layout -->
+</div><!-- end app-screen -->
+
+<!-- ==================== MODAL BATCH (Buat / Edit) ==================== -->
+<div class="modal-overlay" id="modal-batch">
+    <div class="modal-box">
+        <div class="modal-title" id="modal-batch-title">➕ Batch Baru</div>
+        <div class="modal-desc" id="modal-batch-desc">Isi data kendaraan dan ayam. Status DRAFT boleh disubmit meski data belum lengkap.</div>
+
+        <div class="modal-grid">
+            <!-- Kode & Tanggal -->
+            <div class="form-group modal-fg">
+                <label>Kode Batch</label>
+                <input type="text" id="mb-batch-code" readonly placeholder="Auto-generate" style="background:#f9fafb;color:#6b7280;font-weight:700;letter-spacing:1px">
+            </div>
+            <div class="form-group modal-fg">
+                <label>Tanggal <span style="color:#dc2626">*</span></label>
+                <input type="date" id="mb-tanggal" onchange="onTanggalChange()">
+            </div>
+
+            <!-- Dokumen Referensi -->
+            <div class="form-group modal-fg">
+                <label>No. Referensi Supplier
+                    <span style="color:#9ca3af;font-weight:400;font-size:10px;text-transform:none"> (nota timbang dari kandang)</span>
+                </label>
+                <input type="text" id="mb-no-referensi" placeholder="cth: NT-240424-001" maxlength="100">
+            </div>
+            <div class="form-group modal-fg">
+                <label>No. Penerimaan Barang
+                    <span style="color:#9ca3af;font-weight:400;font-size:10px;text-transform:none"> (SPB internal)</span>
+                </label>
+                <input type="text" id="mb-no-spb" placeholder="cth: SPB-240424-001" maxlength="100">
+            </div>
+
+            <hr class="modal-divider">
+            <div class="modal-section-label">Data Kandang / Supplier</div>
+
+            <div class="form-group modal-fg full">
+                <label>Nama Kandang <span style="color:#9ca3af;font-weight:400;font-size:10px;text-transform:none">(wajib saat Aktifkan)</span></label>
+                <div class="combobox-wrap" id="cb-kandang-wrap">
+                    <input type="text" class="combobox-input" id="mb-kandang-search"
+                           placeholder="Ketik nama kandang…" autocomplete="off"
+                           oninput="cbKandangFilter(this.value)"
+                           onfocus="cbKandangOpen()"
+                           onkeydown="cbKandangKey(event)">
+                    <div class="combobox-list" id="cb-kandang-list"></div>
+                </div>
+                <input type="hidden" id="mb-kandang">
+            </div>
+            <div id="mb-kandang-tipe" style="display:none;grid-column:1/-1;font-size:12px;margin-top:-8px;padding:0 2px">
+                Tipe: <span id="mb-kandang-tipe-badge"></span>
+            </div>
+
+            <hr class="modal-divider">
+            <div class="modal-section-label">Data Kendaraan &amp; Ekspedisi</div>
+
+            <div class="form-group modal-fg">
+                <label>Nama Ekspedisi</label>
+                <select id="mb-ekspedisi" onchange="onEkspedisiChange()">
+                    <option value="">— Memuat… —</option>
+                </select>
+            </div>
+            <div class="form-group modal-fg">
+                <label>No. Polisi</label>
+                <input type="text" id="mb-no-polisi" placeholder="cth: B 1234 CD" maxlength="20">
+            </div>
+            <div class="form-group modal-fg">
+                <label>Nama Supir</label>
+                <select id="mb-supir" onchange="onSupirChange()">
+                    <option value="">— Pilih supir —</option>
+                </select>
+            </div>
+            <div class="form-group modal-fg">
+                <label>Jam Gantung Mulai</label>
+                <input type="datetime-local" id="mb-jam-mulai">
+            </div>
+            <div class="form-group modal-fg">
+                <label>Jam Gantung Selesai</label>
+                <input type="datetime-local" id="mb-jam-selesai">
+            </div>
+
+            <hr class="modal-divider">
+            <div class="modal-section-label">Data Kandang (dari Supplier)</div>
+
+            <div class="form-group modal-fg">
+                <label>Ekor Kandang</label>
+                <input type="number" id="mb-ekor-kandang" placeholder="Jumlah ekor" min="0" step="1" oninput="hitungSelisih()">
+            </div>
+            <div class="form-group modal-fg">
+                <label>Kg Kandang</label>
+                <input type="number" id="mb-kg-kandang" placeholder="Berat (kg)" min="0" step="0.01" oninput="hitungSelisih()">
+            </div>
+
+            <hr class="modal-divider">
+            <div class="modal-section-label">Data Timbang Ulang di RPA</div>
+
+            <div class="form-group modal-fg">
+                <label>Ekor Timbang Ulang</label>
+                <input type="number" id="mb-ekor-timbang" placeholder="Jumlah ekor" min="0" step="1" oninput="hitungSelisih()">
+            </div>
+            <div class="form-group modal-fg">
+                <label>Kg Timbang Ulang</label>
+                <input type="number" id="mb-kg-timbang" placeholder="Berat (kg)" min="0" step="0.01" oninput="hitungSelisih()">
+            </div>
+
+            <hr class="modal-divider">
+            <div class="modal-section-label">Ayam Mati Sebelum Potong</div>
+
+            <div class="form-group modal-fg">
+                <label>Ekor Mati</label>
+                <input type="number" id="mb-ekor-mati" placeholder="0" min="0" step="1" value="0" oninput="hitungSelisih()">
+            </div>
+            <div class="form-group modal-fg">
+                <label>Kg Mati</label>
+                <input type="number" id="mb-kg-mati" placeholder="0" min="0" step="0.01" value="0">
+            </div>
+
+            <!-- Selisih Preview -->
+            <div class="selisih-preview" id="selisih-preview" style="display:none">
+                <div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Selisih Ekor (otomatis)</div>
+                <strong id="selisih-val" class="selisih-na">—</strong>
+                <span id="selisih-note" style="font-size:12px;color:#6b7280;margin-left:8px"></span>
+            </div>
+
+            <hr class="modal-divider">
+            <div class="modal-section-label">Catatan</div>
+
+            <div class="form-group modal-fg full">
+                <label>Catatan Medis <span style="color:#9ca3af;font-weight:400;text-transform:none">(opsional — kondisi kesehatan ayam dari kandang)</span></label>
+                <textarea id="mb-catatan-medis" placeholder="cth: Ayam terlihat sehat, tidak ada tanda penyakit. Vaksinasi terakhir 2 minggu lalu…" maxlength="1000" rows="3"></textarea>
+            </div>
+
+            <div class="form-group modal-fg full">
+                <label>Catatan Umum <span style="color:#9ca3af;font-weight:400;text-transform:none">(opsional)</span></label>
+                <textarea id="mb-catatan" placeholder="Catatan tambahan lainnya…" maxlength="500" rows="2"></textarea>
+            </div>
+
+            <div class="modal-info-box" id="modal-draft-info">
+                💡 <strong>Mode DRAFT:</strong> Produksi Karkas sudah bisa dimulai meski data belum lengkap. Klik <em>Simpan &amp; Aktifkan</em> untuk mengunci data dan menghitung selisih ekor.
+            </div>
+        </div>
+
+        <div class="modal-actions">
+            <button class="btn-modal-cancel" onclick="closeModalBatch()">Batal</button>
+            <button class="btn-modal-draft" id="btn-save-draft" onclick="saveBatch('DRAFT')">💾 Simpan Draft</button>
+            <button class="btn-modal-primary" id="btn-save-aktif" onclick="saveBatch('ACTIVE')">✓ Simpan &amp; Aktifkan</button>
+        </div>
+    </div>
+</div>
+
+<!-- ==================== MODAL KONFIRMASI SELESAI (Supervisor) ==================== -->
+<div class="modal-overlay" id="modal-selesai">
+    <div class="modal-box modal-sm">
+        <div class="modal-title">✅ Tandai Batch Selesai</div>
+        <div class="modal-desc">Batch: <strong id="ms-batch-code">—</strong><br>Tindakan ini tidak dapat dibatalkan. Masukkan PIN Supervisor untuk konfirmasi.</div>
+        <input type="password" class="pin-input" id="ms-pin" placeholder="● ● ● ● ● ●" maxlength="6" inputmode="numeric"
+               oninput="this.value=this.value.replace(/\D/g,'')">
+        <div class="pin-error" id="ms-pin-error">PIN salah. Coba lagi.</div>
+        <div class="modal-actions">
+            <button class="btn-modal-cancel" onclick="closeModalSelesai()">Batal</button>
+            <button class="btn-modal-primary" onclick="submitSelesai()">✅ Konfirmasi Selesai</button>
+        </div>
+    </div>
+</div>
+
+<!-- ==================== MODAL KONFIRMASI HAPUS / VOID ==================== -->
+<div class="modal-overlay" id="modal-konfirmasi">
+    <div class="modal-box modal-sm">
+        <div class="modal-title" id="mk-title">Konfirmasi</div>
+        <div class="modal-desc" id="mk-desc">—</div>
+        <div class="modal-actions">
+            <button class="btn-modal-cancel" onclick="closeModalKonfirmasi()">Batal</button>
+            <button class="btn-modal-danger" id="mk-btn-ok" onclick="">Ya, Lanjutkan</button>
+        </div>
+    </div>
+</div>
+
+<!-- ==================== MODAL QUICK-ADD MASTER ==================== -->
+<div class="modal-overlay" id="modal-tambah-master">
+    <div class="modal-box modal-sm">
+        <div class="modal-title" id="mt-title">➕ Tambah Baru</div>
+        <div class="modal-grid" style="margin-top:16px">
+            <!-- Filter ekspedisi (hanya muncul saat tambah supir) -->
+            <div class="form-group modal-fg full" id="mt-eks-row" style="display:none">
+                <label>Ekspedisi</label>
+                <select id="mt-eks-filter">
+                    <option value="">— Tanpa ekspedisi —</option>
+                </select>
+            </div>
+            <!-- Tipe kandang (hanya muncul saat tambah kandang) -->
+            <div class="form-group modal-fg full" id="mt-tipe-row" style="display:none">
+                <label>Tipe Kandang <span style="color:#dc2626">*</span></label>
+                <select id="mt-tipe-kandang" onchange="onMtTipeChange()">
+                    <option value="">— Pilih tipe —</option>
+                </select>
+            </div>
+            <!-- Inline tambah tipe baru (muncul saat pilih "＋ Tipe baru") -->
+            <div id="mt-tipe-new-row" style="display:none;grid-column:1/-1">
+                <div style="display:flex;gap:8px;align-items:center">
+                    <input type="text" id="mt-tipe-new-label" placeholder="Nama tipe baru (cth: Kemitraan)"
+                           style="flex:1;padding:8px 10px;border:1.5px solid #2563eb;border-radius:7px;font-size:13px;font-family:inherit">
+                    <button type="button" onclick="submitTipeKandangBaru()"
+                            style="padding:8px 14px;background:#2563eb;color:white;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer">
+                        Simpan Tipe
+                    </button>
+                    <button type="button" onclick="cancelTipeKandangBaru()"
+                            style="padding:8px 10px;background:#f3f4f6;border:none;border-radius:7px;font-size:12px;color:#374151;cursor:pointer">
+                        ✕
+                    </button>
+                </div>
+                <div id="mt-tipe-new-error" style="display:none;color:#dc2626;font-size:11px;font-weight:700;margin-top:4px"></div>
+            </div>
+            <!-- Nama -->
+            <div class="form-group modal-fg full">
+                <label id="mt-label">Nama</label>
+                <input type="text" id="mt-inp" maxlength="150" placeholder="Tulis nama baru…">
+            </div>
+            <!-- No HP (opsional) -->
+            <div class="form-group modal-fg full">
+                <label>No. HP / Telp <span style="color:#9ca3af;font-weight:400;text-transform:none">(opsional)</span></label>
+                <input type="tel" id="mt-no-hp" maxlength="30" placeholder="cth: 0812-0000-0000">
+            </div>
+            <!-- Error -->
+            <div id="mt-error" style="display:none;color:#dc2626;font-size:12px;font-weight:700;grid-column:1/-1"></div>
+        </div>
+        <div class="modal-actions">
+            <button class="btn-modal-cancel" onclick="closeModalTambahMaster()">Batal</button>
+            <button class="btn-modal-primary" id="mt-btn-ok" onclick="submitTambahMaster()">Simpan</button>
+        </div>
+    </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ============================================================
+// KONFIGURASI
+// ============================================================
+const SUPABASE_URL = 'https://dxixqyokuqrdprupsvic.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR4aXhxeW9rdXFyZHBydXBzdmljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5NjM3ODcsImV4cCI6MjA5MjUzOTc4N30.D_yaPwNbe4FFg_hmDeJ9cuxzbNvXZT8l1_TyZuq1t1M';
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const REFRESH_MS = 60000; // 60 detik
+
+// Format batch code: KKYYMMDDXX
+// KK  = 2-huruf kode fasilitas (ubah sesuai kebutuhan)
+// YY  = tahun 2-digit  (26 = 2026)
+// MM  = bulan 2-digit  (04 = April)
+// DD  = hari 2-digit   (24)
+// XX  = nomer urut batch harian (01, 02, 03…)
+// Contoh: RB26042401
+const BATCH_PREFIX = 'KF'; // ← ubah kode fasilitas di sini
+
+// ============================================================
+// STATE
+// ============================================================
+let currentUser    = null;
+let clockTimer     = null;
+let refreshTimer   = null;
+let editingBatchId = null;
+let selesaiBatchId = null;
+let modalKonfirmasiFn = null;
+let masterEkspedisi  = [];
+let masterSupir      = [];
+let masterKandang    = [];
+let masterTipeKandang = [];
+let tambahType       = null; // 'ekspedisi' | 'supir' | 'kandang'
+
+// Palet warna untuk tipe kandang — index sesuai urutan dari DB
+const TIPE_CLS_PALETTE = ['b-active','b-cu','b-pending','b-karkas','b-part','b-marinasi','b-bp','b-draft'];
+
+function getTipeLabel(kode) {
+    if (!kode) return '';
+    return masterTipeKandang.find(t => t.kode === kode)?.label || kode;
+}
+function getTipeCls(kode) {
+    if (!kode) return 'b-draft';
+    const idx = masterTipeKandang.findIndex(t => t.kode === kode);
+    return idx >= 0 ? (TIPE_CLS_PALETTE[idx] || 'b-draft') : 'b-draft';
+}
+
+// ============================================================
+// UTILITY
+// ============================================================
+async function sha256(str) {
+    const buf  = new TextEncoder().encode(str);
+    const hash = await crypto.subtle.digest('SHA-256', buf);
+    return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+function fmt(n, d = 0) {
+    if (n == null || n === '') return '—';
+    return Number(n).toLocaleString('id-ID', { minimumFractionDigits: d, maximumFractionDigits: d });
+}
+
+function fmtDate(s) {
+    if (!s) return '—';
+    return new Date(s).toLocaleDateString('id-ID', { day:'2-digit', month:'short', year:'numeric' });
+}
+
+function fmtDT(s) {
+    if (!s) return '—';
+    return new Date(s).toLocaleString('id-ID', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
+}
+
+function fmtTime(s) {
+    if (!s) return '—';
+    return new Date(s).toLocaleTimeString('id-ID', { hour:'2-digit', minute:'2-digit' });
+}
+
+function todayISO() {
+    const d = new Date();
+    return d.toISOString().split('T')[0];
+}
+
+function durMenit(mulai, selesai) {
+    if (!mulai || !selesai) return null;
+    return Math.round((new Date(selesai) - new Date(mulai)) / 60000);
+}
+
+function showToast(msg, type = 'success') {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = `toast show ${type}`;
+    setTimeout(() => { t.className = 'toast'; }, 3500);
+}
+
+function badgeStatus(s) {
+    const map = { DRAFT:'b-draft', ACTIVE:'b-active', COMPLETE:'b-complete' };
+    const lbl = { DRAFT:'Draft', ACTIVE:'Aktif', COMPLETE:'Selesai' };
+    return `<span class="badge ${map[s]||'b-draft'}">${lbl[s]||s}</span>`;
+}
+
+function selisihClass(selisih) {
+    if (selisih == null) return 'selisih-na';
+    if (selisih === 0) return 'selisih-ok';
+    if (Math.abs(selisih) <= 3) return 'selisih-warn';
+    return 'selisih-bad';
+}
+
+// ============================================================
+// AUTH
+// ============================================================
+async function doLogin() {
+    const username = document.getElementById('inp-username').value.trim();
+    const password = document.getElementById('inp-password').value;
+    const errEl    = document.getElementById('login-error');
+    const btn      = document.getElementById('btn-login');
+
+    errEl.style.display = 'none';
+    if (!username || !password) { showLoginErr('Username dan password wajib diisi.'); return; }
+
+    btn.disabled = true; btn.textContent = 'Memproses…';
+
+    try {
+        const hash = await sha256(password);
+        const { data, error } = await db
+            .from('users')
+            .select('id, nama, username, role, aktif, pin, is_system_admin')
+            .eq('username', username)
+            .eq('password_hash', hash)
+            .eq('aktif', true)
+            .maybeSingle();
+
+        if (error) throw error;
+        if (!data) { showLoginErr('Username atau password salah.'); return; }
+
+        currentUser = data;
+        localStorage.setItem('rpa_user', JSON.stringify(data));
+        startApp();
+    } catch (e) {
+        console.error(e);
+        showLoginErr('Gagal terhubung ke server. Periksa koneksi internet.');
+    } finally {
+        btn.disabled = false; btn.textContent = 'Masuk →';
+    }
+}
+
+function showLoginErr(msg) {
+    const el = document.getElementById('login-error');
+    el.textContent = msg; el.style.display = 'block';
+}
+
+function doLogout() {
+    currentUser = null;
+    localStorage.removeItem('rpa_user');
+    clearInterval(refreshTimer);
+    clearInterval(clockTimer);
+    document.getElementById('app-screen').style.display  = 'none';
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('inp-username').value = '';
+    document.getElementById('inp-password').value = '';
+    document.getElementById('login-error').style.display = 'none';
+}
+
+document.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && document.getElementById('login-screen').style.display !== 'none') doLogin();
+});
+
+// ============================================================
+// START APP
+// ============================================================
+function startApp() {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app-screen').style.display   = 'block';
+
+    document.getElementById('user-avatar').textContent  = currentUser.nama.charAt(0).toUpperCase();
+    document.getElementById('sidebar-name').textContent = currentUser.nama;
+    document.getElementById('sidebar-role').textContent =
+        currentUser.role === 'SUPERVISOR' ? '👑 Supervisor' : '👷 Operator';
+    if (currentUser.is_system_admin) {
+        const umEl = document.getElementById('nav-user-mgmt');
+        if (umEl) umEl.style.display = 'flex';
+    }
+
+    if (currentUser.role === 'SUPERVISOR') {
+        document.getElementById('app-screen').classList.add('is-supervisor');
+    }
+
+    document.getElementById('topbar-date').textContent = new Date().toLocaleDateString('id-ID', {
+        weekday:'long', day:'numeric', month:'long', year:'numeric'
+    });
+
+    // Set default filter tanggal = hari ini
+    document.getElementById('inp-filter-date').value = todayISO();
+
+    const tick = () => {
+        document.getElementById('clock').textContent = new Date().toLocaleTimeString('id-ID', {
+            hour:'2-digit', minute:'2-digit', second:'2-digit'
+        });
+    };
+    tick();
+    clockTimer = setInterval(tick, 1000);
+
+    loadMasterData();
+    loadPage();
+    refreshTimer = setInterval(loadPage, REFRESH_MS);
+}
+
+// ============================================================
+// SIDEBAR NAVIGATION
+// ============================================================
+function toggleSidebar() {
+    const sb  = document.getElementById('sidebar');
+    const ov  = document.getElementById('sidebar-overlay');
+    const isOpen = sb.classList.contains('open');
+    sb.classList.toggle('open', !isOpen);
+    ov.classList.toggle('visible', !isOpen);
+}
+function closeSidebar() {
+    document.getElementById('sidebar').classList.remove('open');
+    document.getElementById('sidebar-overlay').classList.remove('visible');
+}
+function navTo(page) {
+    closeSidebar();
+    if (currentUser) {
+        localStorage.setItem('rpa_user', JSON.stringify(currentUser));
+        sessionStorage.setItem('rpa_user', JSON.stringify(currentUser));
+    }
+    window.location.href = page;
+}
+
+// ============================================================
+// LOAD PAGE DATA
+// ============================================================
+async function loadPage() {
+    const btn = document.getElementById('btn-refresh');
+    btn.classList.add('loading');
+
+    const filterDate   = document.getElementById('inp-filter-date').value || todayISO();
+    const filterStatus = document.getElementById('inp-filter-status').value;
+
+    try {
+        let q = db
+            .from('live_chicken_batches')
+            .select('*, created_by_user:created_by(nama), updated_by_user:updated_by(nama)')
+            .eq('tanggal', filterDate)
+            .order('created_at', { ascending: true });
+
+        if (filterStatus) q = q.eq('status', filterStatus);
+
+        const { data, error } = await q;
+        if (error) throw error;
+
+        renderCards(data || []);
+        renderTable(data || []);
+
+        document.getElementById('last-updated').textContent =
+            'Update: ' + new Date().toLocaleTimeString('id-ID', { hour:'2-digit', minute:'2-digit' });
+
+    } catch (e) {
+        console.error('Load error:', e);
+        showToast('Gagal memuat data: ' + (e.message || 'Unknown error'), 'error');
+    } finally {
+        btn.classList.remove('loading');
+    }
+}
+
+// ============================================================
+// RENDER: SUMMARY CARDS
+// ============================================================
+function renderCards(rows) {
+    const totalBatch   = rows.length;
+    const batchAktif   = rows.filter(r => r.status === 'ACTIVE').length;
+    const totalEkor    = rows.reduce((s, r) => s + (Number(r.ekor_timbang_ulang) || 0), 0);
+    const totalKg      = rows.reduce((s, r) => s + (Number(r.kg_timbang_ulang) || 0), 0);
+    const totalMati    = rows.reduce((s, r) => s + (Number(r.ekor_mati) || 0), 0);
+    const totalKandang = rows.reduce((s, r) => s + (Number(r.ekor_kandang) || 0), 0);
+    const pctMati      = totalKandang > 0 ? ((totalMati / totalKandang) * 100).toFixed(1) : null;
+
+    document.getElementById('cards-row').innerHTML = `
+        <div class="summary-card c-blue">
+            <div class="sc-label">Batch Hari Ini</div>
+            <div class="sc-value">${totalBatch}</div>
+            <div class="sc-sub">${rows.filter(r=>r.status==='DRAFT').length} draft · ${rows.filter(r=>r.status==='COMPLETE').length} selesai</div>
+        </div>
+        <div class="summary-card ${batchAktif > 0 ? 'c-green' : 'c-blue'}">
+            <div class="sc-label">Status Aktif</div>
+            <div class="sc-value">${batchAktif}</div>
+            <div class="sc-sub">batch sedang berjalan</div>
+        </div>
+        <div class="summary-card c-teal">
+            <div class="sc-label">Total Ekor Timbang</div>
+            <div class="sc-value small">${fmt(totalEkor)} ekor</div>
+            <div class="sc-sub">hasil timbang ulang</div>
+        </div>
+        <div class="summary-card c-purple">
+            <div class="sc-label">Total Kg Timbang</div>
+            <div class="sc-value small">${fmt(totalKg, 1)} kg</div>
+            <div class="sc-sub">berat hidup di RPA</div>
+        </div>
+        <div class="summary-card ${totalMati > 0 ? 'c-amber' : 'c-green'}">
+            <div class="sc-label">Total Mati</div>
+            <div class="sc-value">${fmt(totalMati)}</div>
+            <div class="sc-sub">${pctMati != null ? pctMati + '% dari kandang' : 'ekor'}</div>
+        </div>
+    `;
+}
+
+// ============================================================
+// RENDER: TABLE
+// ============================================================
+function renderTable(rows) {
+    const pill  = document.getElementById('pill-batch');
+    const tbody = document.getElementById('tbody-batch');
+    const isSup = currentUser.role === 'SUPERVISOR';
+
+    pill.textContent = rows.length + ' batch';
+
+    if (!rows.length) {
+        tbody.innerHTML = `<tr><td colspan="9"><div class="empty"><div class="e-icon">🐔</div>Belum ada batch untuk tanggal ini</div></td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = rows.map(r => {
+        const selisih  = r.selisih_ekor;
+        const sCls     = selisihClass(selisih);
+        const selisihTxt = selisih != null ? (selisih > 0 ? '+' + selisih : String(selisih)) : '—';
+
+        // Jam gantung
+        const durasi = durMenit(r.jam_gantung_mulai, r.jam_gantung_selesai);
+        let jamHtml = '—';
+        if (r.jam_gantung_mulai) {
+            jamHtml = fmtTime(r.jam_gantung_mulai);
+            if (r.jam_gantung_selesai) {
+                jamHtml += ' – ' + fmtTime(r.jam_gantung_selesai);
+                if (durasi != null) jamHtml += `<div class="tbl-sub">${durasi} menit</div>`;
+            } else {
+                jamHtml += ' – <span style="color:#9ca3af">berjalan</span>';
+            }
+        }
+
+        // Kandang
+        const kandangHtml = r.ekor_kandang != null
+            ? `${fmt(r.ekor_kandang)} ekor<div class="tbl-sub">${fmt(r.kg_kandang, 1)} kg</div>`
+            : '<span style="color:#9ca3af">—</span>';
+
+        // Timbang ulang
+        const timbangHtml = r.ekor_timbang_ulang != null
+            ? `${fmt(r.ekor_timbang_ulang)} ekor<div class="tbl-sub">${fmt(r.kg_timbang_ulang, 1)} kg</div>`
+            : '<span style="color:#9ca3af">—</span>';
+
+        // Aksi
+        let aksiHtml = `<button class="btn btn-edit" onclick="openModalEdit('${r.id}')">✏️ Edit</button>`;
+
+        if (r.status === 'DRAFT') {
+            aksiHtml += ` <button class="btn btn-aktif" onclick="konfirmasiAktifkan('${r.id}','${r.batch_code}')">▶ Aktifkan</button>`;
+        } else if (r.status === 'ACTIVE' && isSup) {
+            aksiHtml += ` <button class="btn btn-done" onclick="openModalSelesai('${r.id}','${r.batch_code}')">✅ Selesai</button>`;
+        }
+
+        // Catatan medis — truncate jika panjang
+        const medis = r.catatan_medis
+            ? `<span title="${r.catatan_medis.replace(/"/g,'&quot;')}" style="cursor:help">${r.catatan_medis.length > 40 ? r.catatan_medis.slice(0,40) + '…' : r.catatan_medis}</span>`
+            : '<span style="color:#9ca3af">—</span>';
+
+        return `<tr>
+            <td>
+                <strong>${r.batch_code}</strong>
+                <div class="tbl-sub">${fmtDate(r.tanggal)}</div>
+                ${r.no_referensi ? `<div class="tbl-sub" style="color:#6b7280">Ref: ${r.no_referensi}</div>` : ''}
+                ${r.no_penerimaan_barang ? `<div class="tbl-sub" style="color:#6b7280">SPB: ${r.no_penerimaan_barang}</div>` : ''}
+            </td>
+            <td>${badgeStatus(r.status)}</td>
+            <td>
+                <strong>${r.nama_kandang || '<span style="color:#9ca3af;font-size:11px;font-weight:400">Belum dipilih</span>'}</strong>
+                ${r.tipe_kandang ? `<div class="tbl-sub"><span class="badge ${getTipeCls(r.tipe_kandang)}" style="font-size:10px;padding:1px 6px">${getTipeLabel(r.tipe_kandang)}</span></div>` : ''}
+            </td>
+            <td>
+                ${r.nama_ekspedisi ? `<strong>${r.nama_ekspedisi}</strong>` : '<span style="color:#9ca3af">—</span>'}
+                ${r.no_polisi ? `<div class="tbl-sub">🚚 ${r.no_polisi}</div>` : ''}
+                ${r.nama_supir ? `<div class="tbl-sub">👤 ${r.nama_supir}</div>` : ''}
+            </td>
+            <td>${kandangHtml}</td>
+            <td>${timbangHtml}</td>
+            <td>${r.ekor_mati != null ? fmt(r.ekor_mati) : '0'}</td>
+            <td><span class="${sCls}">${selisihTxt}</span></td>
+            <td style="white-space:nowrap">${jamHtml}</td>
+            <td style="max-width:200px;font-size:12px">${medis}</td>
+            <td style="white-space:nowrap">${aksiHtml}</td>
+        </tr>`;
+    }).join('');
+}
+
+// ============================================================
+// GENERATE BATCH CODE
+// ============================================================
+async function generateBatchCode(tanggal) {
+    // Format: KKYYMMDDXX  contoh: RB26042401
+    const d  = new Date(tanggal + 'T00:00:00');
+    const yy = String(d.getFullYear()).slice(2);
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const prefix = BATCH_PREFIX + yy + mm + dd; // e.g. RB260424
+
+    const { data } = await db
+        .from('live_chicken_batches')
+        .select('batch_code')
+        .like('batch_code', `${prefix}%`)
+        .order('batch_code', { ascending: false })
+        .limit(1);
+
+    let seq = 1;
+    if (data && data.length > 0) {
+        // Ambil 2 digit terakhir sebagai sequence
+        const lastSeq = parseInt(data[0].batch_code.slice(-2));
+        if (!isNaN(lastSeq)) seq = lastSeq + 1;
+    }
+    return `${prefix}${String(seq).padStart(2, '0')}`;
+}
+
+// ============================================================
+// MODAL BATCH — BUAT
+// ============================================================
+async function openModalBaru() {
+    editingBatchId = null;
+
+    // Reset form
+    resetFormBatch();
+
+    const today = document.getElementById('inp-filter-date').value || todayISO();
+    document.getElementById('mb-tanggal').value = today;
+
+    // Generate kode
+    document.getElementById('mb-batch-code').value = 'Generating…';
+    const kode = await generateBatchCode(today);
+    document.getElementById('mb-batch-code').value = kode;
+
+    document.getElementById('modal-batch-title').textContent = '➕ Batch Baru';
+    document.getElementById('modal-batch-desc').textContent  = 'Isi data kendaraan dan ayam. Status DRAFT boleh disubmit meski data belum lengkap.';
+    document.getElementById('btn-save-draft').style.display  = '';
+    document.getElementById('btn-save-aktif').textContent    = '✓ Simpan & Aktifkan';
+    document.getElementById('modal-draft-info').style.display = '';
+
+    document.getElementById('modal-batch').classList.add('open');
+}
+
+// ============================================================
+// MODAL BATCH — EDIT
+// ============================================================
+async function openModalEdit(batchId) {
+    editingBatchId = batchId;
+
+    const { data, error } = await db
+        .from('live_chicken_batches')
+        .select('*')
+        .eq('id', batchId)
+        .single();
+
+    if (error || !data) { showToast('Gagal memuat data batch', 'error'); return; }
+
+    resetFormBatch();
+
+    document.getElementById('mb-batch-code').value   = data.batch_code;
+    document.getElementById('mb-tanggal').value       = data.tanggal;
+    // Set combobox kandang
+    const kndMatch = masterKandang.find(k => k.nama === data.nama_kandang);
+    if (kndMatch) {
+        cbKandangSelect(kndMatch.id);
+    } else {
+        document.getElementById('mb-kandang-search').value = data.nama_kandang || '';
+        document.getElementById('mb-kandang').value = '';
+        showKandangTipeBadge('');
+    }
+    document.getElementById('mb-no-referensi').value   = data.no_referensi || '';
+    document.getElementById('mb-no-spb').value          = data.no_penerimaan_barang || '';
+    document.getElementById('mb-no-polisi').value       = data.no_polisi || '';
+    // Set dropdown ekspedisi & supir berdasarkan nama tersimpan
+    const eksMatch   = masterEkspedisi.find(e => e.nama === data.nama_ekspedisi);
+    populateEkspedisiSelect(eksMatch?.id || '');
+    const supirMatch = masterSupir.find(s => s.nama === data.nama_supir);
+    populateSupirSelect(supirMatch?.id || '', eksMatch?.id || '');
+    document.getElementById('mb-ekor-kandang').value = data.ekor_kandang != null ? data.ekor_kandang : '';
+    document.getElementById('mb-kg-kandang').value   = data.kg_kandang != null ? data.kg_kandang : '';
+    document.getElementById('mb-ekor-timbang').value = data.ekor_timbang_ulang != null ? data.ekor_timbang_ulang : '';
+    document.getElementById('mb-kg-timbang').value   = data.kg_timbang_ulang != null ? data.kg_timbang_ulang : '';
+    document.getElementById('mb-ekor-mati').value      = data.ekor_mati != null ? data.ekor_mati : 0;
+    document.getElementById('mb-kg-mati').value        = data.kg_mati != null ? data.kg_mati : 0;
+    document.getElementById('mb-catatan-medis').value  = data.catatan_medis || '';
+    document.getElementById('mb-catatan').value        = data.catatan || '';
+
+    // Jam gantung — convert TIMESTAMPTZ to datetime-local value
+    if (data.jam_gantung_mulai) {
+        document.getElementById('mb-jam-mulai').value = toDatetimeLocal(data.jam_gantung_mulai);
+    }
+    if (data.jam_gantung_selesai) {
+        document.getElementById('mb-jam-selesai').value = toDatetimeLocal(data.jam_gantung_selesai);
+    }
+
+    hitungSelisih();
+
+    document.getElementById('modal-batch-title').textContent = '✏️ Edit Batch — ' + data.batch_code;
+    document.getElementById('modal-batch-desc').textContent  = 'Status saat ini: ' + { DRAFT:'Draft', ACTIVE:'Aktif', COMPLETE:'Selesai' }[data.status];
+
+    // Tombol sesuai status
+    if (data.status === 'COMPLETE') {
+        document.getElementById('btn-save-draft').style.display = 'none';
+        document.getElementById('btn-save-aktif').textContent   = '💾 Update Data';
+        document.getElementById('btn-save-aktif').onclick       = () => saveBatch('COMPLETE');
+        document.getElementById('modal-draft-info').style.display = 'none';
+    } else if (data.status === 'ACTIVE') {
+        document.getElementById('btn-save-draft').style.display = 'none';
+        document.getElementById('btn-save-aktif').textContent   = '💾 Update Data';
+        document.getElementById('btn-save-aktif').onclick       = () => saveBatch('ACTIVE');
+        document.getElementById('modal-draft-info').style.display = 'none';
+    } else {
+        // DRAFT
+        document.getElementById('btn-save-draft').style.display = '';
+        document.getElementById('btn-save-aktif').textContent   = '✓ Simpan & Aktifkan';
+        document.getElementById('btn-save-aktif').onclick       = () => saveBatch('ACTIVE');
+        document.getElementById('modal-draft-info').style.display = '';
+    }
+
+    document.getElementById('modal-batch').classList.add('open');
+}
+
+function toDatetimeLocal(isoStr) {
+    // Convert ISO 8601 to datetime-local format (YYYY-MM-DDTHH:MM)
+    const d = new Date(isoStr);
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function resetFormBatch() {
+    ['mb-batch-code','mb-tanggal','mb-no-referensi','mb-no-spb','mb-no-polisi',
+     'mb-jam-mulai','mb-jam-selesai','mb-ekor-kandang','mb-kg-kandang',
+     'mb-ekor-timbang','mb-kg-timbang','mb-catatan-medis','mb-catatan'].forEach(id => {
+        document.getElementById(id).value = '';
+    });
+    populateEkspedisiSelect('');
+    populateSupirSelect('', '');
+    document.getElementById('mb-kandang-search').value = '';
+    document.getElementById('mb-kandang').value = '';
+    document.getElementById('mb-kandang-tipe').style.display = 'none';
+    document.getElementById('mb-ekor-mati').value = '0';
+    document.getElementById('mb-kg-mati').value   = '0';
+    document.getElementById('btn-save-aktif').onclick = () => saveBatch('ACTIVE');
+    document.getElementById('selisih-preview').style.display = 'none';
+}
+
+async function onTanggalChange() {
+    if (editingBatchId) return; // jangan re-generate saat edit
+    const tgl = document.getElementById('mb-tanggal').value;
+    if (!tgl) return;
+    document.getElementById('mb-batch-code').value = 'Generating…';
+    const kode = await generateBatchCode(tgl);
+    document.getElementById('mb-batch-code').value = kode;
+}
+
+function hitungSelisih() {
+    const ekorK = parseInt(document.getElementById('mb-ekor-kandang').value) || null;
+    const ekorT = parseInt(document.getElementById('mb-ekor-timbang').value) || null;
+    const ekorM = parseInt(document.getElementById('mb-ekor-mati').value) || 0;
+
+    const preview = document.getElementById('selisih-preview');
+
+    if (ekorK != null && ekorT != null) {
+        const selisih = ekorK - ekorM - ekorT;
+        const cls = selisihClass(selisih);
+        const sign = selisih > 0 ? '+' : '';
+        let note = '';
+        if (selisih === 0) note = '✅ tidak ada selisih';
+        else if (Math.abs(selisih) <= 3) note = '⚠️ selisih kecil, perlu dicatat';
+        else note = '❌ selisih besar, perlu klarifikasi';
+
+        document.getElementById('selisih-val').className  = cls;
+        document.getElementById('selisih-val').textContent = sign + selisih + ' ekor';
+        document.getElementById('selisih-note').textContent = note;
+        preview.style.display = '';
+    } else {
+        preview.style.display = 'none';
+    }
+}
+
+function closeModalBatch() {
+    document.getElementById('modal-batch').classList.remove('open');
+    editingBatchId = null;
+}
+
+// ============================================================
+// SAVE BATCH (Create atau Update)
+// ============================================================
+async function saveBatch(targetStatus) {
+    const batchCode   = document.getElementById('mb-batch-code').value.trim();
+    const tanggal     = document.getElementById('mb-tanggal').value;
+    const namaKandang   = getNamaKandang();
+    const tipeKandang   = getTipeKandang();
+    const noPolisi      = document.getElementById('mb-no-polisi').value.trim() || null;
+    const namaEkspedisi = getNamaEkspedisi();
+    const namaSupir     = getNamaSupir();
+    const jamMulai  = document.getElementById('mb-jam-mulai').value || null;
+    const jamSelesai = document.getElementById('mb-jam-selesai').value || null;
+
+    const ekorKandang  = parseNumInt('mb-ekor-kandang');
+    const kgKandang    = parseNumFloat('mb-kg-kandang');
+    const ekorTimbang  = parseNumInt('mb-ekor-timbang');
+    const kgTimbang    = parseNumFloat('mb-kg-timbang');
+    const ekorMati     = parseNumInt('mb-ekor-mati') ?? 0;
+    const kgMati       = parseNumFloat('mb-kg-mati') ?? 0;
+    const catatanMedis = document.getElementById('mb-catatan-medis').value.trim() || null;
+    const catatan      = document.getElementById('mb-catatan').value.trim() || null;
+
+    // Validasi minimal (DRAFT: hanya tanggal wajib)
+    if (!tanggal) { showToast('Tanggal wajib diisi', 'error'); return; }
+    if (!batchCode || batchCode === 'Generating…') { showToast('Kode batch belum siap, tunggu sebentar', 'error'); return; }
+
+    // Validasi untuk ACTIVE (semua data operasional wajib)
+    if (targetStatus === 'ACTIVE') {
+        const missing = [];
+        if (!namaKandang)        missing.push('Nama Kandang');
+        if (ekorKandang == null) missing.push('Ekor Kandang');
+        if (kgKandang == null)   missing.push('Kg Kandang');
+        if (ekorTimbang == null) missing.push('Ekor Timbang Ulang');
+        if (kgTimbang == null)   missing.push('Kg Timbang Ulang');
+        if (missing.length) {
+            showToast('Untuk Aktifkan, lengkapi: ' + missing.join(', '), 'warning');
+            return;
+        }
+    }
+
+    // Hitung selisih_ekor jika data cukup
+    let selisihEkor = null;
+    if (ekorKandang != null && ekorTimbang != null) {
+        selisihEkor = ekorKandang - ekorMati - ekorTimbang;
+    }
+
+    const noReferensi      = document.getElementById('mb-no-referensi').value.trim() || null;
+    const noPenerimaanBrg  = document.getElementById('mb-no-spb').value.trim() || null;
+
+    const payload = {
+        batch_code:            batchCode,
+        status:                editingBatchId ? undefined : targetStatus, // saat create
+        tanggal,
+        no_referensi:          noReferensi,
+        no_penerimaan_barang:  noPenerimaanBrg,
+        nama_kandang:          namaKandang,
+        tipe_kandang:          tipeKandang,
+        nama_ekspedisi:        namaEkspedisi,
+        no_polisi:             noPolisi,
+        nama_supir:            namaSupir,
+        jam_gantung_mulai:     jamMulai ? new Date(jamMulai).toISOString() : null,
+        jam_gantung_selesai:   jamSelesai ? new Date(jamSelesai).toISOString() : null,
+        ekor_kandang:          ekorKandang,
+        kg_kandang:            kgKandang,
+        ekor_timbang_ulang:    ekorTimbang,
+        kg_timbang_ulang:      kgTimbang,
+        ekor_mati:             ekorMati,
+        kg_mati:               kgMati,
+        selisih_ekor:          selisihEkor,
+        catatan_medis:         catatanMedis,
+        catatan,
+        updated_by:            currentUser.id,
+        updated_at:            new Date().toISOString(),
+    };
+
+    // Disable tombol
+    const btnDraft  = document.getElementById('btn-save-draft');
+    const btnAktif  = document.getElementById('btn-save-aktif');
+    btnDraft.disabled = true;
+    btnAktif.disabled = true;
+
+    try {
+        let error;
+        if (editingBatchId) {
+            // Update: status bisa berubah jika sebelumnya DRAFT dan target ACTIVE
+            const { data: existing } = await db
+                .from('live_chicken_batches')
+                .select('status')
+                .eq('id', editingBatchId)
+                .single();
+
+            const newStatus = (existing?.status === 'DRAFT' && targetStatus === 'ACTIVE') ? 'ACTIVE' : existing?.status;
+            ({ error } = await db
+                .from('live_chicken_batches')
+                .update({ ...payload, status: newStatus })
+                .eq('id', editingBatchId));
+        } else {
+            // Create
+            ({ error } = await db
+                .from('live_chicken_batches')
+                .insert({ ...payload, status: targetStatus, created_by: currentUser.id }));
+        }
+
+        if (error) throw error;
+
+        const msg = editingBatchId
+            ? 'Batch berhasil diupdate'
+            : (targetStatus === 'ACTIVE' ? 'Batch dibuat dan diaktifkan ✅' : 'Batch tersimpan sebagai Draft');
+
+        showToast(msg, 'success');
+        closeModalBatch();
+        loadPage();
+    } catch (e) {
+        console.error('Save batch error:', e);
+        showToast('Gagal menyimpan: ' + (e.message || 'Unknown error'), 'error');
+    } finally {
+        btnDraft.disabled = false;
+        btnAktif.disabled = false;
+    }
+}
+
+// ============================================================
+// MASTER DATA — EKSPEDISI & SUPIR
+// ============================================================
+async function loadMasterData() {
+    try {
+        const [{ data: eks, error: e1 }, { data: sup, error: e2 },
+               { data: knd, error: e3 }, { data: tipe, error: e4 }] = await Promise.all([
+            db.from('master_ekspedisi').select('id, nama').eq('aktif', true).order('nama'),
+            db.from('master_supir').select('id, nama, ekspedisi_id').eq('aktif', true).order('nama'),
+            db.from('master_kandang').select('id, nama, tipe').eq('aktif', true).order('nama'),
+            db.from('master_tipe_kandang').select('kode, label, urutan').eq('aktif', true).order('urutan'),
+        ]);
+        if (!e1 && eks)  masterEkspedisi   = eks;
+        if (!e2 && sup)  masterSupir        = sup;
+        if (!e3 && knd)  masterKandang      = knd;
+        if (!e4 && tipe) masterTipeKandang  = tipe;
+        populateEkspedisiSelect('');
+        populateSupirSelect('', '');
+    } catch (e) {
+        console.error('loadMasterData error:', e);
+    }
+}
+
+function populateEkspedisiSelect(selectedId = '') {
+    const sel = document.getElementById('mb-ekspedisi');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">— Pilih ekspedisi —</option>';
+    masterEkspedisi.forEach(e => {
+        sel.innerHTML += `<option value="${e.id}"${e.id === selectedId ? ' selected' : ''}>${e.nama}</option>`;
+    });
+    sel.innerHTML += '<option value="__tambah__" style="color:#2563eb;font-weight:700">＋ Tambah ekspedisi baru…</option>';
+}
+
+function onEkspedisiChange() {
+    const val = document.getElementById('mb-ekspedisi').value;
+    if (val === '__tambah__') {
+        document.getElementById('mb-ekspedisi').value = '';
+        openModalTambahMaster('ekspedisi');
+        return;
+    }
+    populateSupirSelect('', val);
+}
+
+function populateSupirSelect(selectedId = '', filterEksId = '') {
+    const sel = document.getElementById('mb-supir');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">— Pilih supir —</option>';
+    const list = filterEksId
+        ? masterSupir.filter(s => s.ekspedisi_id === filterEksId || !s.ekspedisi_id)
+        : masterSupir;
+    list.forEach(s => {
+        sel.innerHTML += `<option value="${s.id}"${s.id === selectedId ? ' selected' : ''}>${s.nama}</option>`;
+    });
+    sel.innerHTML += '<option value="__tambah__" style="color:#2563eb;font-weight:700">＋ Tambah supir baru…</option>';
+}
+
+function onSupirChange() {
+    if (document.getElementById('mb-supir').value === '__tambah__') {
+        document.getElementById('mb-supir').value = '';
+        openModalTambahMaster('supir');
+    }
+}
+
+function getNamaEkspedisi() {
+    const id = document.getElementById('mb-ekspedisi').value;
+    if (!id || id === '__tambah__') return null;
+    return masterEkspedisi.find(e => e.id === id)?.nama || null;
+}
+
+function getNamaSupir() {
+    const id = document.getElementById('mb-supir').value;
+    if (!id || id === '__tambah__') return null;
+    return masterSupir.find(s => s.id === id)?.nama || null;
+}
+
+// ---- KANDANG COMBOBOX ----
+let cbHi = -1; // highlight index
+
+function cbKandangRender(q = '') {
+    const listEl = document.getElementById('cb-kandang-list');
+    const ql     = q.toLowerCase();
+    const filtered = ql
+        ? masterKandang.filter(k => k.nama.toLowerCase().includes(ql))
+        : masterKandang;
+
+    const tipeOrder = masterTipeKandang.length
+        ? masterTipeKandang.map(t => t.kode)
+        : [];
+
+    let html = '';
+    let hasItems = false;
+
+    // Group by tipe order
+    const rendered = new Set();
+    tipeOrder.forEach(tipe => {
+        const items = filtered.filter(k => k.tipe === tipe);
+        if (!items.length) return;
+        html += `<div class="cb-group">${getTipeLabel(tipe)}</div>`;
+        items.forEach(k => {
+            const display = ql
+                ? k.nama.replace(new RegExp(`(${ql.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`, 'gi'), '<mark>$1</mark>')
+                : k.nama;
+            html += `<div class="cb-item" data-id="${k.id}" onclick="cbKandangSelect('${k.id}')">${display}</div>`;
+            rendered.add(k.id);
+            hasItems = true;
+        });
+    });
+
+    // Kandang tanpa tipe dikenal
+    const rest = filtered.filter(k => !rendered.has(k.id));
+    if (rest.length) {
+        html += `<div class="cb-group">Lainnya</div>`;
+        rest.forEach(k => {
+            html += `<div class="cb-item" data-id="${k.id}" onclick="cbKandangSelect('${k.id}')">${k.nama}</div>`;
+            hasItems = true;
+        });
+    }
+
+    if (!hasItems) {
+        html += `<div class="cb-empty">Tidak ada kandang "${q}"</div>`;
+    }
+
+    html += `<div class="cb-add" onclick="openModalTambahMaster('kandang')">＋ Tambah kandang baru…</div>`;
+    listEl.innerHTML = html;
+    cbHi = -1;
+}
+
+function cbKandangFilter(q) {
+    document.getElementById('mb-kandang').value = '';
+    showKandangTipeBadge('');
+    cbKandangRender(q);
+    document.getElementById('cb-kandang-list').classList.add('open');
+}
+
+function cbKandangOpen() {
+    cbKandangRender(document.getElementById('mb-kandang-search').value);
+    document.getElementById('cb-kandang-list').classList.add('open');
+}
+
+function cbKandangClose() {
+    document.getElementById('cb-kandang-list').classList.remove('open');
+    cbHi = -1;
+    // Jika tidak ada yang dipilih, bersihkan teks
+    if (!document.getElementById('mb-kandang').value) {
+        document.getElementById('mb-kandang-search').value = '';
+    }
+}
+
+function cbKandangSelect(id) {
+    const k = masterKandang.find(x => x.id === id);
+    if (!k) return;
+    document.getElementById('mb-kandang-search').value = k.nama;
+    document.getElementById('mb-kandang').value        = id;
+    showKandangTipeBadge(id);
+    document.getElementById('cb-kandang-list').classList.remove('open');
+    cbHi = -1;
+}
+
+function cbKandangKey(e) {
+    const listEl = document.getElementById('cb-kandang-list');
+    const isOpen = listEl.classList.contains('open');
+    if (!isOpen) { cbKandangOpen(); return; }
+
+    const items = listEl.querySelectorAll('.cb-item[data-id]');
+    if (e.key === 'ArrowDown') {
+        cbHi = Math.min(cbHi + 1, items.length - 1);
+        cbKandangHighlight(items); e.preventDefault();
+    } else if (e.key === 'ArrowUp') {
+        cbHi = Math.max(cbHi - 1, 0);
+        cbKandangHighlight(items); e.preventDefault();
+    } else if (e.key === 'Enter') {
+        if (cbHi >= 0 && items[cbHi]) { items[cbHi].click(); }
+        e.preventDefault();
+    } else if (e.key === 'Escape') {
+        cbKandangClose(); e.preventDefault();
+    }
+}
+
+function cbKandangHighlight(items) {
+    items.forEach((el, i) => el.classList.toggle('cb-hi', i === cbHi));
+    if (cbHi >= 0) items[cbHi].scrollIntoView({ block: 'nearest' });
+}
+
+function showKandangTipeBadge(kandangId) {
+    const box = document.getElementById('mb-kandang-tipe');
+    if (!kandangId) { box.style.display = 'none'; return; }
+    const k = masterKandang.find(x => x.id === kandangId);
+    if (!k) { box.style.display = 'none'; return; }
+    document.getElementById('mb-kandang-tipe-badge').innerHTML =
+        `<span class="badge ${getTipeCls(k.tipe)}">${getTipeLabel(k.tipe)}</span>`;
+    box.style.display = '';
+}
+
+function getNamaKandang() {
+    const id = document.getElementById('mb-kandang').value;
+    if (!id) return null;
+    return masterKandang.find(k => k.id === id)?.nama || null;
+}
+
+function getTipeKandang() {
+    const id = document.getElementById('mb-kandang').value;
+    if (!id) return null;
+    return masterKandang.find(k => k.id === id)?.tipe || null;
+}
+
+// ---- TIPE KANDANG INLINE ADD ----
+function onMtTipeChange() {
+    if (document.getElementById('mt-tipe-kandang').value === '__new__') {
+        document.getElementById('mt-tipe-kandang').value = '';
+        document.getElementById('mt-tipe-new-row').style.display = '';
+        document.getElementById('mt-tipe-new-label').value = '';
+        document.getElementById('mt-tipe-new-error').style.display = 'none';
+        setTimeout(() => document.getElementById('mt-tipe-new-label').focus(), 80);
+    }
+}
+
+function cancelTipeKandangBaru() {
+    document.getElementById('mt-tipe-new-row').style.display = 'none';
+    document.getElementById('mt-tipe-new-label').value = '';
+}
+
+async function submitTipeKandangBaru() {
+    const label = document.getElementById('mt-tipe-new-label').value.trim();
+    const errEl = document.getElementById('mt-tipe-new-error');
+    if (!label) { errEl.textContent = 'Nama tipe wajib diisi'; errEl.style.display = 'block'; return; }
+
+    // Auto-generate kode dari label
+    const kode = label.toUpperCase()
+        .replace(/\s+/g, '_')
+        .replace(/[^A-Z0-9_]/g, '')
+        .slice(0, 30);
+
+    const urutan = masterTipeKandang.length > 0
+        ? Math.max(...masterTipeKandang.map(t => t.urutan || 0)) + 1
+        : 99;
+
+    try {
+        const { data, error } = await db
+            .from('master_tipe_kandang')
+            .insert({ kode, label, urutan })
+            .select('kode, label, urutan')
+            .single();
+        if (error) throw error;
+        masterTipeKandang.push(data);
+        // Update select
+        const sel = document.getElementById('mt-tipe-kandang');
+        const newOpt = new Option(label, kode, true, true);
+        sel.insertBefore(newOpt, sel.querySelector('option[value="__new__"]'));
+        document.getElementById('mt-tipe-new-row').style.display = 'none';
+        showToast(`Tipe "${label}" ditambahkan ✅`, 'success');
+    } catch (e) {
+        errEl.textContent = e.code === '23505' ? 'Tipe sudah ada' : 'Gagal: ' + (e.message || 'Error');
+        errEl.style.display = 'block';
+    }
+}
+
+// ============================================================
+// MODAL QUICK-ADD MASTER (Ekspedisi / Supir)
+// ============================================================
+function openModalTambahMaster(type) {
+    tambahType = type;
+
+    const titles = {
+        ekspedisi: '➕ Tambah Ekspedisi Baru',
+        supir:     '➕ Tambah Supir Baru',
+        kandang:   '➕ Tambah Kandang Baru',
+    };
+    const labels = {
+        ekspedisi: 'Nama Ekspedisi',
+        supir:     'Nama Supir',
+        kandang:   'Nama Kandang',
+    };
+    document.getElementById('mt-title').textContent = titles[type] || '➕ Tambah';
+    document.getElementById('mt-label').textContent = labels[type] || 'Nama';
+    document.getElementById('mt-inp').value   = '';
+    document.getElementById('mt-no-hp').value = '';
+    document.getElementById('mt-error').style.display = 'none';
+
+    // Baris ekspedisi: hanya tampil untuk supir
+    const eksRow = document.getElementById('mt-eks-row');
+    eksRow.style.display = type === 'supir' ? '' : 'none';
+    if (type === 'supir') {
+        const currEksId = document.getElementById('mb-ekspedisi').value;
+        const mtEks = document.getElementById('mt-eks-filter');
+        mtEks.innerHTML = '<option value="">— Tanpa ekspedisi —</option>';
+        masterEkspedisi.forEach(e => {
+            mtEks.innerHTML += `<option value="${e.id}"${e.id === currEksId ? ' selected' : ''}>${e.nama}</option>`;
+        });
+    }
+
+    // Baris tipe kandang: hanya tampil untuk kandang
+    const tipeRow = document.getElementById('mt-tipe-row');
+    tipeRow.style.display = type === 'kandang' ? '' : 'none';
+    if (type === 'kandang') {
+        // Populate tipe dari master (dynamic)
+        const tipeSelect = document.getElementById('mt-tipe-kandang');
+        tipeSelect.innerHTML = '<option value="">— Pilih tipe —</option>';
+        masterTipeKandang.forEach(t => {
+            tipeSelect.innerHTML += `<option value="${t.kode}">${t.label}</option>`;
+        });
+        tipeSelect.innerHTML += '<option value="__new__" style="color:#2563eb;font-weight:700">＋ Tambah tipe baru…</option>';
+        document.getElementById('mt-tipe-new-row').style.display = 'none';
+    }
+
+    document.getElementById('modal-tambah-master').classList.add('open');
+    setTimeout(() => document.getElementById('mt-inp').focus(), 120);
+}
+
+function closeModalTambahMaster() {
+    document.getElementById('modal-tambah-master').classList.remove('open');
+    tambahType = null;
+}
+
+async function submitTambahMaster() {
+    const nama = document.getElementById('mt-inp').value.trim();
+    const noHp = document.getElementById('mt-no-hp').value.trim() || null;
+    const errEl = document.getElementById('mt-error');
+
+    if (!nama) {
+        errEl.textContent = 'Nama wajib diisi.';
+        errEl.style.display = 'block';
+        return;
+    }
+
+    const btn = document.getElementById('mt-btn-ok');
+    btn.disabled = true;
+    errEl.style.display = 'none';
+
+    try {
+        if (tambahType === 'ekspedisi') {
+            const { data, error } = await db
+                .from('master_ekspedisi')
+                .insert({ nama, no_telp: noHp })
+                .select('id, nama')
+                .single();
+            if (error) throw error;
+            masterEkspedisi.push({ ...data, aktif: true });
+            masterEkspedisi.sort((a, b) => a.nama.localeCompare(b.nama));
+            populateEkspedisiSelect(data.id);
+            populateSupirSelect('', data.id);
+            showToast(`Ekspedisi "${nama}" ditambahkan ✅`, 'success');
+
+        } else if (tambahType === 'supir') {
+            const eksId = document.getElementById('mt-eks-filter').value || null;
+            const { data, error } = await db
+                .from('master_supir')
+                .insert({ nama, ekspedisi_id: eksId, no_hp: noHp })
+                .select('id, nama, ekspedisi_id')
+                .single();
+            if (error) throw error;
+            masterSupir.push({ ...data, aktif: true });
+            masterSupir.sort((a, b) => a.nama.localeCompare(b.nama));
+            const currEksId = document.getElementById('mb-ekspedisi').value;
+            populateSupirSelect(data.id, currEksId);
+            showToast(`Supir "${nama}" ditambahkan ✅`, 'success');
+
+        } else if (tambahType === 'kandang') {
+            const tipe = document.getElementById('mt-tipe-kandang').value;
+            if (!tipe) {
+                errEl.textContent = 'Tipe kandang wajib dipilih.';
+                errEl.style.display = 'block';
+                btn.disabled = false;
+                return;
+            }
+            const { data, error } = await db
+                .from('master_kandang')
+                .insert({ nama, tipe, no_telp: noHp })
+                .select('id, nama, tipe')
+                .single();
+            if (error) throw error;
+            masterKandang.push({ ...data, aktif: true });
+            masterKandang.sort((a, b) => a.nama.localeCompare(b.nama));
+            cbKandangSelect(data.id);
+            showToast(`Kandang "${nama}" ditambahkan ✅`, 'success');
+        }
+        closeModalTambahMaster();
+    } catch (e) {
+        errEl.textContent = e.code === '23505'
+            ? 'Nama sudah terdaftar, gunakan nama lain.'
+            : 'Gagal menyimpan: ' + (e.message || 'Error');
+        errEl.style.display = 'block';
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+function parseNumInt(id) {
+    const v = document.getElementById(id).value;
+    if (v === '' || v == null) return null;
+    const n = parseInt(v);
+    return isNaN(n) ? null : n;
+}
+function parseNumFloat(id) {
+    const v = document.getElementById(id).value;
+    if (v === '' || v == null) return null;
+    const n = parseFloat(v);
+    return isNaN(n) ? null : n;
+}
+
+// ============================================================
+// AKTIFKAN DRAFT → ACTIVE (dari tabel, tanpa buka modal)
+// ============================================================
+async function konfirmasiAktifkan(batchId, batchCode) {
+    // Cek data dulu
+    const { data } = await db
+        .from('live_chicken_batches')
+        .select('ekor_kandang, kg_kandang, ekor_timbang_ulang, kg_timbang_ulang')
+        .eq('id', batchId)
+        .single();
+
+    if (!data?.ekor_kandang || !data?.ekor_timbang_ulang) {
+        showToast('Data kandang & timbang ulang harus diisi sebelum Aktifkan. Klik Edit terlebih dahulu.', 'warning');
+        return;
+    }
+
+    openModalKonfirmasi(
+        '▶ Aktifkan Batch',
+        `Batch <strong>${batchCode}</strong> akan diaktifkan. Status berubah dari Draft → Aktif dan selisih ekor akan dikunci. Lanjutkan?`,
+        async () => {
+            const ekorK   = data.ekor_kandang || 0;
+            const ekorT   = data.ekor_timbang_ulang || 0;
+            const ekorM   = 0;
+            const selisih = ekorK - ekorM - ekorT;
+
+            const { error } = await db
+                .from('live_chicken_batches')
+                .update({
+                    status: 'ACTIVE',
+                    selisih_ekor: selisih,
+                    updated_by: currentUser.id,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', batchId);
+
+            if (error) throw error;
+            showToast(`Batch ${batchCode} diaktifkan ✅`, 'success');
+            loadPage();
+        }
+    );
+}
+
+// ============================================================
+// MODAL SELESAI (Supervisor PIN)
+// ============================================================
+function openModalSelesai(batchId, batchCode) {
+    selesaiBatchId = batchId;
+    document.getElementById('ms-batch-code').textContent = batchCode;
+    document.getElementById('ms-pin').value = '';
+    document.getElementById('ms-pin-error').style.display = 'none';
+    document.getElementById('modal-selesai').classList.add('open');
+    setTimeout(() => document.getElementById('ms-pin').focus(), 100);
+}
+function closeModalSelesai() {
+    document.getElementById('modal-selesai').classList.remove('open');
+    selesaiBatchId = null;
+}
+
+async function submitSelesai() {
+    const pin = document.getElementById('ms-pin').value;
+    if (!pin || pin.length < 4) {
+        document.getElementById('ms-pin-error').style.display = 'block';
+        document.getElementById('ms-pin-error').textContent   = 'PIN harus minimal 4 digit.';
+        return;
+    }
+
+    // Verifikasi PIN ke DB — hanya Supervisor atau System Admin
+    const pinErr = document.getElementById('ms-pin-error');
+    const { data: sup } = await db.from('users')
+        .select('id, nama')
+        .eq('pin', pin)
+        .eq('aktif', true)
+        .or('role.eq.SUPERVISOR,is_system_admin.eq.true')
+        .maybeSingle();
+    if (!sup) {
+        pinErr.textContent   = 'PIN salah atau bukan Supervisor.';
+        pinErr.style.display = 'block';
+        document.getElementById('ms-pin').value = '';
+        return;
+    }
+
+    try {
+        const { error } = await db
+            .from('live_chicken_batches')
+            .update({
+                status: 'COMPLETE',
+                updated_by: currentUser.id,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', selesaiBatchId);
+
+        if (error) throw error;
+        showToast('Batch ditandai Selesai ✅', 'success');
+        closeModalSelesai();
+        loadPage();
+    } catch (e) {
+        console.error(e);
+        showToast('Gagal: ' + (e.message || 'Unknown'), 'error');
+    }
+}
+
+// ============================================================
+// MODAL KONFIRMASI GENERIC
+// ============================================================
+function openModalKonfirmasi(title, descHtml, onConfirm) {
+    document.getElementById('mk-title').textContent = title;
+    document.getElementById('mk-desc').innerHTML    = descHtml;
+    const btn = document.getElementById('mk-btn-ok');
+    btn.onclick = async () => {
+        btn.disabled = true;
+        try {
+            await onConfirm();
+            closeModalKonfirmasi();
+        } catch (e) {
+            showToast('Gagal: ' + (e.message || 'Unknown error'), 'error');
+        } finally {
+            btn.disabled = false;
+        }
+    };
+    document.getElementById('modal-konfirmasi').classList.add('open');
+}
+function closeModalKonfirmasi() {
+    document.getElementById('modal-konfirmasi').classList.remove('open');
+}
+
+// ============================================================
+// CLOSE MODAL SAAT KLIK BACKDROP
+// ============================================================
+document.addEventListener('click', e => {
+    // Tutup combobox kandang jika klik di luar
+    if (!e.target.closest('#cb-kandang-wrap')) {
+        cbKandangClose();
+    }
+    // Tutup modal overlay
+    if (e.target.classList.contains('modal-overlay')) {
+        document.querySelectorAll('.modal-overlay.open').forEach(m => m.classList.remove('open'));
+        editingBatchId = null;
+        selesaiBatchId = null;
+    }
+});
+
+// ============================================================
+// INIT — cek session yang sudah ada
+// ============================================================
+(function init() {
+    const saved = localStorage.getItem('rpa_user');
+    if (saved) {
+        try {
+            currentUser = JSON.parse(saved);
+            startApp();
+        } catch (e) {
+            localStorage.removeItem('rpa_user');
+        }
+    }
+})();
+</script>
+</body>
+</html>

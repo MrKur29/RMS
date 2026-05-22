@@ -1,0 +1,2355 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Produksi Karkas — Kurnia's Food</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+/* ===== RESET & BASE ===== */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f2f5;color:#111827;font-size:14px}
+button{cursor:pointer;font-family:inherit}
+a{text-decoration:none}
+
+/* ===== LOGIN ===== */
+#login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(135deg,#0f172a 0%,#1e3a8a 60%,#2563eb 100%)}
+.login-card{background:white;border-radius:16px;padding:44px 40px;width:400px;box-shadow:0 25px 60px rgba(0,0,0,0.4)}
+.login-logo{text-align:center;margin-bottom:36px}
+.login-logo .icon{font-size:48px;display:block;margin-bottom:12px}
+.login-logo h1{font-size:22px;font-weight:800;color:#111827}
+.login-logo p{font-size:13px;color:#6b7280;margin-top:4px}
+.form-group{margin-bottom:20px}
+.form-group label{display:block;font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
+.form-group input,.form-group select,.form-group textarea{width:100%;padding:11px 14px;border:1.5px solid #d1d5db;border-radius:8px;font-size:15px;transition:border-color .2s,box-shadow .2s;color:#111827;background:white;font-family:inherit}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{outline:none;border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+.form-group textarea{resize:vertical;min-height:72px;font-size:14px}
+.btn-login{width:100%;padding:13px;background:#2563eb;color:white;border:none;border-radius:8px;font-size:15px;font-weight:700;transition:background .2s,transform .1s}
+.btn-login:hover{background:#1d4ed8}
+.btn-login:active{transform:scale(.98)}
+.btn-login:disabled{background:#93c5fd;cursor:not-allowed}
+.login-error{background:#fee2e2;color:#dc2626;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:18px;border:1px solid #fecaca;display:none}
+.login-version{text-align:center;margin-top:20px;font-size:11px;color:#9ca3af}
+
+/* ===== APP LAYOUT ===== */
+#app-screen{display:none;height:100vh;overflow:hidden}
+.app-layout{display:flex;height:100%}
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:90}
+.sidebar-overlay.visible{display:block}
+
+/* ===== SIDEBAR ===== */
+.sidebar{width:230px;flex-shrink:0;background:#0f172a;color:white;display:flex;flex-direction:column;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.1) transparent;transition:transform .28s cubic-bezier(.4,0,.2,1);z-index:100}
+.sidebar-brand{padding:20px 18px 16px;border-bottom:1px solid rgba(255,255,255,.08);flex-shrink:0}
+.sidebar-brand h2{font-size:15px;font-weight:800;color:#f8fafc;display:flex;align-items:center;gap:8px}
+.sidebar-brand p{font-size:11px;color:rgba(255,255,255,.4);margin-top:3px}
+.sidebar-nav{flex:1;padding:10px 0}
+.nav-section-label{font-size:10px;font-weight:700;color:rgba(255,255,255,.3);text-transform:uppercase;letter-spacing:1px;padding:12px 18px 4px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 18px;font-size:13px;color:rgba(255,255,255,.65);cursor:pointer;transition:all .15s;border-left:3px solid transparent;position:relative}
+.nav-item:hover:not(.disabled){background:rgba(255,255,255,.07);color:white}
+.nav-item.active{background:rgba(37,99,235,.2);color:#93c5fd;border-left-color:#3b82f6}
+.nav-item.disabled{opacity:.3;cursor:not-allowed}
+.nav-icon{font-size:15px;width:22px;text-align:center;flex-shrink:0}
+.nav-label-text{flex:1}
+.nav-tag{font-size:9px;font-weight:700;padding:2px 5px;border-radius:4px;background:rgba(37,99,235,.3);color:#93c5fd}
+.sidebar-footer{padding:14px 18px;border-top:1px solid rgba(255,255,255,.08);flex-shrink:0}
+.user-card{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.user-avatar{width:34px;height:34px;border-radius:50%;background:#2563eb;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:white;flex-shrink:0}
+.user-info-text .user-name{font-size:13px;font-weight:700;color:#f8fafc}
+.user-info-text .user-role{font-size:11px;color:rgba(255,255,255,.45);margin-top:1px}
+.btn-logout{width:100%;padding:8px 12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.6);border-radius:6px;font-size:12px;font-weight:600;transition:all .15s}
+.btn-logout:hover{background:rgba(220,38,38,.25);border-color:rgba(220,38,38,.5);color:#fca5a5}
+
+/* ===== MAIN AREA ===== */
+.main-area{flex:1;display:flex;flex-direction:column;overflow:hidden}
+
+/* ===== TOPBAR ===== */
+.topbar{background:white;height:58px;padding:0 20px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e5e7eb;box-shadow:0 1px 4px rgba(0,0,0,.05);gap:12px}
+.topbar-left{display:flex;align-items:center;gap:12px;min-width:0}
+.topbar-left h1{font-size:17px;font-weight:800;color:#111827;white-space:nowrap}
+.topbar-left p{font-size:12px;color:#9ca3af;margin-top:1px;white-space:nowrap}
+.topbar-left-text{min-width:0}
+.topbar-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.btn-hamburger{display:none;align-items:center;justify-content:center;width:40px;height:40px;border-radius:8px;background:#f3f4f6;border:1.5px solid #e5e7eb;font-size:18px;color:#374151;flex-shrink:0;transition:background .15s}
+.btn-hamburger:hover{background:#e5e7eb}
+.clock-display{font-size:14px;font-weight:700;color:#374151;background:#f9fafb;padding:6px 10px;border-radius:6px;border:1px solid #e5e7eb;white-space:nowrap}
+
+/* ===== CONTENT AREA ===== */
+.content-area{flex:1;overflow-y:auto;padding:20px 24px 32px}
+
+/* ===== BATCH SELECTOR BAR ===== */
+.batch-bar{background:white;border-radius:10px;padding:14px 18px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.06);display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.batch-bar label{font-size:12px;font-weight:700;color:#374151;white-space:nowrap}
+.batch-bar select{padding:8px 12px;border:1.5px solid #d1d5db;border-radius:7px;font-size:13px;color:#111827;background:white;font-family:inherit;min-width:220px;transition:border-color .2s}
+.batch-bar select:focus{outline:none;border-color:#2563eb}
+.batch-bar .spacer{flex:1}
+.btn-buka-sesi{padding:9px 18px;background:#16a34a;color:white;border:none;border-radius:7px;font-size:13px;font-weight:700;transition:background .15s;white-space:nowrap}
+.btn-buka-sesi:hover{background:#15803d}
+.btn-buka-sesi:disabled{background:#86efac;cursor:not-allowed}
+.session-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:20px;font-size:12px;font-weight:700}
+.session-badge.open{background:#d1fae5;color:#065f46}
+.session-badge.closed{background:#dbeafe;color:#1e40af}
+
+/* ===== SUMMARY CARDS ===== */
+.cards-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;margin-bottom:16px}
+.summary-card{background:white;border-radius:10px;padding:14px 14px;border-left:4px solid #e5e7eb;box-shadow:0 1px 3px rgba(0,0,0,.06);transition:transform .15s,box-shadow .15s}
+.summary-card:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.1)}
+.summary-card.c-blue{border-left-color:#2563eb}
+.summary-card.c-green{border-left-color:#16a34a}
+.summary-card.c-amber{border-left-color:#d97706}
+.summary-card.c-red{border-left-color:#dc2626}
+.summary-card.c-purple{border-left-color:#2563eb}
+.summary-card.c-teal{border-left-color:#2563eb}
+.sc-label{font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.6px}
+.sc-value{font-size:26px;font-weight:900;color:#111827;line-height:1.1;margin:4px 0 2px}
+.sc-value.small{font-size:18px}
+.sc-sub{font-size:11px;color:#9ca3af}
+
+/* ===== TWO-PANEL GRID ===== */
+.prod-grid{display:grid;grid-template-columns:1fr 360px;gap:14px;align-items:start}
+
+/* ===== PANEL ===== */
+.panel{background:white;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden;margin-bottom:14px}
+.panel:last-child{margin-bottom:0}
+.panel-head{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:1px solid #f3f4f6;gap:8px;flex-wrap:wrap}
+.panel-title{font-size:14px;font-weight:800;color:#111827}
+.panel-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.panel-pill{font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;background:#f3f4f6;color:#374151}
+.panel-pill.alert{background:#fee2e2;color:#dc2626}
+.panel-pill.ok{background:#d1fae5;color:#065f46}
+.panel-pill.warn{background:#fef3c7;color:#92400e}
+
+/* ===== TABLE ===== */
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.tbl{width:100%;border-collapse:collapse;font-size:13px;min-width:600px}
+.tbl thead th{text-align:left;padding:9px 14px;font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;background:#f9fafb;border-bottom:1px solid #f0f2f5;white-space:nowrap}
+.tbl tbody td{padding:10px 14px;border-bottom:1px solid #f9fafb;vertical-align:middle}
+.tbl tbody tr:last-child td{border-bottom:none}
+.tbl tbody tr:hover td{background:#fafafa}
+.tbl-sub{font-size:11px;color:#6b7280;margin-top:2px}
+
+/* ===== BADGES ===== */
+.badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:12px;font-size:11px;font-weight:700;white-space:nowrap}
+.b-lantai{background:#f3f4f6;color:#374151}
+.b-pending{background:#fef3c7;color:#92400e}
+.b-chiller{background:#dbeafe;color:#1e40af}
+.b-parting{background:#dbeafe;color:#1e40af}
+.b-boneless{background:#fce7f3;color:#9d174d}
+.b-ok{background:#d1fae5;color:#065f46}
+.b-warn{background:#fef3c7;color:#92400e}
+.b-block{background:#fee2e2;color:#991b1b}
+.b-override{background:#fce7f3;color:#9d174d}
+.b-musnah{background:#f3f4f6;color:#6b7280}
+
+/* ===== BUTTONS ===== */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 12px;border-radius:6px;border:none;font-size:12px;font-weight:700;transition:all .15s;min-height:34px;touch-action:manipulation;-webkit-tap-highlight-color:transparent;white-space:nowrap}
+.btn-primary{background:#2563eb;color:white}
+.btn-primary:hover{background:#1d4ed8}
+.btn-green{background:#16a34a;color:white}
+.btn-green:hover{background:#15803d}
+.btn-amber{background:#d97706;color:white}
+.btn-amber:hover{background:#b45309}
+.btn-red{background:#dc2626;color:white}
+.btn-red:hover{background:#b91c1c}
+.btn-ghost{background:#f3f4f6;color:#374151}
+.btn-ghost:hover{background:#e5e7eb}
+.btn-outline{background:white;color:#374151;border:1.5px solid #d1d5db}
+.btn-outline:hover{background:#f9fafb;border-color:#9ca3af}
+.btn-sm{padding:5px 9px;font-size:11px;min-height:28px}
+.btn:disabled{opacity:.45;cursor:not-allowed;pointer-events:none}
+.btn-baru{display:flex;align-items:center;gap:6px;padding:9px 16px;background:#2563eb;color:white;border:none;border-radius:7px;font-size:13px;font-weight:700;transition:background .15s;white-space:nowrap;min-height:38px}
+.btn-baru:hover{background:#1d4ed8}
+
+/* ===== SCAN PANEL ===== */
+.scan-panel-body{padding:16px}
+.scan-field-wrap{position:relative;margin-bottom:12px}
+.scan-field-wrap .scan-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:18px;pointer-events:none}
+.scan-input{width:100%;padding:12px 12px 12px 40px;border:2px solid #2563eb;border-radius:8px;font-size:15px;font-weight:700;letter-spacing:1px;color:#111827;background:#f0f7ff;font-family:inherit;transition:box-shadow .2s}
+.scan-input:focus{outline:none;box-shadow:0 0 0 3px rgba(37,99,235,.2)}
+.scan-input::placeholder{font-weight:400;letter-spacing:0;color:#9ca3af}
+.scan-hint{font-size:11px;color:#6b7280;margin-bottom:14px}
+.scan-result{background:#f9fafb;border-radius:8px;padding:14px;border:1.5px solid #e5e7eb;margin-bottom:12px;display:none}
+.scan-result.visible{display:block}
+.scan-result.error{border-color:#fecaca;background:#fff5f5}
+.scan-result-code{font-size:13px;font-weight:800;color:#111827;margin-bottom:6px}
+.scan-result-detail{font-size:12px;color:#374151;line-height:1.7}
+.scan-dest-btns{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:12px}
+.btn-dest{padding:10px 4px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;transition:all .15s;text-align:center}
+.btn-dest-chiller{background:#dbeafe;color:#1e40af}
+.btn-dest-chiller:hover{background:#2563eb;color:white}
+.btn-dest-parting{background:#dbeafe;color:#1e40af}
+.btn-dest-parting:hover{background:#2563eb;color:white}
+.btn-dest-boneless{background:#fce7f3;color:#9d174d}
+.btn-dest-boneless:hover{background:#db2777;color:white}
+.btn-dest.selected{outline:3px solid #111827;transform:scale(1.04)}
+
+/* ===== PARTIAL TRANSFER ===== */
+.pk-partial-wrap{margin-top:12px}
+.pk-partial-toggle{display:flex;border:1.5px solid #d1d5db;border-radius:8px;overflow:hidden}
+.pk-partial-toggle button{flex:1;padding:8px;font-size:12px;font-weight:600;cursor:pointer;border:none;background:#f9fafb;color:#6b7280;transition:all .15s}
+.pk-partial-toggle button.active{background:#1d4ed8;color:white}
+.pk-partial-toggle button:first-child{border-right:1.5px solid #d1d5db}
+.pk-partial-input{display:none;background:#f0f9ff;border:1.5px solid #bae6fd;border-radius:8px;padding:10px;margin-top:8px}
+.pk-partial-input.show{display:block}
+.pk-partial-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.pk-partial-row label{font-size:11px;font-weight:700;color:#374151;display:block;margin-bottom:3px}
+.pk-partial-row input{width:100%;padding:6px 8px;border:1.5px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box}
+.pk-partial-row input:focus{outline:none;border-color:#1d4ed8}
+.pk-ratio-warn{display:none;background:#fef9c3;border:1.5px solid #fde047;border-radius:6px;padding:7px 10px;font-size:11px;color:#854d0e;margin-top:6px;line-height:1.4}
+.pk-partial-hint{font-size:11px;color:#6b7280;margin-top:5px}
+.pk-confirm-btn{width:100%;margin-top:10px;padding:9px;background:#1d4ed8;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer}
+.pk-confirm-btn:disabled{background:#93c5fd;cursor:not-allowed}
+.pk-err{display:none;color:#dc2626;font-size:11px;font-weight:700;margin-top:6px}
+
+/* ===== LANTAI LIST ===== */
+.lantai-item{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid #f3f4f6}
+.lantai-item:last-child{border-bottom:none}
+.lantai-code{font-size:12px;font-weight:700;color:#111827;font-family:monospace}
+.lantai-detail{flex:1;font-size:11px;color:#6b7280}
+.lantai-status{flex-shrink:0}
+
+/* ===== VALIDATION DISPLAY ===== */
+.val-box{padding:8px 12px;border-radius:6px;font-size:12px;font-weight:700;margin-top:8px;display:none}
+.val-box.visible{display:block}
+.val-ok{background:#d1fae5;color:#065f46;border:1px solid #a7f3d0}
+.val-warn{background:#fef3c7;color:#92400e;border:1px solid #fde68a}
+.val-block{background:#fee2e2;color:#991b1b;border:1px solid #fecaca}
+
+/* ===== EMPTY STATE ===== */
+.empty{text-align:center;padding:32px 16px;color:#9ca3af;font-size:13px}
+.empty .e-icon{font-size:28px;margin-bottom:8px}
+
+/* ===== MODAL ===== */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;align-items:flex-start;justify-content:center;padding:32px 16px;overflow-y:auto}
+.modal-overlay.open{display:flex}
+.modal-box{background:white;border-radius:14px;padding:28px;width:540px;max-width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);animation:modal-in .2s ease;margin:auto}
+.modal-box.modal-sm{width:400px}
+.modal-box.modal-lg{width:640px}
+@keyframes modal-in{from{transform:scale(.92);opacity:0}to{transform:scale(1);opacity:1}}
+.modal-title{font-size:16px;font-weight:800;margin-bottom:4px;color:#111827}
+.modal-desc{font-size:13px;color:#6b7280;margin-bottom:20px}
+.modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px 16px}
+.modal-grid .full{grid-column:1/-1}
+.form-group.modal-fg{margin-bottom:0}
+.form-group.modal-fg input,.form-group.modal-fg select,.form-group.modal-fg textarea{font-size:14px;padding:9px 12px}
+.modal-divider{border:none;border-top:1px solid #f0f2f5;margin:4px 0;grid-column:1/-1}
+.modal-footer{display:flex;justify-content:flex-end;gap:10px;margin-top:22px;padding-top:18px;border-top:1px solid #f0f2f5}
+.modal-step{display:none}
+.modal-step.active{display:block}
+
+/* ===== REKON BOX ===== */
+.rekon-box{background:#f9fafb;border-radius:8px;padding:16px;border:1px solid #e5e7eb;margin-bottom:16px}
+.rekon-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f0f2f5;font-size:13px}
+.rekon-row:last-child{border-bottom:none}
+.rekon-label{color:#6b7280}
+.rekon-val{font-weight:700;color:#111827}
+.rekon-selisih-ok{color:#16a34a;font-weight:800;font-size:15px}
+.rekon-selisih-bad{color:#dc2626;font-weight:800;font-size:15px}
+.rekon-selisih-warn{color:#d97706;font-weight:800;font-size:15px}
+
+/* ===== CLOSE SESSION BOTTOM BAR ===== */
+.session-bottom-bar{background:white;border-radius:10px;padding:14px 18px;box-shadow:0 1px 3px rgba(0,0,0,.06);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-top:14px}
+.session-bottom-info{font-size:13px;color:#6b7280}
+.session-bottom-info strong{color:#111827}
+.btn-tutup-sesi{padding:10px 20px;background:#1e40af;color:white;border:none;border-radius:7px;font-size:13px;font-weight:700;transition:background .15s}
+.btn-tutup-sesi:hover{background:#1d4ed8}
+
+/* ===== PIN INPUT ===== */
+.pin-input{width:100%;padding:14px;border:2px solid #d1d5db;border-radius:8px;font-size:22px;font-weight:800;letter-spacing:6px;text-align:center;color:#111827;font-family:monospace;transition:border-color .2s}
+.pin-input:focus{outline:none;border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.15)}
+.pin-error{color:#dc2626;font-size:12px;font-weight:700;margin-top:6px;display:none}
+
+/* ===== TOAST ===== */
+#toast{position:fixed;bottom:28px;right:28px;padding:13px 20px;border-radius:10px;font-size:13px;font-weight:700;box-shadow:0 8px 24px rgba(0,0,0,.2);display:none;z-index:999;animation:toast-in .25s ease}
+#toast.show{display:block}
+#toast.success{background:#065f46;color:white}
+#toast.error{background:#991b1b;color:white}
+#toast.warning{background:#92400e;color:white}
+@keyframes toast-in{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+
+/* ===== NO SESSION STATE ===== */
+.no-session-state{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 24px;text-align:center;background:white;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.no-session-icon{font-size:56px;margin-bottom:16px}
+.no-session-title{font-size:18px;font-weight:800;color:#111827;margin-bottom:8px}
+.no-session-desc{font-size:13px;color:#6b7280;margin-bottom:24px;max-width:360px}
+
+/* ===== KARKAS RUSAK SECTION ===== */
+.rusak-item{padding:12px 16px;border-bottom:1px solid #f3f4f6;display:flex;align-items:flex-start;gap:12px}
+.rusak-item:last-child{border-bottom:none}
+.rusak-ekor{font-size:22px;font-weight:900;color:#dc2626;min-width:44px;text-align:center}
+.rusak-detail{flex:1}
+.rusak-alasan{font-size:12px;font-weight:700;color:#374151}
+.rusak-catatan{font-size:11px;color:#6b7280;margin-top:2px}
+.rusak-status{flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+
+/* ===== PRINT STYLES — LABEL 57×38mm ===== */
+@media print {
+  @page { size: 57mm 38mm; margin: 0; }
+  body > *:not(#label-print-area) { display: none !important; }
+  #label-print-area { display: block !important; }
+  #label-print-area * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+#label-print-area {
+  display: none;
+  width: 57mm;
+  height: 38mm;
+  padding: 1.5mm 2mm;
+  font-family: 'Arial Narrow', Arial, sans-serif;
+  overflow: hidden;
+  box-sizing: border-box;
+  background: white;
+}
+.label-inner {
+  display: flex;
+  gap: 2mm;
+  height: 100%;
+  align-items: center;
+}
+.label-qr {
+  flex-shrink: 0;
+  width: 20mm;
+  height: 20mm;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.label-qr img, .label-qr canvas {
+  width: 20mm !important;
+  height: 20mm !important;
+}
+.label-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 100%;
+  overflow: hidden;
+}
+.label-code {
+  font-size: 6.5pt;
+  font-weight: 700;
+  color: #111;
+  letter-spacing: .3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.label-batch {
+  font-size: 6pt;
+  color: #444;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.label-grade-uk {
+  font-size: 9pt;
+  font-weight: 900;
+  color: #000;
+  line-height: 1.2;
+}
+.label-qty-kg {
+  font-size: 7.5pt;
+  font-weight: 700;
+  color: #111;
+}
+.label-avg {
+  font-size: 6pt;
+  color: #555;
+}
+.label-date {
+  font-size: 5.5pt;
+  color: #777;
+}
+.label-divider {
+  border: none;
+  border-top: 0.3mm solid #ccc;
+  margin: 0.5mm 0;
+}
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 1200px) { .prod-grid { grid-template-columns: 1fr 320px; } }
+@media (max-width: 1023px) {
+  .sidebar { position: fixed; top: 0; left: 0; height: 100%; transform: translateX(-100%); }
+  .sidebar.open { transform: translateX(0); }
+  .btn-hamburger { display: flex; }
+  .main-area { width: 100%; }
+  .content-area { padding: 16px 16px 32px; }
+  .topbar { padding: 0 16px; }
+  .prod-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 767px) {
+  .login-card { width: 92vw; padding: 32px 24px; }
+  .cards-row { grid-template-columns: repeat(2,1fr); gap: 10px; }
+  .sc-value { font-size: 20px; }
+  .modal-grid { grid-template-columns: 1fr; }
+  .modal-box { padding: 20px; }
+  .scan-dest-btns { grid-template-columns: 1fr; }
+  .topbar-left p { display: none; }
+  .batch-bar select { min-width: 180px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ==================== LOGIN ==================== -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <span class="icon">🔪</span>
+      <h1>RPA Management System</h1>
+      <p>Produksi Karkas — Login</p>
+    </div>
+    <div class="login-error" id="login-error"></div>
+    <div class="form-group">
+      <label>Username</label>
+      <input type="text" id="inp-username" placeholder="Masukkan username" autocomplete="username"
+             onkeydown="if(event.key==='Enter')document.getElementById('inp-password').focus()">
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input type="password" id="inp-password" placeholder="Masukkan password" autocomplete="current-password"
+             onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button class="btn-login" id="btn-login" onclick="doLogin()">Masuk →</button>
+    <p class="login-version">v1.0 — RPA System</p>
+  </div>
+</div>
+
+<!-- ==================== APP ==================== -->
+<div id="app-screen">
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+<div class="app-layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <div style="display:flex;align-items:center;gap:10px;"><img src="logo.png" style="height:36px;width:auto;object-fit:contain;"><span style="font-size:15px;font-weight:800;color:#f8fafc;">Kurnia's Food</span></div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section-label">Utama</div>
+      <div class="nav-item" onclick="navTo('Dashboard.html')">
+        <span class="nav-icon">🏠</span><span class="nav-label-text">Dashboard</span>
+      </div>
+      <div class="nav-section-label">Produksi</div>
+      <div class="nav-item" onclick="navTo('BatchAyamHidup.html')">
+        <span class="nav-icon">🐔</span><span class="nav-label-text">Batch Ayam Hidup</span>
+      </div>
+      <div class="nav-item active">
+        <span class="nav-icon">⚙️</span><span class="nav-label-text">Produksi Karkas</span>
+        <span class="nav-tag">Aktif</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Thawing.html')"><span class="nav-icon">🧊</span><span class="nav-label-text">Thawing</span></div>
+      <div class="nav-item" onclick="navTo('Chiller.html')"><span class="nav-icon">❄️</span><span class="nav-label-text">Chiller</span></div>
+      <div class="nav-item" onclick="navTo('WorkOrder.html')"><span class="nav-icon">📋</span><span class="nav-label-text">Work Order</span></div>
+      <div class="nav-item" onclick="navTo('Parting.html')"><span class="nav-icon">✂️</span><span class="nav-label-text">Parting</span></div>
+      <div class="nav-item" onclick="navTo('Boneless.html')"><span class="nav-icon">🥩</span><span class="nav-label-text">Boneless</span></div>
+      <div class="nav-item" onclick="navTo('Marinasi.html')"><span class="nav-icon">🌶️</span><span class="nav-label-text">Marinasi</span></div>
+      <div class="nav-item" onclick="navTo('Blasting.html')"><span class="nav-icon">🧊</span><span class="nav-label-text">Blasting</span></div>
+      <div class="nav-item" onclick="navTo('ByProductKarkas.html')"><span class="nav-icon">📦</span><span class="nav-label-text">By-product Karkas</span></div>
+      <div class="nav-section-label">Penjualan</div>
+      <div class="nav-item disabled"><span class="nav-icon">🛒</span><span class="nav-label-text">Penjualan</span></div>
+      <div class="nav-section-label">Manajemen</div>
+      <div class="nav-item disabled"><span class="nav-icon">✅</span><span class="nav-label-text">Koreksi &amp; Approval</span></div>
+      <div class="nav-item disabled"><span class="nav-icon">📊</span><span class="nav-label-text">Traceability</span></div>
+      <div class="nav-item" onclick="navTo('MasterData.html')"><span class="nav-icon">🗂️</span><span class="nav-label-text">Master Data</span></div>
+      <div class="nav-item" id="nav-user-mgmt" style="display:none" onclick="navTo('UserManagement.html')"><span class="nav-icon">👥</span><span class="nav-label-text">Manajemen User</span></div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-card">
+        <div class="user-avatar" id="user-avatar">?</div>
+        <div class="user-info-text">
+          <div class="user-name" id="sidebar-name">—</div>
+          <div class="user-role" id="sidebar-role">—</div>
+        </div>
+      </div>
+      <button class="btn-logout" onclick="doLogout()">⬅ Keluar</button>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="main-area">
+    <div class="topbar">
+      <div class="topbar-left">
+        <button class="btn-hamburger" id="btn-hamburger" onclick="toggleSidebar()">☰</button>
+        <div class="topbar-left-text">
+          <h1>🔪 Produksi Karkas</h1>
+          <p id="topbar-date">—</p>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <div class="clock-display" id="clock">—</div>
+      </div>
+    </div>
+
+    <div class="content-area" id="content-area">
+
+      <!-- BATCH SELECTOR BAR -->
+      <div class="batch-bar">
+        <label>Tanggal:</label>
+        <input type="date" id="inp-filter-date" onchange="loadBatches()"
+               style="padding:8px 10px;border:1.5px solid #d1d5db;border-radius:7px;font-size:13px;color:#111827;font-family:inherit;transition:border-color .2s">
+        <label>Batch:</label>
+        <select id="sel-batch" onchange="onBatchChange()">
+          <option value="">— Pilih Batch —</option>
+        </select>
+        <div id="session-info-badge"></div>
+        <div class="spacer"></div>
+        <button class="btn-buka-sesi" id="btn-buka-sesi" onclick="bukaSession()" style="display:none">
+          ▶ Buka Sesi Produksi
+        </button>
+      </div>
+
+      <!-- CONTENT: NO SESSION / ACTIVE SESSION -->
+      <div id="state-no-batch">
+        <div class="no-session-state">
+          <div class="no-session-icon">🐔</div>
+          <div class="no-session-title">Pilih Batch Terlebih Dahulu</div>
+          <div class="no-session-desc">Pilih batch ayam hidup yang aktif dari dropdown di atas untuk memulai atau melanjutkan sesi produksi karkas.</div>
+        </div>
+      </div>
+
+      <div id="state-no-session" style="display:none">
+        <div class="no-session-state">
+          <div class="no-session-icon">📋</div>
+          <div class="no-session-title">Belum Ada Sesi Produksi</div>
+          <div class="no-session-desc" id="no-session-desc">Batch ini belum memiliki sesi produksi yang aktif. Klik tombol "Buka Sesi Produksi" untuk mulai mencatat hasil timbang karkas.</div>
+        </div>
+      </div>
+
+      <div id="state-active" style="display:none">
+
+        <!-- SUMMARY CARDS -->
+        <div class="cards-row">
+          <div class="summary-card c-blue">
+            <div class="sc-label">Total Keranjang</div>
+            <div class="sc-value" id="sc-keranjang">—</div>
+          </div>
+          <div class="summary-card c-green">
+            <div class="sc-label">Total Ekor</div>
+            <div class="sc-value" id="sc-ekor">—</div>
+          </div>
+          <div class="summary-card c-teal">
+            <div class="sc-label">Total Kg</div>
+            <div class="sc-value small" id="sc-kg">—</div>
+          </div>
+          <div class="summary-card c-amber">
+            <div class="sc-label">Di Lantai</div>
+            <div class="sc-value" id="sc-lantai">—</div>
+            <div class="sc-sub">keranjang</div>
+          </div>
+          <div class="summary-card c-purple">
+            <div class="sc-label">Pending Pindah</div>
+            <div class="sc-value" id="sc-pending">—</div>
+            <div class="sc-sub">keranjang</div>
+          </div>
+          <div class="summary-card c-red">
+            <div class="sc-label">Karkas Rusak</div>
+            <div class="sc-value" id="sc-rusak">—</div>
+            <div class="sc-sub">ekor</div>
+          </div>
+        </div>
+
+        <!-- TWO-PANEL GRID -->
+        <div class="prod-grid">
+
+          <!-- LEFT: KERANJANG LIST -->
+          <div>
+            <div class="panel">
+              <div class="panel-head">
+                <span class="panel-title">🗂️ Keranjang Tercatat</span>
+                <div class="panel-actions">
+                  <button class="btn btn-amber btn-sm" onclick="openModalRusak()">⚠️ Catat Rusak</button>
+                  <button class="btn-baru btn-sm" onclick="openModalKeranjang()">＋ Tambah Keranjang</button>
+                </div>
+              </div>
+              <div class="tbl-wrap">
+                <table class="tbl">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Kode Keranjang</th>
+                      <th>Produk</th>
+                      <th>Ekor</th>
+                      <th>Kg</th>
+                      <th>Avg kg/ekor</th>
+                      <th>Validasi</th>
+                      <th>Grade</th>
+                      <th>Tipe Rusak</th>
+                      <th>Status</th>
+                      <th>Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tbody-keranjang">
+                    <tr><td colspan="9"><div class="empty"><div class="e-icon">⏳</div>Memuat…</div></td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- KARKAS RUSAK PANEL -->
+            <div class="panel" id="panel-rusak" style="display:none">
+              <div class="panel-head">
+                <span class="panel-title">⚠️ Karkas Rusak / Musnah</span>
+                <span class="panel-pill alert" id="pill-rusak">0 pending</span>
+              </div>
+              <div id="list-rusak">
+                <div class="empty"><div class="e-icon">✅</div>Tidak ada karkas rusak</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- RIGHT: SCAN PANEL -->
+          <div>
+            <div class="panel">
+              <div class="panel-head">
+                <span class="panel-title">📡 Scan Keranjang</span>
+              </div>
+              <div class="scan-panel-body">
+                <div class="scan-field-wrap">
+                  <span class="scan-icon">📷</span>
+                  <input type="text" class="scan-input" id="scan-input"
+                         placeholder="Scan atau ketik kode keranjang…"
+                         onkeydown="onScanKeydown(event)"
+                         autocomplete="off" autocorrect="off" spellcheck="false">
+                </div>
+                <div class="scan-hint">Tekan Enter atau scan barcode untuk cari keranjang</div>
+
+                <!-- Scan result -->
+                <div class="scan-result" id="scan-result">
+                  <div class="scan-result-code" id="scan-result-code">—</div>
+                  <div class="scan-result-detail" id="scan-result-detail">—</div>
+                  <div class="scan-dest-btns" id="scan-dest-btns" style="display:none">
+                    <button class="btn-dest btn-dest-chiller" id="scan-dest-CHILLER" onclick="pkSelectScanDest('CHILLER')">❄️ Chiller</button>
+                    <button class="btn-dest btn-dest-parting" id="scan-dest-PARTING" onclick="pkSelectScanDest('PARTING')">✂️ Parting</button>
+                    <button class="btn-dest btn-dest-boneless" id="scan-dest-BONELESS" onclick="pkSelectScanDest('BONELESS')">🥩 Boneless</button>
+                  </div>
+                  <!-- Partial section scan -->
+                  <div class="pk-partial-wrap" id="scan-partial-wrap" style="display:none">
+                    <div class="pk-partial-toggle">
+                      <button id="scan-tog-semua" class="active" onclick="pkScanSetPartial(false)">📦 Kirim Semua</button>
+                      <button id="scan-tog-sebagian" onclick="pkScanSetPartial(true)">✂️ Kirim Sebagian</button>
+                    </div>
+                    <div class="pk-partial-input" id="scan-partial-input">
+                      <div class="pk-partial-row">
+                        <div><label>Ekor dikirim <span style="color:#dc2626">*</span></label>
+                          <input type="number" id="scan-qty-kirim" min="1" placeholder="ekor" oninput="pkScanCheckRatio()"></div>
+                        <div><label>Berat dikirim (kg) <span style="color:#dc2626">*</span></label>
+                          <input type="number" id="scan-kg-kirim" min="0.01" step="0.01" placeholder="kg" oninput="pkScanCheckRatio()"></div>
+                      </div>
+                      <div class="pk-partial-hint" id="scan-partial-hint">Maks: —</div>
+                      <div class="pk-ratio-warn" id="scan-ratio-warn"></div>
+                    </div>
+                    <div class="pk-err" id="scan-pk-err"></div>
+                    <button class="pk-confirm-btn" id="scan-confirm-btn" onclick="pkConfirmScan()">📤 Kirim</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- LANTAI LIST -->
+            <div class="panel">
+              <div class="panel-head">
+                <span class="panel-title">📦 Keranjang Di Lantai</span>
+                <span class="panel-pill" id="pill-lantai">0</span>
+              </div>
+              <div id="list-lantai">
+                <div class="empty"><div class="e-icon">✅</div>Semua sudah dipindah</div>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- end prod-grid -->
+
+        <!-- BOTTOM BAR -->
+        <div class="session-bottom-bar">
+          <div class="session-bottom-info">
+            Sesi: <strong id="bottom-session-code">—</strong> &nbsp;|&nbsp;
+            Batch: <strong id="bottom-batch-code">—</strong> &nbsp;|&nbsp;
+            Ekor batch: <strong id="bottom-ekor-batch">—</strong>
+          </div>
+          <button class="btn-tutup-sesi" onclick="openModalClose()">
+            🔒 Tutup Sesi Produksi
+          </button>
+        </div>
+
+      </div><!-- end state-active -->
+
+    </div><!-- end content-area -->
+  </div><!-- end main-area -->
+</div><!-- end app-layout -->
+</div><!-- end app-screen -->
+
+<!-- ==================== MODAL: TAMBAH KERANJANG ==================== -->
+<div class="modal-overlay" id="modal-keranjang">
+  <div class="modal-box">
+
+    <!-- STEP 1: INPUT -->
+    <div class="modal-step active" id="mk-step1">
+      <div class="modal-title">＋ Tambah Keranjang</div>
+      <div class="modal-desc">Input data timbang. Sistem akan memvalidasi avg kg/ekor terhadap range produk.</div>
+      <div class="modal-grid">
+        <div class="form-group modal-fg full">
+          <label>Produk (Grade + Ukuran) <span style="color:#dc2626">*</span></label>
+          <select id="mk-product" onchange="onProductChange()">
+            <option value="">— Pilih Produk —</option>
+          </select>
+        </div>
+        <div class="form-group modal-fg full" id="mk-range-info" style="display:none">
+          <div style="background:#f0f7ff;padding:8px 12px;border-radius:6px;font-size:12px;color:#1e40af;border:1px solid #bfdbfe">
+            <strong>Range validasi:</strong> <span id="mk-range-text">—</span> kg/ekor
+          </div>
+        </div>
+        <!-- TIPE KERUSAKAN — hanya untuk Grade B & C -->
+        <div class="form-group modal-fg full" id="mk-tipe-rusak-section" style="display:none">
+          <label>Tipe Kerusakan <span style="color:#dc2626">*</span></label>
+          <select id="mk-tipe-rusak">
+            <option value="">— Pilih Tipe —</option>
+            <option value="1">1 — Dari Kandang (supplier)</option>
+            <option value="2">2 — Dari RPA (proses produksi)</option>
+          </select>
+          <div style="font-size:11px;color:#6b7280;margin-top:5px">
+            Wajib diisi untuk Grade B &amp; C — digunakan untuk laporan rekap kerusakan
+          </div>
+        </div>
+        <div class="form-group modal-fg">
+          <label>Jumlah Ekor <span style="color:#dc2626">*</span></label>
+          <input type="number" id="mk-qty" placeholder="Ekor" min="1" step="1" oninput="onKgQtyChange()">
+        </div>
+        <div class="form-group modal-fg">
+          <label>Berat Timbang (kg) <span style="color:#dc2626">*</span></label>
+          <input type="number" id="mk-kg" placeholder="0.0" min="0.1" step="0.1" oninput="onKgQtyChange()">
+        </div>
+        <div class="full">
+          <div style="display:flex;gap:16px;align-items:center">
+            <div style="font-size:12px;color:#6b7280">Avg kg/ekor:</div>
+            <div style="font-size:16px;font-weight:800;color:#111827" id="mk-avg">—</div>
+          </div>
+          <div class="val-box" id="mk-val-box"></div>
+        </div>
+        <!-- Override section (hidden unless BLOCKED) -->
+        <div class="full" id="mk-override-section" style="display:none">
+          <div style="background:#fff5f5;border:1.5px solid #fecaca;border-radius:8px;padding:14px">
+            <div style="font-size:13px;font-weight:700;color:#991b1b;margin-bottom:10px">⛔ Validasi HARD — Diperlukan Override Supervisor</div>
+            <div class="form-group modal-fg" style="margin-bottom:10px">
+              <label>PIN Supervisor</label>
+              <input type="password" id="mk-override-pin" placeholder="••••••" maxlength="6" style="letter-spacing:4px;font-size:16px"
+                     oninput="clearOverridePinError()">
+              <div class="pin-error" id="mk-override-pin-error">PIN salah atau bukan Supervisor</div>
+            </div>
+            <div class="form-group modal-fg">
+              <label>Alasan Override</label>
+              <input type="text" id="mk-override-alasan" placeholder="Jelaskan alasan override…">
+            </div>
+          </div>
+        </div>
+        <div class="form-group modal-fg full">
+          <label>Catatan</label>
+          <input type="text" id="mk-catatan" placeholder="Opsional">
+        </div>
+      </div>
+      <div id="mk-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-top:12px;display:none"></div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('modal-keranjang')">Batal</button>
+        <button class="btn btn-primary" id="mk-btn-simpan" onclick="submitKeranjang()">💾 Simpan &amp; Cetak Label</button>
+      </div>
+    </div>
+
+    <!-- STEP 2: SETELAH SIMPAN -->
+    <div class="modal-step" id="mk-step2">
+      <div style="text-align:center;padding:8px 0 16px">
+        <div style="font-size:40px;margin-bottom:8px">✅</div>
+        <div class="modal-title" style="margin-bottom:4px">Keranjang Berhasil Disimpan!</div>
+        <div style="font-size:13px;color:#6b7280;margin-bottom:16px" id="mk-step2-info">—</div>
+        <button class="btn btn-outline" style="margin-bottom:20px" onclick="printCurrentLabel()">🖨️ Print Label</button>
+      </div>
+      <div style="font-size:13px;font-weight:700;color:#374151;margin-bottom:10px;text-align:center">Pindahkan keranjang ini ke:</div>
+      <div class="scan-dest-btns" style="margin-bottom:8px">
+        <button class="btn-dest btn-dest-chiller" id="mod-dest-CHILLER" onclick="pkSelectModalDest('CHILLER')">❄️<br>Chiller</button>
+        <button class="btn-dest btn-dest-parting" id="mod-dest-PARTING" onclick="pkSelectModalDest('PARTING')">✂️<br>Parting</button>
+        <button class="btn-dest btn-dest-boneless" id="mod-dest-BONELESS" onclick="pkSelectModalDest('BONELESS')">🥩<br>Boneless</button>
+      </div>
+      <!-- Partial section modal -->
+      <div class="pk-partial-wrap" id="mod-partial-wrap" style="display:none">
+        <div class="pk-partial-toggle">
+          <button id="mod-tog-semua" class="active" onclick="pkModalSetPartial(false)">📦 Kirim Semua</button>
+          <button id="mod-tog-sebagian" onclick="pkModalSetPartial(true)">✂️ Kirim Sebagian</button>
+        </div>
+        <div class="pk-partial-input" id="mod-partial-input">
+          <div class="pk-partial-row">
+            <div><label>Ekor dikirim <span style="color:#dc2626">*</span></label>
+              <input type="number" id="mod-qty-kirim" min="1" placeholder="ekor" oninput="pkModalCheckRatio()"></div>
+            <div><label>Berat dikirim (kg) <span style="color:#dc2626">*</span></label>
+              <input type="number" id="mod-kg-kirim" min="0.01" step="0.01" placeholder="kg" oninput="pkModalCheckRatio()"></div>
+          </div>
+          <div class="pk-partial-hint" id="mod-partial-hint">Maks: —</div>
+          <div class="pk-ratio-warn" id="mod-ratio-warn"></div>
+        </div>
+        <div class="pk-err" id="mod-pk-err"></div>
+        <button class="pk-confirm-btn" id="mod-confirm-btn" onclick="pkConfirmModal()">📤 Kirim</button>
+      </div>
+      <div style="text-align:center;margin-top:12px">
+        <button class="btn btn-ghost" onclick="closeModalAndRefresh()">Nanti / Tambah Lagi</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ==================== MODAL: KARKAS RUSAK ==================== -->
+<div class="modal-overlay" id="modal-rusak">
+  <div class="modal-box modal-sm">
+    <div class="modal-title">⚠️ Catat Karkas Rusak</div>
+    <div class="modal-desc">Karkas yang tidak layak dan akan dimusnahkan. Perlu persetujuan Supervisor.</div>
+    <div class="modal-grid">
+      <div class="form-group modal-fg full">
+        <label>Jumlah Ekor Rusak <span style="color:#dc2626">*</span></label>
+        <input type="number" id="mr-ekor" placeholder="Ekor" min="1" step="1">
+      </div>
+      <div class="form-group modal-fg full">
+        <label>Alasan <span style="color:#dc2626">*</span></label>
+        <select id="mr-alasan">
+          <option value="">— Pilih Alasan —</option>
+          <option value="CACAT_FISIK">Cacat Fisik</option>
+          <option value="KONTAMINASI">Kontaminasi</option>
+          <option value="PENYAKIT">Penyakit</option>
+          <option value="LAIN_LAIN">Lain-lain</option>
+        </select>
+      </div>
+      <div class="form-group modal-fg full">
+        <label>Catatan</label>
+        <input type="text" id="mr-catatan" placeholder="Keterangan tambahan…">
+      </div>
+      <hr class="modal-divider">
+      <div class="full">
+        <div style="background:#fef3c7;border:1.5px solid #fde68a;border-radius:8px;padding:12px;margin-bottom:4px">
+          <div style="font-size:12px;font-weight:700;color:#92400e;margin-bottom:8px">🔑 PIN Supervisor untuk Menyetujui</div>
+          <input type="password" id="mr-pin" placeholder="••••••" maxlength="6"
+                 style="width:100%;padding:10px;border:1.5px solid #d1d5db;border-radius:6px;font-size:18px;font-weight:800;letter-spacing:6px;text-align:center;font-family:monospace"
+                 oninput="clearPinError('mr-pin-error')">
+          <div class="pin-error" id="mr-pin-error">PIN salah atau bukan Supervisor</div>
+          <div style="font-size:11px;color:#6b7280;margin-top:6px">Jika Supervisor tidak ada, simpan sebagai PENDING untuk disetujui kemudian.</div>
+        </div>
+      </div>
+    </div>
+    <div id="mr-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-top:10px;display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-rusak')">Batal</button>
+      <button class="btn btn-outline" onclick="submitRusak(false)">Simpan PENDING</button>
+      <button class="btn btn-red" onclick="submitRusak(true)">✅ Setujui &amp; Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== MODAL: TUTUP SESI ==================== -->
+<div class="modal-overlay" id="modal-close">
+  <div class="modal-box">
+    <div class="modal-title">🔒 Tutup Sesi Produksi</div>
+    <div class="modal-desc">Rekonsiliasi ekor sebelum menutup sesi. Pastikan semua data sudah benar.</div>
+
+    <!-- REKON BOX -->
+    <div class="rekon-box">
+      <div class="rekon-row">
+        <span class="rekon-label">Ekor siap potong (dari batch)</span>
+        <span class="rekon-val" id="rc-ekor-batch">—</span>
+      </div>
+      <div class="rekon-row">
+        <span class="rekon-label">Total ekor ditimbang (keranjang)</span>
+        <span class="rekon-val" id="rc-ekor-produksi">—</span>
+      </div>
+      <div class="rekon-row">
+        <span class="rekon-label">Karkas rusak dimusnahkan (approved)</span>
+        <span class="rekon-val" id="rc-ekor-rusak">—</span>
+      </div>
+      <div class="rekon-row" style="border-top:2px solid #e5e7eb;padding-top:10px;margin-top:4px">
+        <span class="rekon-label" style="font-weight:700;color:#111827">Selisih</span>
+        <span id="rc-selisih">—</span>
+      </div>
+    </div>
+
+    <!-- Alasan selisih (tampil jika selisih != 0) -->
+    <div id="rc-alasan-section" style="display:none">
+      <div class="form-group modal-fg" style="margin-bottom:16px">
+        <label>Alasan Selisih <span style="color:#dc2626">*</span></label>
+        <textarea id="rc-alasan" placeholder="Jelaskan penyebab selisih ekor…" rows="2"></textarea>
+      </div>
+    </div>
+
+    <!-- PIN Supervisor -->
+    <div style="margin-bottom:16px">
+      <div class="form-group modal-fg">
+        <label>PIN Supervisor untuk Menutup Sesi <span style="color:#dc2626">*</span></label>
+        <input type="password" class="pin-input" id="rc-pin" placeholder="••••••" maxlength="6"
+               oninput="clearPinError('rc-pin-error')">
+        <div class="pin-error" id="rc-pin-error">PIN salah atau bukan Supervisor</div>
+      </div>
+    </div>
+
+    <!-- Keranjang masih di lantai warning -->
+    <div id="rc-lantai-warning" style="display:none;background:#fff7ed;border:1.5px solid #fed7aa;border-radius:8px;padding:12px;margin-bottom:16px;font-size:12px;color:#9a3412">
+      <strong>⚠️ Masih ada keranjang di lantai!</strong> <span id="rc-lantai-count"></span> keranjang belum dipindah. Sesi tetap bisa ditutup, namun keranjang tersebut perlu dipindah dari modul Chiller/Parting.
+    </div>
+
+    <div id="rc-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-bottom:10px;display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-close')">Batal</button>
+      <button class="btn btn-primary" onclick="submitClose()">🔒 Tutup Sesi</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== MODAL: PIN KONFIRMASI (reusable) ==================== -->
+<div class="modal-overlay" id="modal-pin-confirm">
+  <div class="modal-box modal-sm">
+    <div class="modal-title" id="mpc-title">🔑 Konfirmasi Supervisor</div>
+    <div class="modal-desc" id="mpc-desc">Masukkan PIN Supervisor untuk melanjutkan.</div>
+    <div class="form-group modal-fg">
+      <label>PIN Supervisor <span style="color:#dc2626">*</span></label>
+      <input type="password" class="pin-input" id="mpc-pin" placeholder="••••••" maxlength="6"
+             oninput="document.getElementById('mpc-pin-error').style.display='none'"
+             onkeydown="if(event.key==='Enter')mpcSubmit()">
+      <div class="pin-error" id="mpc-pin-error">PIN salah atau bukan Supervisor</div>
+    </div>
+    <div id="mpc-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-top:8px;display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="mpcCancel()">Batal</button>
+      <button class="btn btn-primary" id="mpc-ok-btn" onclick="mpcSubmit()">✓ Konfirmasi</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== TOAST ==================== -->
+<div id="toast"></div>
+
+<!-- ==================== LABEL PRINT AREA ==================== -->
+<div id="label-print-area">
+  <div class="label-inner">
+    <div class="label-qr" id="label-qr-container"></div>
+    <div class="label-info">
+      <div class="label-code" id="lbl-code">—</div>
+      <div class="label-batch" id="lbl-batch">—</div>
+      <hr class="label-divider">
+      <div class="label-grade-uk" id="lbl-grade-uk">—</div>
+      <div class="label-qty-kg" id="lbl-qty-kg">—</div>
+      <div class="label-avg" id="lbl-avg">—</div>
+      <div class="label-date" id="lbl-date">—</div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SCRIPT ==================== -->
+<script>
+const SUPABASE_URL = 'https://dxixqyokuqrdprupsvic.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR4aXhxeW9rdXFyZHBydXBzdmljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5NjM3ODcsImV4cCI6MjA5MjUzOTc4N30.D_yaPwNbe4FFg_hmDeJ9cuxzbNvXZT8l1_TyZuq1t1M';
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ============================================================
+// STATE
+// ============================================================
+let currentUser    = null;
+let currentBatch   = null;   // live_chicken_batches object
+let currentSession = null;   // carcass_sessions object
+let masterProducts = [];     // KARKAS products from product_master
+let sessionKeranjang = [];   // carcass_baskets for current session
+let lantaiBaskets  = [];     // baskets at LANTAI for current batch
+let rusakList      = [];     // karkas_rusak for current session
+let scanResultBasket = null; // currently scanned basket (baskets row)
+let lastSavedBasket  = null; // after simpan, for pindah sekarang
+let clockTimer = null;
+
+// ============================================================
+// UTILITY
+// ============================================================
+async function sha256(str) {
+  const buf  = new TextEncoder().encode(str);
+  const hash = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+function fmt(n, d=0) {
+  if (n == null || n === '') return '—';
+  return Number(n).toLocaleString('id-ID', {minimumFractionDigits:d, maximumFractionDigits:d});
+}
+function fmtKg(n) {
+  if (n == null) return '—';
+  return Number(n).toLocaleString('id-ID', {minimumFractionDigits:1, maximumFractionDigits:1}) + ' kg';
+}
+function roundKg(n) {
+  // Semua kg disimpan 1 desimal
+  return Math.round(parseFloat(n) * 10) / 10;
+}
+function fmtDate(s) {
+  if (!s) return '—';
+  return new Date(s).toLocaleDateString('id-ID', {day:'2-digit', month:'short', year:'numeric'});
+}
+function fmtDT(s) {
+  if (!s) return '—';
+  return new Date(s).toLocaleString('id-ID', {day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'});
+}
+function todayISO() {
+  return new Date().toISOString().split('T')[0];
+}
+function showToast(msg, type='success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `toast show ${type}`;
+  setTimeout(() => { t.className = 'toast'; }, 3500);
+}
+function setEl(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = val;
+}
+function showEl(id, show=true) {
+  const el = document.getElementById(id);
+  if (el) el.style.display = show ? '' : 'none';
+}
+function navTo(url) {
+  closeSidebar();
+  if (currentUser) {
+        localStorage.setItem('rpa_user', JSON.stringify(currentUser));
+        sessionStorage.setItem('rpa_user', JSON.stringify(currentUser));
+    }
+  window.location.href = url;
+}
+
+// ============================================================
+// AUTH
+// ============================================================
+async function doLogin() {
+  const username = document.getElementById('inp-username').value.trim();
+  const password = document.getElementById('inp-password').value;
+  const errEl    = document.getElementById('login-error');
+  const btn      = document.getElementById('btn-login');
+  errEl.style.display = 'none';
+  if (!username || !password) { showLoginErr('Username dan password wajib diisi.'); return; }
+  btn.disabled = true; btn.textContent = 'Memproses…';
+  try {
+    const hash = await sha256(password);
+    const { data, error } = await db.from('users')
+      .select('id, nama, username, role, aktif, pin, is_system_admin')
+      .eq('username', username).eq('password_hash', hash).eq('aktif', true).maybeSingle();
+    if (error) throw error;
+    if (!data) { showLoginErr('Username atau password salah.'); return; }
+    currentUser = data;
+    localStorage.setItem('rpa_user', JSON.stringify(data));
+    startApp();
+  } catch(e) {
+    console.error(e);
+    showLoginErr('Gagal terhubung ke server. Periksa koneksi internet.');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Masuk →';
+  }
+}
+function showLoginErr(msg) {
+  const el = document.getElementById('login-error');
+  el.textContent = msg; el.style.display = 'block';
+}
+function doLogout() {
+  localStorage.removeItem('rpa_user');
+  currentUser = null; currentBatch = null; currentSession = null;
+  if (clockTimer) clearInterval(clockTimer);
+  document.getElementById('app-screen').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+}
+function startApp() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app-screen').style.display = 'block';
+  // Sidebar user info
+  const av = document.getElementById('user-avatar');
+  if (av) av.textContent = currentUser.nama.charAt(0).toUpperCase();
+  setEl('sidebar-name', currentUser.nama);
+  setEl('sidebar-role', currentUser.is_system_admin ? 'Admin' : currentUser.role === 'SUPERVISOR' ? 'Supervisor' : 'Operator');
+  if (currentUser.is_system_admin) {
+    const umEl = document.getElementById('nav-user-mgmt');
+    if (umEl) umEl.style.display = 'flex';
+  }
+  // Clock
+  updateClock();
+  clockTimer = setInterval(updateClock, 1000);
+  // Date
+  setEl('topbar-date', new Date().toLocaleDateString('id-ID', {weekday:'long', day:'2-digit', month:'long', year:'numeric'}));
+  // Default filter tanggal = hari ini
+  const dateInput = document.getElementById('inp-filter-date');
+  if (dateInput) dateInput.value = todayISO();
+  // Load
+  loadMasterProducts();
+  loadBatches();
+}
+function updateClock() {
+  const now = new Date();
+  setEl('clock', now.toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit', second:'2-digit'}));
+}
+
+// ============================================================
+// SIDEBAR
+// ============================================================
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sidebar-overlay').classList.toggle('visible');
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-overlay').classList.remove('visible');
+}
+
+// ============================================================
+// MASTER DATA
+// ============================================================
+async function loadMasterProducts() {
+  const { data } = await db.from('product_master')
+    .select('id, product_code, nama_produk, grade, kg_min, kg_max, validation_type')
+    .eq('kategori', 'KARKAS').eq('aktif', true)
+    .order('nama_produk');
+  masterProducts = data || [];
+  // Populate product dropdown in modal
+  const sel = document.getElementById('mk-product');
+  sel.innerHTML = '<option value="">— Pilih Produk —</option>';
+  masterProducts.forEach(p => {
+    const opt = document.createElement('option');
+    opt.value = p.id;
+    opt.textContent = `${p.nama_produk} (${p.product_code})`;
+    opt.dataset.kgMin  = p.kg_min;
+    opt.dataset.kgMax  = p.kg_max;
+    opt.dataset.valType = p.validation_type;
+    opt.dataset.grade  = p.grade || '';   // 'A' | 'B' | 'C' | ''
+    sel.appendChild(opt);
+  });
+}
+
+// ============================================================
+// BATCH
+// ============================================================
+async function loadBatches() {
+  const tgl = document.getElementById('inp-filter-date').value || todayISO();
+  const { data } = await db.from('live_chicken_batches')
+    .select('id, batch_code, status, tanggal, ekor_timbang_ulang, ekor_mati, ekor_kandang')
+    .eq('tanggal', tgl)
+    .order('created_at', {ascending: false});   // semua status: DRAFT, ACTIVE, COMPLETE
+
+  const sel = document.getElementById('sel-batch');
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">— Pilih Batch —</option>';
+
+  const statusLbl = { DRAFT:'Draft', ACTIVE:'Aktif', COMPLETE:'Selesai' };
+  (data || []).forEach(b => {
+    const opt = document.createElement('option');
+    opt.value = b.id;
+    const ekor = b.ekor_timbang_ulang || b.ekor_kandang || '?';
+    opt.textContent = `${b.batch_code} [${statusLbl[b.status] || b.status}] — ${ekor} ekor`;
+    opt.dataset.batchCode   = b.batch_code;
+    opt.dataset.batchStatus = b.status;
+    opt.dataset.ekorTimbang = b.ekor_timbang_ulang || 0;
+    opt.dataset.ekorMati    = b.ekor_mati || 0;
+    opt.dataset.ekorKandang = b.ekor_kandang || 0;
+    sel.appendChild(opt);
+  });
+
+  // Pertahankan pilihan sebelumnya jika masih ada di list
+  if (prev) sel.value = prev;
+
+  if (!sel.value) {
+    showState('no-batch');
+    currentBatch = null;
+    return;
+  }
+  onBatchChange();
+}
+async function onBatchChange() {
+  const sel = document.getElementById('sel-batch');
+  const batchId = sel.value;
+  if (!batchId) { showState('no-batch'); return; }
+  const opt = sel.options[sel.selectedIndex];
+  currentBatch = {
+    id: batchId,
+    batch_code: opt.dataset.batchCode,
+    status: opt.dataset.batchStatus,
+    ekor_timbang_ulang: parseInt(opt.dataset.ekorTimbang) || 0,
+    ekor_mati: parseInt(opt.dataset.ekorMati) || 0,
+    ekor_kandang: parseInt(opt.dataset.ekorKandang) || 0
+  };
+  // Load open session for this batch
+  await loadSession(batchId);
+}
+async function loadSession(batchId) {
+  const { data } = await db.from('carcass_sessions')
+    .select('*')
+    .eq('batch_id', batchId)
+    .eq('status', 'OPEN')
+    .maybeSingle();
+  if (data) {
+    currentSession = data;
+    showState('active');
+    updateSessionBadge('OPEN');
+    showEl('btn-buka-sesi', false);
+    setEl('bottom-session-code', data.session_code);
+    setEl('bottom-batch-code', currentBatch.batch_code);
+    // ekor siap potong = ekor_timbang_ulang - ekor_mati
+    const ekorSiap = currentBatch.ekor_timbang_ulang - currentBatch.ekor_mati;
+    setEl('bottom-ekor-batch', fmt(ekorSiap));
+    loadAll();
+  } else {
+    currentSession = null;
+    showState('no-session');
+    updateSessionBadge(null);
+    const desc = document.getElementById('no-session-desc');
+    if (currentBatch.status === 'COMPLETE') {
+      // Batch sudah selesai — tidak bisa buka sesi baru
+      showEl('btn-buka-sesi', false);
+      if (desc) desc.textContent = `Batch ${currentBatch.batch_code} sudah berstatus Selesai. Sesi produksi tidak bisa dibuka lagi.`;
+    } else {
+      showEl('btn-buka-sesi', true);
+      if (desc) desc.textContent = `Batch ${currentBatch.batch_code} belum memiliki sesi produksi. Klik "Buka Sesi Produksi" untuk mulai mencatat hasil timbang karkas.`;
+    }
+  }
+}
+function updateSessionBadge(status) {
+  const el = document.getElementById('session-info-badge');
+  if (!status) { el.innerHTML = ''; return; }
+  if (status === 'OPEN') {
+    el.innerHTML = `<span class="session-badge open">● Sesi Aktif: ${currentSession?.session_code || ''}</span>`;
+  } else {
+    el.innerHTML = `<span class="session-badge closed">✓ Sesi Selesai</span>`;
+  }
+}
+function showState(state) {
+  ['no-batch','no-session','active'].forEach(s => {
+    const el = document.getElementById(`state-${s}`);
+    if (el) el.style.display = s === state ? '' : 'none';
+  });
+}
+async function bukaSession() {
+  if (!currentBatch) return;
+  const btn = document.getElementById('btn-buka-sesi');
+  btn.disabled = true; btn.textContent = 'Membuka…';
+  try {
+    const { data: code } = await db.rpc('generate_session_code');
+    const { data, error } = await db.from('carcass_sessions').insert({
+      session_code: code,
+      batch_id: currentBatch.id,
+      tanggal: todayISO(),
+      created_by: currentUser.id
+    }).select().single();
+    if (error) throw error;
+    currentSession = data;
+    showToast(`Sesi ${code} dibuka`, 'success');
+    showState('active');
+    updateSessionBadge('OPEN');
+    showEl('btn-buka-sesi', false);
+    setEl('bottom-session-code', data.session_code);
+    setEl('bottom-batch-code', currentBatch.batch_code);
+    const ekorSiap = currentBatch.ekor_timbang_ulang - currentBatch.ekor_mati;
+    setEl('bottom-ekor-batch', fmt(ekorSiap));
+    loadAll();
+  } catch(e) {
+    console.error(e);
+    showToast('Gagal membuka sesi: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = '▶ Buka Sesi Produksi';
+  }
+}
+
+// ============================================================
+// LOAD ALL DATA
+// ============================================================
+async function loadAll() {
+  await Promise.all([loadKeranjang(), loadLantai(), loadRusak()]);
+  updateSummaryCards();
+}
+async function loadKeranjang() {
+  if (!currentSession) return;
+  const { data } = await db.from('carcass_baskets')
+    .select(`id, qty_timbang, kg_timbang, avg_kg, validation_status, override, tipe_kerusakan, created_at,
+             basket:basket_id(id, basket_code, lokasi, status),
+             product:product_id(product_code, nama_produk, grade)`)
+    .eq('session_id', currentSession.id)
+    .order('created_at', {ascending: false});
+  sessionKeranjang = data || [];
+  renderKeranjangTable();
+}
+async function loadLantai() {
+  if (!currentBatch) return;
+  // Load baskets at LANTAI for this batch, plus their pending movements
+  const { data } = await db.from('baskets')
+    .select(`id, basket_code, qty_sisa, kg_sisa, created_at,
+             product:product_id(product_code, nama_produk, grade, kg_min, kg_max)`)
+    .eq('batch_id', currentBatch.id)
+    .eq('lokasi', 'LANTAI')
+    .eq('status', 'AKTIF')
+    .order('created_at', {ascending: false});
+  // For each, check pending movements
+  const baskIds = (data || []).map(b => b.id);
+  let pendingMap = {};
+  if (baskIds.length > 0) {
+    const { data: mvs } = await db.from('basket_movements')
+      .select('id, basket_id, ke_lokasi, qty_pindah, kg_pindah, status')
+      .in('basket_id', baskIds)
+      .eq('status', 'PENDING');
+    (mvs || []).forEach(m => {
+      pendingMap[m.basket_id] = { dest: m.ke_lokasi, mvId: m.id, qty: m.qty_pindah, kg: m.kg_pindah };
+    });
+  }
+  lantaiBaskets = (data || []).map(b => ({
+    ...b,
+    pendingTo:   pendingMap[b.id]?.dest  || null,
+    pendingMvId: pendingMap[b.id]?.mvId  || null,
+    pendingQty:  pendingMap[b.id]?.qty   || 0,
+    pendingKg:   pendingMap[b.id]?.kg    || 0,
+  }));
+  renderLantaiList();
+}
+async function loadRusak() {
+  if (!currentSession) return;
+  const { data } = await db.from('karkas_rusak')
+    .select(`id, jumlah_ekor, alasan, catatan, status, created_at,
+             requested_by:requested_by(nama), reviewed_by:reviewed_by(nama)`)
+    .eq('session_id', currentSession.id)
+    .order('created_at', {ascending: false});
+  rusakList = data || [];
+  renderRusakList();
+}
+
+// ============================================================
+// RENDER
+// ============================================================
+function renderKeranjangTable() {
+  const tbody = document.getElementById('tbody-keranjang');
+  if (!sessionKeranjang.length) {
+    tbody.innerHTML = `<tr><td colspan="9"><div class="empty"><div class="e-icon">📦</div>Belum ada keranjang. Klik "+ Tambah Keranjang" untuk mulai.</div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = sessionKeranjang.map((cb, i) => {
+    const b = cb.basket;
+    const p = cb.product;
+    const valBadge = valStatusBadge(cb.validation_status, cb.override);
+    const lokasiMap = {LANTAI:'<span class="badge b-lantai">Di Lantai</span>',
+                       CHILLER:'<span class="badge b-chiller">Chiller</span>',
+                       PARTING:'<span class="badge b-parting">Parting</span>',
+                       BONELESS:'<span class="badge b-boneless">Boneless</span>',
+                       MUSNAH:'<span class="badge b-musnah">Musnah</span>'};
+    const lokasiLabel = b ? (lokasiMap[b.lokasi] || `<span class="badge b-lantai">${b.lokasi}</span>`) : '—';
+    const code = b ? b.basket_code : '—';
+    const grade = p?.grade || '';
+    const gradeBadge = grade === 'A'
+      ? `<span class="badge b-ok">A</span>`
+      : grade === 'B'
+        ? `<span class="badge b-warn">B</span>`
+        : grade === 'C'
+          ? `<span class="badge b-block">C</span>`
+          : '—';
+    const tipeMap = { 1: '1 · Kandang', 2: '2 · RPA' };
+    const tipeBadge = cb.tipe_kerusakan
+      ? `<span class="badge ${cb.tipe_kerusakan === 1 ? 'b-pending' : 'b-block'}" style="font-size:10px">${tipeMap[cb.tipe_kerusakan]}</span>`
+      : (grade === 'A' ? '<span style="color:#d1d5db;font-size:11px">—</span>' : '<span style="color:#dc2626;font-size:11px;font-weight:700">!</span>');
+    return `<tr>
+      <td>${sessionKeranjang.length - i}</td>
+      <td><span style="font-weight:700;font-family:monospace;font-size:11px">${code}</span></td>
+      <td><div>${p ? p.nama_produk : '—'}</div><div class="tbl-sub">${p ? p.product_code : ''}</div></td>
+      <td>${fmt(cb.qty_timbang)}</td>
+      <td>${fmtKg(cb.kg_timbang)}</td>
+      <td style="font-weight:700">${cb.avg_kg ? Number(cb.avg_kg).toFixed(4) : '—'}</td>
+      <td>${valBadge}</td>
+      <td>${gradeBadge}</td>
+      <td>${tipeBadge}</td>
+      <td>${lokasiLabel}</td>
+      <td>
+        ${b ? `<button class="btn btn-ghost btn-sm" onclick="printLabelById('${b.id}','${b.basket_code}')">🖨️</button>` : ''}
+      </td>
+    </tr>`;
+  }).join('');
+}
+function valStatusBadge(status, override) {
+  if (override) return `<span class="badge b-override">Override ✓</span>`;
+  if (status === 'OK') return `<span class="badge b-ok">✓ OK</span>`;
+  if (status === 'WARNING') return `<span class="badge b-warn">⚠ Warn</span>`;
+  if (status === 'BLOCKED') return `<span class="badge b-block">✗ Blocked</span>`;
+  return `<span class="badge b-ok">OK</span>`;
+}
+function renderLantaiList() {
+  const el = document.getElementById('list-lantai');
+  const pill = document.getElementById('pill-lantai');
+  if (pill) pill.textContent = lantaiBaskets.length;
+  if (!lantaiBaskets.length) {
+    el.innerHTML = `<div class="empty"><div class="e-icon">✅</div>Semua keranjang sudah dipindah</div>`;
+    return;
+  }
+  el.innerHTML = lantaiBaskets.map(b => {
+    const p = b.product;
+    let statusHtml = '';
+    let cancelBtn  = '';
+    if (b.pendingTo) {
+      const destMap = {CHILLER:'b-chiller',PARTING:'b-parting',BONELESS:'b-boneless'};
+      const destLbl = {CHILLER:'→ Chiller',PARTING:'→ Parting',BONELESS:'→ Boneless'};
+      const efektif = b.qty_sisa - b.pendingQty;
+      const efInfo  = efektif > 0 ? ` · sisa efektif ${fmt(efektif)} ekor` : '';
+      statusHtml = `<span class="badge ${destMap[b.pendingTo]||'b-pending'}" style="font-size:10px">${destLbl[b.pendingTo]||b.pendingTo} (menunggu${efInfo})</span>`;
+      cancelBtn  = `<button class="btn btn-ghost btn-sm" style="color:#dc2626;margin-left:4px" onclick="cancelPendingMovement('${b.pendingMvId}','${b.basket_code}')">✕ Batal</button>`;
+    } else {
+      statusHtml = `<span class="badge b-lantai" style="font-size:10px">Di Lantai</span>`;
+    }
+    return `<div class="lantai-item">
+      <div style="flex:1;min-width:0">
+        <div class="lantai-code">${b.basket_code}</div>
+        <div class="lantai-detail">${p ? p.nama_produk : '—'} | ${fmt(b.qty_sisa)} ekor | ${fmtKg(b.kg_sisa)}</div>
+      </div>
+      <div class="lantai-status" style="display:flex;align-items:center">${statusHtml}${cancelBtn}</div>
+    </div>`;
+  }).join('');
+}
+function renderRusakList() {
+  const el = document.getElementById('list-rusak');
+  const pill = document.getElementById('pill-rusak');
+  const panel = document.getElementById('panel-rusak');
+  if (!rusakList.length) {
+    if (panel) panel.style.display = 'none';
+    return;
+  }
+  if (panel) panel.style.display = '';
+  const pending = rusakList.filter(r => r.status === 'PENDING').length;
+  if (pill) {
+    pill.textContent = pending ? `${pending} pending` : 'Semua approved';
+    pill.className = pending ? 'panel-pill alert' : 'panel-pill ok';
+  }
+  const alasanMap = {CACAT_FISIK:'Cacat Fisik',KONTAMINASI:'Kontaminasi',PENYAKIT:'Penyakit',LAIN_LAIN:'Lain-lain'};
+  el.innerHTML = rusakList.map(r => {
+    const statusBadge = r.status === 'APPROVED'
+      ? `<span class="badge b-ok">✓ Approved</span>`
+      : r.status === 'REJECTED'
+        ? `<span class="badge b-block">✗ Rejected</span>`
+        : `<span class="badge b-pending">Pending</span>`;
+    const approveBtn = r.status === 'PENDING'
+      ? `<button class="btn btn-green btn-sm" onclick="approveRusak('${r.id}')">✓ Approve</button>
+         <button class="btn btn-ghost btn-sm" onclick="rejectRusak('${r.id}')">✗ Tolak</button>`
+      : '';
+    return `<div class="rusak-item">
+      <div class="rusak-ekor">${r.jumlah_ekor}</div>
+      <div class="rusak-detail">
+        <div class="rusak-alasan">${alasanMap[r.alasan] || r.alasan}</div>
+        <div class="rusak-catatan">${r.catatan || ''}</div>
+        <div class="rusak-catatan" style="margin-top:4px">${fmtDT(r.created_at)} — ${r.requested_by?.nama || '—'}</div>
+      </div>
+      <div class="rusak-status">${statusBadge}${approveBtn ? '<div style="margin-top:6px;display:flex;gap:4px">'+approveBtn+'</div>' : ''}</div>
+    </div>`;
+  }).join('');
+}
+function updateSummaryCards() {
+  const totalKeranjang = sessionKeranjang.length;
+  const totalEkor = sessionKeranjang.reduce((s, cb) => s + Number(cb.qty_timbang || 0), 0);
+  const totalKg = sessionKeranjang.reduce((s, cb) => s + Number(cb.kg_timbang || 0), 0);
+  const diLantai = lantaiBaskets.filter(b => !b.pendingTo).length;
+  const pending  = lantaiBaskets.filter(b => b.pendingTo).length;
+  const rusakApproved = rusakList.filter(r => r.status === 'APPROVED')
+                                  .reduce((s, r) => s + r.jumlah_ekor, 0);
+  setEl('sc-keranjang', fmt(totalKeranjang));
+  setEl('sc-ekor', fmt(totalEkor));
+  setEl('sc-kg', fmt(totalKg, 1));
+  setEl('sc-lantai', fmt(diLantai));
+  setEl('sc-pending', fmt(pending));
+  setEl('sc-rusak', fmt(rusakApproved));
+}
+
+// ============================================================
+// MODAL KERANJANG
+// ============================================================
+function openModalKeranjang() {
+  if (!currentSession) { showToast('Buka sesi produksi dulu', 'warning'); return; }
+  // Reset step 1
+  ['mk-product','mk-qty','mk-kg','mk-catatan','mk-override-pin','mk-override-alasan','mk-tipe-rusak'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  setEl('mk-avg', '—');
+  const vb = document.getElementById('mk-val-box');
+  if (vb) { vb.className = 'val-box'; vb.textContent = ''; }
+  showEl('mk-range-info', false);
+  showEl('mk-override-section', false);
+  showEl('mk-tipe-rusak-section', false);
+  showEl('mk-err', false);
+  // Show step 1, hide step 2
+  document.getElementById('mk-step1').className = 'modal-step active';
+  document.getElementById('mk-step2').className = 'modal-step';
+  openModal('modal-keranjang');
+  setTimeout(() => document.getElementById('mk-product').focus(), 200);
+}
+function onProductChange() {
+  const sel = document.getElementById('mk-product');
+  const opt = sel.options[sel.selectedIndex];
+  const kgMin = parseFloat(opt.dataset.kgMin);
+  const kgMax = parseFloat(opt.dataset.kgMax);
+  const grade = opt.dataset.grade || '';
+
+  // Range validasi info
+  const rangeInfo = document.getElementById('mk-range-info');
+  if (!isNaN(kgMin) && !isNaN(kgMax)) {
+    rangeInfo.style.display = '';
+    setEl('mk-range-text', `${kgMin.toFixed(3)} – ${kgMax.toFixed(3)}`);
+  } else {
+    rangeInfo.style.display = 'none';
+  }
+
+  // Tipe kerusakan — hanya untuk Grade B & C
+  const tipeSection = document.getElementById('mk-tipe-rusak-section');
+  const tipoSel     = document.getElementById('mk-tipe-rusak');
+  if (grade === 'B' || grade === 'C') {
+    tipeSection.style.display = '';
+  } else {
+    tipeSection.style.display = 'none';
+    tipoSel.value = '';   // reset jika pindah ke grade A
+  }
+
+  onKgQtyChange();
+}
+function onKgQtyChange() {
+  const qty = parseFloat(document.getElementById('mk-qty').value);
+  const kg  = parseFloat(document.getElementById('mk-kg').value);
+  if (!qty || !kg || qty <= 0 || kg <= 0) {
+    setEl('mk-avg', '—');
+    const vb = document.getElementById('mk-val-box');
+    if (vb) { vb.className = 'val-box'; }
+    return;
+  }
+  const avg = kg / qty;
+  setEl('mk-avg', avg.toFixed(4) + ' kg/ekor');
+  // Validate client-side using product range from dropdown data
+  const sel = document.getElementById('mk-product');
+  const opt = sel.options[sel.selectedIndex];
+  if (!opt || !opt.value) return;
+  const kgMin = parseFloat(opt.dataset.kgMin);
+  const kgMax = parseFloat(opt.dataset.kgMax);
+  const valType = opt.dataset.valType;
+  const vb = document.getElementById('mk-val-box');
+  if (isNaN(kgMin) || isNaN(kgMax)) {
+    vb.className = 'val-box visible val-ok';
+    vb.textContent = '✓ Tidak ada range validasi';
+    showEl('mk-override-section', false);
+    return;
+  }
+  if (avg >= kgMin && avg <= kgMax) {
+    vb.className = 'val-box visible val-ok';
+    vb.textContent = `✓ OK — avg ${avg.toFixed(4)} kg/ekor dalam range`;
+    showEl('mk-override-section', false);
+  } else if (valType === 'HARD') {
+    vb.className = 'val-box visible val-block';
+    vb.textContent = `✗ Di luar range (${kgMin.toFixed(3)}–${kgMax.toFixed(3)}) — HARD: butuh override Supervisor`;
+    showEl('mk-override-section', true);
+  } else {
+    vb.className = 'val-box visible val-warn';
+    vb.textContent = `⚠ Di luar range (${kgMin.toFixed(3)}–${kgMax.toFixed(3)}) — SOFT: boleh lanjut, akan ditandai review`;
+    showEl('mk-override-section', false);
+  }
+}
+function clearOverridePinError() {
+  document.getElementById('mk-override-pin-error').style.display = 'none';
+}
+
+async function submitKeranjang() {
+  const productId = document.getElementById('mk-product').value;
+  const qty = parseFloat(document.getElementById('mk-qty').value);
+  const kg  = roundKg(document.getElementById('mk-kg').value);   // 1 desimal
+  const catatan = document.getElementById('mk-catatan').value.trim();
+  const errEl = document.getElementById('mk-err');
+  errEl.style.display = 'none';
+
+  if (!productId) { errEl.textContent = 'Pilih produk terlebih dahulu.'; errEl.style.display='block'; return; }
+  if (!qty || qty <= 0) { errEl.textContent = 'Jumlah ekor tidak valid.'; errEl.style.display='block'; return; }
+  if (!kg  || kg  <= 0) { errEl.textContent = 'Berat tidak valid.'; errEl.style.display='block'; return; }
+
+  const avg = kg / qty;
+  const sel = document.getElementById('mk-product');
+  const opt = sel.options[sel.selectedIndex];
+  const kgMin = parseFloat(opt.dataset.kgMin);
+  const kgMax = parseFloat(opt.dataset.kgMax);
+  const valType = opt.dataset.valType;
+
+  let validationStatus = 'OK';
+  let isBlocked = false;
+  if (!isNaN(kgMin) && !isNaN(kgMax)) {
+    if (avg < kgMin || avg > kgMax) {
+      if (valType === 'HARD') {
+        validationStatus = 'BLOCKED';
+        isBlocked = true;
+      } else {
+        validationStatus = 'WARNING';
+      }
+    }
+  }
+
+  // If HARD blocked, need supervisor override
+  let isOverride = false;
+  let overrideSupervisorId = null;
+  let overrideAlasan = '';
+  if (isBlocked) {
+    const pin = document.getElementById('mk-override-pin').value;
+    overrideAlasan = document.getElementById('mk-override-alasan').value.trim();
+    if (!pin) {
+      errEl.textContent = 'PIN Supervisor wajib diisi untuk override.';
+      errEl.style.display = 'block'; return;
+    }
+    if (!overrideAlasan) {
+      errEl.textContent = 'Alasan override wajib diisi.';
+      errEl.style.display = 'block'; return;
+    }
+    // Verify supervisor PIN
+    const sup = await verifySupervisorPin(pin);
+    if (!sup) {
+      document.getElementById('mk-override-pin-error').style.display = 'block';
+      return;
+    }
+    isOverride = true;
+    overrideSupervisorId = sup.id;
+    validationStatus = 'OK'; // override approved
+  }
+
+  // Tipe kerusakan — wajib untuk Grade B & C
+  const grade = sel.options[sel.selectedIndex].dataset.grade || '';
+  let tipoKerusakan = null;
+  if (grade === 'B' || grade === 'C') {
+    const tipoVal = document.getElementById('mk-tipe-rusak').value;
+    if (!tipoVal) {
+      errEl.textContent = `Grade ${grade} wajib memilih Tipe Kerusakan (1=Kandang / 2=RPA).`;
+      errEl.style.display = 'block'; return;
+    }
+    tipoKerusakan = parseInt(tipoVal);
+  }
+
+  const btn = document.getElementById('mk-btn-simpan');
+  btn.disabled = true; btn.textContent = 'Menyimpan…';
+  try {
+    // Generate basket code — format BK-YYMMDD-XXXX
+    const { data: basketCode } = await db.rpc('generate_basket_code', { p_prefix: 'BK' });
+    // Insert basket
+    const { data: basket, error: bErr } = await db.from('baskets').insert({
+      basket_code: basketCode,
+      basket_type: 'KARKAS',
+      product_id: productId,
+      batch_id: currentBatch.id,
+      tanggal_produksi: currentBatch.tanggal,   // tgl pemotongan = tgl batch
+      qty_awal: qty, qty_sisa: qty,
+      kg_awal: kg, kg_sisa: kg,
+      lokasi: 'LANTAI',
+      status: 'AKTIF',
+      needs_review: validationStatus === 'WARNING',
+      override: isOverride,
+      override_by: isOverride ? overrideSupervisorId : null,
+      override_at: isOverride ? new Date().toISOString() : null,
+      override_alasan: isOverride ? overrideAlasan : null,
+      created_by: currentUser.id
+    }).select().single();
+    if (bErr) throw bErr;
+
+    // Insert carcass_basket
+    const { error: cbErr } = await db.from('carcass_baskets').insert({
+      session_id: currentSession.id,
+      basket_id: basket.id,
+      batch_id: currentBatch.id,
+      product_id: productId,
+      qty_timbang: qty, kg_timbang: kg,
+      avg_kg: avg,
+      tipe_kerusakan: tipoKerusakan,   // NULL untuk Grade A
+      validation_status: validationStatus,
+      needs_review: validationStatus === 'WARNING',
+      override: isOverride,
+      override_by: isOverride ? overrideSupervisorId : null,
+      override_at: isOverride ? new Date().toISOString() : null,
+      override_alasan: isOverride ? overrideAlasan : null,
+      created_by: currentUser.id
+    });
+    if (cbErr) throw cbErr;
+
+    // Update session totals
+    await db.from('carcass_sessions').update({
+      total_keranjang: (currentSession.total_keranjang || 0) + 1,
+      total_qty: parseFloat(currentSession.total_qty || 0) + qty,
+      total_kg: parseFloat(currentSession.total_kg || 0) + kg
+    }).eq('id', currentSession.id);
+    currentSession.total_keranjang = (currentSession.total_keranjang || 0) + 1;
+    currentSession.total_qty = parseFloat(currentSession.total_qty || 0) + qty;
+    currentSession.total_kg = parseFloat(currentSession.total_kg || 0) + kg;
+
+    // Save for step 2
+    lastSavedBasket = { ...basket, product_code: opt.textContent, qty, kg, avg, batch_code: currentBatch.batch_code };
+
+    // Refresh data in background
+    loadAll();
+
+    // Show step 2
+    document.getElementById('mk-step1').className = 'modal-step';
+    document.getElementById('mk-step2').className = 'modal-step active';
+    const prodName = sel.options[sel.selectedIndex].textContent;
+    setEl('mk-step2-info', `${basketCode} | ${prodName} | ${fmt(qty)} ekor | ${fmtKg(kg)}`);
+
+    // Prepare label
+    prepareLabelContent(lastSavedBasket);
+    showToast(`Keranjang ${basketCode} disimpan`, 'success');
+  } catch(e) {
+    console.error(e);
+    errEl.textContent = 'Gagal menyimpan: ' + e.message;
+    errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = '💾 Simpan & Cetak Label';
+  }
+}
+function closeModalAndRefresh() {
+  closeModal('modal-keranjang');
+  loadAll();
+  // Reset for next keranjang
+  lastSavedBasket = null;
+}
+// ============================================================
+// PARTIAL TRANSFER — state & helpers
+// ============================================================
+let pkScanDest      = null;
+let pkModalDest     = null;
+let pkScanPartial   = false;
+let pkModalPartial  = false;
+let pkScanEfektif   = { qty: 0, kg: 0 };
+let pkModalEfektif  = { qty: 0, kg: 0 };
+let pkScanKgMin     = null, pkScanKgMax  = null;
+let pkModalKgMin    = null, pkModalKgMax = null;
+
+// --- SCAN: pilih tujuan ---
+async function pkSelectScanDest(dest) {
+  pkScanDest    = dest;
+  pkScanPartial = false;
+  ['CHILLER','PARTING','BONELESS'].forEach(d => {
+    const el = document.getElementById(`scan-dest-${d}`);
+    if (el) el.classList.toggle('selected', d === dest);
+  });
+  if (!scanResultBasket) return;
+
+  // Hitung efektif (kurangi pending yang sudah ada)
+  const { data: pendings } = await db.from('basket_movements')
+    .select('qty_pindah, kg_pindah')
+    .eq('basket_id', scanResultBasket.id)
+    .eq('status', 'PENDING')
+    .eq('dari_lokasi', 'LANTAI');
+  const usedQty = (pendings||[]).reduce((s,m)=>s+(m.qty_pindah||0),0);
+  const usedKg  = (pendings||[]).reduce((s,m)=>s+(m.kg_pindah||0),0);
+  pkScanEfektif = {
+    qty: (scanResultBasket.qty_sisa||0) - usedQty,
+    kg:  (scanResultBasket.kg_sisa||0)  - usedKg
+  };
+  pkScanKgMin = scanResultBasket.product?.kg_min ?? null;
+  pkScanKgMax = scanResultBasket.product?.kg_max ?? null;
+
+  const hint = document.getElementById('scan-partial-hint');
+  if (hint) hint.textContent = `Maks: ${fmt(pkScanEfektif.qty)} ekor / ${fmtKg(pkScanEfektif.kg)}`;
+  document.getElementById('scan-qty-kirim').value = '';
+  document.getElementById('scan-kg-kirim').value  = '';
+  document.getElementById('scan-ratio-warn').style.display = 'none';
+  document.getElementById('scan-pk-err').style.display     = 'none';
+
+  // Reset toggle ke Kirim Semua
+  pkScanSetPartial(false);
+  const wrap = document.getElementById('scan-partial-wrap');
+  if (pkScanEfektif.qty <= 0) {
+    document.getElementById('scan-confirm-btn').disabled = true;
+    document.getElementById('scan-pk-err').textContent = '⚠️ Semua isi sudah dalam pengiriman PENDING.';
+    document.getElementById('scan-pk-err').style.display = 'block';
+  } else {
+    document.getElementById('scan-confirm-btn').disabled = false;
+  }
+  wrap.style.display = 'block';
+}
+
+function pkScanSetPartial(partial) {
+  pkScanPartial = partial;
+  document.getElementById('scan-tog-semua').classList.toggle('active', !partial);
+  document.getElementById('scan-tog-sebagian').classList.toggle('active', partial);
+  const inp = document.getElementById('scan-partial-input');
+  inp.classList.toggle('show', partial);
+  if (!partial) {
+    document.getElementById('scan-qty-kirim').value = '';
+    document.getElementById('scan-kg-kirim').value  = '';
+    document.getElementById('scan-ratio-warn').style.display = 'none';
+  }
+}
+
+function pkScanCheckRatio() {
+  const warn = document.getElementById('scan-ratio-warn');
+  const qty  = parseFloat(document.getElementById('scan-qty-kirim').value);
+  const kg   = parseFloat(document.getElementById('scan-kg-kirim').value);
+  if (!qty || !kg || pkScanKgMin === null || pkScanKgMax === null) { warn.style.display='none'; return; }
+  const mn = +(qty*pkScanKgMin).toFixed(2), mx = +(qty*pkScanKgMax).toFixed(2);
+  if (kg < mn || kg > mx) {
+    warn.textContent = `⚠️ Berat tidak wajar untuk ${qty} ekor. Rentang wajar: ${mn}–${mx} kg (standar ${pkScanKgMin}–${pkScanKgMax} kg/ekor).`;
+    warn.style.display = 'block';
+  } else { warn.style.display = 'none'; }
+}
+
+async function pkConfirmScan() {
+  const errEl = document.getElementById('scan-pk-err');
+  errEl.style.display = 'none';
+  if (!pkScanDest) return;
+  let qty, kg;
+  if (pkScanPartial) {
+    qty = parseFloat(document.getElementById('scan-qty-kirim').value);
+    kg  = parseFloat(document.getElementById('scan-kg-kirim').value);
+    if (!qty||qty<=0) { errEl.textContent='Jumlah ekor harus diisi.'; errEl.style.display='block'; return; }
+    if (!kg||kg<=0)   { errEl.textContent='Berat harus diisi.'; errEl.style.display='block'; return; }
+    if (qty > pkScanEfektif.qty) { errEl.textContent=`Melebihi sisa efektif (${fmt(pkScanEfektif.qty)} ekor).`; errEl.style.display='block'; return; }
+    if (kg  > pkScanEfektif.kg)  { errEl.textContent=`Berat melebihi sisa efektif (${fmtKg(pkScanEfektif.kg)}).`; errEl.style.display='block'; return; }
+  } else {
+    qty = pkScanEfektif.qty;
+    kg  = pkScanEfektif.kg;
+  }
+  const isPartial = pkScanPartial || (qty < (scanResultBasket?.qty_sisa||0));
+  const btn = document.getElementById('scan-confirm-btn');
+  btn.disabled = true; btn.textContent = 'Memproses…';
+  const ok = await doSubmitPindah(scanResultBasket.id, pkScanDest, qty, kg, isPartial);
+  btn.disabled = false; btn.textContent = '📤 Kirim';
+  if (ok) {
+    document.getElementById('scan-result').className = 'scan-result';
+    document.getElementById('scan-dest-btns').style.display = 'none';
+    document.getElementById('scan-partial-wrap').style.display = 'none';
+    pkScanDest = null; scanResultBasket = null;
+    loadLantai(); updateSummaryCards();
+  }
+}
+
+// --- MODAL: pilih tujuan ---
+function pkSelectModalDest(dest) {
+  pkModalDest    = dest;
+  pkModalPartial = false;
+  ['CHILLER','PARTING','BONELESS'].forEach(d => {
+    const el = document.getElementById(`mod-dest-${d}`);
+    if (el) el.classList.toggle('selected', d === dest);
+  });
+  if (!lastSavedBasket) return;
+  pkModalEfektif = { qty: lastSavedBasket.qty_sisa||lastSavedBasket.qty||0, kg: lastSavedBasket.kg_sisa||lastSavedBasket.kg||0 };
+  pkModalKgMin   = lastSavedBasket.product_master?.kg_min ?? lastSavedBasket.kg_min ?? null;
+  pkModalKgMax   = lastSavedBasket.product_master?.kg_max ?? lastSavedBasket.kg_max ?? null;
+  const hint = document.getElementById('mod-partial-hint');
+  if (hint) hint.textContent = `Maks: ${fmt(pkModalEfektif.qty)} ekor / ${fmtKg(pkModalEfektif.kg)}`;
+  document.getElementById('mod-qty-kirim').value = '';
+  document.getElementById('mod-kg-kirim').value  = '';
+  document.getElementById('mod-ratio-warn').style.display = 'none';
+  document.getElementById('mod-pk-err').style.display     = 'none';
+  pkModalSetPartial(false);
+  document.getElementById('mod-partial-wrap').style.display = 'block';
+}
+
+function pkModalSetPartial(partial) {
+  pkModalPartial = partial;
+  document.getElementById('mod-tog-semua').classList.toggle('active', !partial);
+  document.getElementById('mod-tog-sebagian').classList.toggle('active', partial);
+  const inp = document.getElementById('mod-partial-input');
+  inp.classList.toggle('show', partial);
+  if (!partial) {
+    document.getElementById('mod-qty-kirim').value = '';
+    document.getElementById('mod-kg-kirim').value  = '';
+    document.getElementById('mod-ratio-warn').style.display = 'none';
+  }
+}
+
+function pkModalCheckRatio() {
+  const warn = document.getElementById('mod-ratio-warn');
+  const qty  = parseFloat(document.getElementById('mod-qty-kirim').value);
+  const kg   = parseFloat(document.getElementById('mod-kg-kirim').value);
+  if (!qty || !kg || pkModalKgMin === null || pkModalKgMax === null) { warn.style.display='none'; return; }
+  const mn = +(qty*pkModalKgMin).toFixed(2), mx = +(qty*pkModalKgMax).toFixed(2);
+  if (kg < mn || kg > mx) {
+    warn.textContent = `⚠️ Berat tidak wajar untuk ${qty} ekor. Rentang wajar: ${mn}–${mx} kg (standar ${pkModalKgMin}–${pkModalKgMax} kg/ekor).`;
+    warn.style.display = 'block';
+  } else { warn.style.display = 'none'; }
+}
+
+async function pkConfirmModal() {
+  const errEl = document.getElementById('mod-pk-err');
+  errEl.style.display = 'none';
+  if (!pkModalDest || !lastSavedBasket) return;
+  let qty, kg;
+  if (pkModalPartial) {
+    qty = parseFloat(document.getElementById('mod-qty-kirim').value);
+    kg  = parseFloat(document.getElementById('mod-kg-kirim').value);
+    if (!qty||qty<=0) { errEl.textContent='Jumlah ekor harus diisi.'; errEl.style.display='block'; return; }
+    if (!kg||kg<=0)   { errEl.textContent='Berat harus diisi.'; errEl.style.display='block'; return; }
+    if (qty > pkModalEfektif.qty) { errEl.textContent=`Melebihi sisa (${fmt(pkModalEfektif.qty)} ekor).`; errEl.style.display='block'; return; }
+    if (kg  > pkModalEfektif.kg)  { errEl.textContent=`Berat melebihi sisa (${fmtKg(pkModalEfektif.kg)}).`; errEl.style.display='block'; return; }
+  } else {
+    qty = pkModalEfektif.qty;
+    kg  = pkModalEfektif.kg;
+  }
+  const isPartial = pkModalPartial || (qty < (lastSavedBasket.qty_sisa||lastSavedBasket.qty||0));
+  const btn = document.getElementById('mod-confirm-btn');
+  btn.disabled = true; btn.textContent = 'Memproses…';
+  const ok = await doSubmitPindah(lastSavedBasket.id, pkModalDest, qty, kg, isPartial);
+  btn.disabled = false; btn.textContent = '📤 Kirim';
+  if (ok) {
+    closeModal('modal-keranjang');
+    loadAll();
+    lastSavedBasket = null;
+  }
+}
+
+// --- CANCEL pending movement ---
+async function cancelPendingMovement(movementId, basketCode) {
+  if (!confirm(`Batalkan pengiriman keranjang ${basketCode} yang masih PENDING?`)) return;
+  const { error } = await db.from('basket_movements')
+    .update({ status: 'REJECTED', catatan: 'Dibatalkan oleh pengirim (Lantai Produksi)' })
+    .eq('id', movementId)
+    .eq('status', 'PENDING');
+  if (error) { showToast('Gagal batalkan: ' + error.message, 'error'); return; }
+  showToast(`✅ Pengiriman ${basketCode} dibatalkan`, 'success');
+  loadLantai();
+  updateSummaryCards();
+}
+
+async function pindahDariModal(dest) {
+  // kept for compatibility — now handled via pkSelectModalDest / pkConfirmModal
+  if (!lastSavedBasket) return;
+  await doSubmitPindah(lastSavedBasket.id, dest, lastSavedBasket.qty_sisa || lastSavedBasket.qty, lastSavedBasket.kg_sisa || lastSavedBasket.kg, false);
+  closeModal('modal-keranjang');
+  loadAll();
+  lastSavedBasket = null;
+}
+
+// ============================================================
+// PRINT LABEL
+// ============================================================
+function prepareLabelContent(basket) {
+  const code = basket.basket_code;
+  const batch = basket.batch_code || currentBatch.batch_code;
+  // product info: try from product_code field or fallback
+  const prodText = basket.product_code || basket.nama_produk || '—';
+  setEl('lbl-code', code);
+  setEl('lbl-batch', `Batch: ${batch}`);
+  setEl('lbl-grade-uk', prodText);
+  setEl('lbl-qty-kg', `${fmt(basket.qty)} ekor  |  ${fmtKg(basket.kg)}`);
+  setEl('lbl-avg', `Avg: ${basket.avg ? basket.avg.toFixed(4) : '—'} kg/ekor`);
+  setEl('lbl-date', fmtDT(new Date().toISOString()));
+  // Generate QR
+  const qrContainer = document.getElementById('label-qr-container');
+  qrContainer.innerHTML = '';
+  try {
+    new QRCode(qrContainer, {
+      text: code,
+      width: 76,  // ~20mm at 96dpi
+      height: 76,
+      colorDark: '#000000',
+      colorLight: '#ffffff',
+      correctLevel: QRCode.CorrectLevel.M
+    });
+  } catch(e) { console.error('QR gen error:', e); }
+}
+function printCurrentLabel() {
+  window.print();
+}
+async function printLabelById(basketId, basketCode) {
+  // Fetch basket + product
+  const { data } = await db.from('baskets')
+    .select('id, basket_code, qty_sisa, kg_sisa, created_at, product:product_id(nama_produk, product_code)')
+    .eq('id', basketId).single();
+  if (!data) { showToast('Data keranjang tidak ditemukan', 'error'); return; }
+  // Find avg from carcass_baskets
+  const { data: cb } = await db.from('carcass_baskets')
+    .select('avg_kg').eq('basket_id', basketId).maybeSingle();
+  const fakeBasket = {
+    basket_code: data.basket_code,
+    batch_code: currentBatch.batch_code,
+    product_code: data.product?.nama_produk || '',
+    qty: data.qty_sisa,
+    kg: data.kg_sisa,
+    avg: cb?.avg_kg
+  };
+  prepareLabelContent(fakeBasket);
+  setTimeout(() => window.print(), 200);
+}
+
+// ============================================================
+// SCAN TO MOVE
+// ============================================================
+function onScanKeydown(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const code = document.getElementById('scan-input').value.trim().toUpperCase();
+    if (code) lookupBasket(code);
+  }
+}
+async function lookupBasket(code) {
+  const resultEl = document.getElementById('scan-result');
+  const codeEl   = document.getElementById('scan-result-code');
+  const detailEl = document.getElementById('scan-result-detail');
+  const destEl   = document.getElementById('scan-dest-btns');
+
+  resultEl.className = 'scan-result visible';
+  codeEl.textContent = code;
+  detailEl.textContent = 'Mencari…';
+  destEl.style.display = 'none';
+  scanResultBasket = null;
+
+  const { data, error } = await db.from('baskets')
+    .select('id, basket_code, qty_sisa, kg_sisa, lokasi, status, product:product_id(nama_produk, product_code, grade)')
+    .eq('basket_code', code)
+    .maybeSingle();
+
+  if (error || !data) {
+    resultEl.className = 'scan-result visible error';
+    detailEl.textContent = '✗ Keranjang tidak ditemukan. Periksa kode scan.';
+    return;
+  }
+  if (data.status === 'HABIS' || data.status === 'VOID') {
+    resultEl.className = 'scan-result visible error';
+    detailEl.innerHTML = `✗ Keranjang ini sudah <strong>${data.status}</strong> — tidak bisa dipindah.`;
+    return;
+  }
+  if (data.lokasi !== 'LANTAI') {
+    const lokasiLbl = {CHILLER:'Chiller',PARTING:'Parting',BONELESS:'Boneless',BLASTING:'Blasting'}[data.lokasi] || data.lokasi;
+    // Check if pending
+    const { data: mvPending } = await db.from('basket_movements')
+      .select('ke_lokasi').eq('basket_id', data.id).eq('status', 'PENDING').maybeSingle();
+    if (mvPending) {
+      resultEl.className = 'scan-result visible error';
+      detailEl.innerHTML = `⏳ Keranjang ini sedang pending konfirmasi ke <strong>${mvPending.ke_lokasi}</strong>. Tunggu konfirmasi dari penerima.`;
+    } else {
+      resultEl.className = 'scan-result visible error';
+      detailEl.innerHTML = `ℹ️ Keranjang ini sudah di <strong>${lokasiLbl}</strong> — bukan di Lantai.`;
+    }
+    return;
+  }
+  // Check existing pending movement
+  const { data: mvPending } = await db.from('basket_movements')
+    .select('ke_lokasi').eq('basket_id', data.id).eq('status', 'PENDING').maybeSingle();
+
+  scanResultBasket = data;
+  const prod = data.product;
+  const qty = Number(data.qty_sisa);
+  const kg  = Number(data.kg_sisa);
+  resultEl.className = 'scan-result visible';
+  detailEl.innerHTML = `
+    <strong>${prod?.nama_produk || '—'}</strong> (${prod?.product_code || '—'})<br>
+    ${fmt(qty)} ekor &nbsp;|&nbsp; ${fmtKg(kg)}
+    ${mvPending ? `<br><span style="color:#d97706;font-weight:700">⚠ Ada pending ke ${mvPending.ke_lokasi} — bisa submit ulang</span>` : ''}
+  `;
+  destEl.style.display = 'grid';
+  // Clear scan input
+  document.getElementById('scan-input').value = '';
+}
+async function submitPindah(dest) {
+  if (!scanResultBasket) return;
+  await doSubmitPindah(scanResultBasket.id, dest, scanResultBasket.qty_sisa, scanResultBasket.kg_sisa);
+  // Clear scan result
+  document.getElementById('scan-result').className = 'scan-result';
+  document.getElementById('scan-dest-btns').style.display = 'none';
+  scanResultBasket = null;
+  loadLantai();
+  updateSummaryCards();
+}
+async function doSubmitPindah(basketId, dest, qty, kg, isPartial=false) {
+  try {
+    const { error } = await db.from('basket_movements').insert({
+      basket_id:    basketId,
+      batch_id:     currentBatch.id,
+      dari_lokasi:  'LANTAI',
+      ke_lokasi:    dest,
+      qty_pindah:   qty,
+      kg_pindah:    kg,
+      is_partial:   isPartial,
+      status:       'PENDING',
+      submitted_by: currentUser.id
+    });
+    if (error) throw error;
+    const destLbl = {CHILLER:'Chiller',PARTING:'Parting',BONELESS:'Boneless'}[dest] || dest;
+    const partialInfo = isPartial ? ` (${fmt(qty)} ekor / ${fmtKg(kg)})` : '';
+    showToast(`Keranjang dikirim ke ${destLbl}${partialInfo} — menunggu konfirmasi`, 'success');
+    return true;
+  } catch(e) {
+    console.error(e);
+    showToast('Gagal submit: ' + e.message, 'error');
+    return false;
+  }
+}
+
+// ============================================================
+// KARKAS RUSAK
+// ============================================================
+function openModalRusak() {
+  if (!currentSession) { showToast('Buka sesi produksi dulu', 'warning'); return; }
+  ['mr-ekor','mr-catatan','mr-pin'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  document.getElementById('mr-alasan').value = '';
+  document.getElementById('mr-err').style.display = 'none';
+  document.getElementById('mr-pin-error').style.display = 'none';
+  openModal('modal-rusak');
+}
+async function submitRusak(withApproval) {
+  const ekor = parseInt(document.getElementById('mr-ekor').value);
+  const alasan = document.getElementById('mr-alasan').value;
+  const catatan = document.getElementById('mr-catatan').value.trim();
+  const errEl = document.getElementById('mr-err');
+  errEl.style.display = 'none';
+
+  if (!ekor || ekor <= 0) { errEl.textContent = 'Jumlah ekor tidak valid.'; errEl.style.display='block'; return; }
+  if (!alasan) { errEl.textContent = 'Pilih alasan.'; errEl.style.display='block'; return; }
+
+  let status = 'PENDING';
+  let reviewedById = null;
+  if (withApproval) {
+    const pin = document.getElementById('mr-pin').value;
+    if (!pin) { errEl.textContent = 'PIN Supervisor wajib untuk menyetujui.'; errEl.style.display='block'; return; }
+    const sup = await verifySupervisorPin(pin);
+    if (!sup) {
+      document.getElementById('mr-pin-error').style.display = 'block';
+      return;
+    }
+    status = 'APPROVED';
+    reviewedById = sup.id;
+  }
+
+  try {
+    const { error } = await db.from('karkas_rusak').insert({
+      session_id: currentSession.id,
+      batch_id: currentBatch.id,
+      jumlah_ekor: ekor,
+      alasan, catatan,
+      status,
+      requested_by: currentUser.id,
+      reviewed_by: reviewedById,
+      reviewed_at: reviewedById ? new Date().toISOString() : null
+    });
+    if (error) throw error;
+
+    // If approved, update session ekor_rusak
+    if (status === 'APPROVED') {
+      const newRusak = (currentSession.ekor_rusak || 0) + ekor;
+      await db.from('carcass_sessions').update({ ekor_rusak: newRusak }).eq('id', currentSession.id);
+      currentSession.ekor_rusak = newRusak;
+    }
+
+    closeModal('modal-rusak');
+    loadRusak();
+    updateSummaryCards();
+    showToast(status === 'APPROVED' ? `${ekor} ekor rusak disetujui` : `${ekor} ekor rusak disimpan (pending)`, 'success');
+  } catch(e) {
+    console.error(e);
+    errEl.textContent = 'Gagal menyimpan: ' + e.message;
+    errEl.style.display = 'block';
+  }
+}
+function approveRusak(rusakId) {
+  const r = rusakList.find(x => x.id === rusakId);
+  if (!r) return;
+  showPinConfirm({
+    title: '✅ Approve Karkas Rusak',
+    desc: `Setujui pemusnahan ${r.jumlah_ekor} ekor karkas (${r.alasan}). Masukkan PIN Supervisor.`,
+    onConfirm: async (sup) => {
+      try {
+        await db.from('karkas_rusak').update({
+          status: 'APPROVED',
+          reviewed_by: sup.id,
+          reviewed_at: new Date().toISOString()
+        }).eq('id', rusakId);
+        const newRusak = (currentSession.ekor_rusak || 0) + r.jumlah_ekor;
+        await db.from('carcass_sessions').update({ ekor_rusak: newRusak }).eq('id', currentSession.id);
+        currentSession.ekor_rusak = newRusak;
+        loadRusak(); updateSummaryCards();
+        showToast(`${r.jumlah_ekor} ekor rusak disetujui oleh ${sup.nama}`, 'success');
+      } catch(e) { showToast('Gagal: ' + e.message, 'error'); }
+    }
+  });
+}
+function rejectRusak(rusakId) {
+  const r = rusakList.find(x => x.id === rusakId);
+  if (!r) return;
+  showPinConfirm({
+    title: '✗ Tolak Karkas Rusak',
+    desc: `Tolak pencatatan ${r.jumlah_ekor} ekor karkas rusak ini. Masukkan PIN Supervisor.`,
+    onConfirm: async (sup) => {
+      try {
+        await db.from('karkas_rusak').update({
+          status: 'REJECTED',
+          reviewed_by: sup.id,
+          reviewed_at: new Date().toISOString()
+        }).eq('id', rusakId);
+        loadRusak();
+        showToast('Karkas rusak ditolak', 'warning');
+      } catch(e) { showToast('Gagal: ' + e.message, 'error'); }
+    }
+  });
+}
+
+// ============================================================
+// CLOSE SESSION
+// ============================================================
+async function openModalClose() {
+  if (!currentSession) return;
+  // Recalculate from DB
+  const { data: sesData } = await db.from('carcass_sessions')
+    .select('total_qty, ekor_rusak').eq('id', currentSession.id).single();
+  const ekorBatch = currentBatch.ekor_timbang_ulang - currentBatch.ekor_mati;
+  const ekorProduksi = Number(sesData?.total_qty || 0);
+  const ekorRusak = Number(sesData?.ekor_rusak || 0);
+  const selisih = ekorBatch - ekorProduksi - ekorRusak;
+
+  setEl('rc-ekor-batch', fmt(ekorBatch));
+  setEl('rc-ekor-produksi', fmt(Math.round(ekorProduksi)));
+  setEl('rc-ekor-rusak', fmt(ekorRusak));
+  const selisihEl = document.getElementById('rc-selisih');
+  if (selisih === 0) {
+    selisihEl.innerHTML = `<span class="rekon-selisih-ok">✓ 0 (Seimbang)</span>`;
+  } else if (Math.abs(selisih) <= 3) {
+    selisihEl.innerHTML = `<span class="rekon-selisih-warn">⚠ ${selisih > 0 ? '+' : ''}${selisih} ekor</span>`;
+  } else {
+    selisihEl.innerHTML = `<span class="rekon-selisih-bad">✗ ${selisih > 0 ? '+' : ''}${selisih} ekor</span>`;
+  }
+  showEl('rc-alasan-section', selisih !== 0);
+  if (document.getElementById('rc-alasan')) document.getElementById('rc-alasan').value = '';
+  if (document.getElementById('rc-pin')) document.getElementById('rc-pin').value = '';
+  document.getElementById('rc-pin-error').style.display = 'none';
+  document.getElementById('rc-err').style.display = 'none';
+
+  // Lantai warning
+  const lantaiCount = lantaiBaskets.filter(b => !b.pendingTo).length;
+  showEl('rc-lantai-warning', lantaiCount > 0);
+  if (lantaiCount > 0) setEl('rc-lantai-count', lantaiCount);
+
+  // Store for submit
+  document.getElementById('modal-close').dataset.selisih = selisih;
+  document.getElementById('modal-close').dataset.ekorProduksi = ekorProduksi;
+  document.getElementById('modal-close').dataset.ekorRusak = ekorRusak;
+  openModal('modal-close');
+}
+async function submitClose() {
+  const pin = document.getElementById('rc-pin').value;
+  const selisih = parseInt(document.getElementById('modal-close').dataset.selisih || '0');
+  const alasan = document.getElementById('rc-alasan')?.value.trim();
+  const errEl = document.getElementById('rc-err');
+  errEl.style.display = 'none';
+
+  if (selisih !== 0 && !alasan) {
+    errEl.textContent = 'Alasan selisih wajib diisi.';
+    errEl.style.display = 'block'; return;
+  }
+  if (!pin) {
+    errEl.textContent = 'PIN Supervisor wajib diisi.';
+    errEl.style.display = 'block'; return;
+  }
+  const sup = await verifySupervisorPin(pin);
+  if (!sup) {
+    document.getElementById('rc-pin-error').style.display = 'block';
+    return;
+  }
+  try {
+    const updateData = {
+      status: 'CLOSED',
+      selisih_ekor: selisih,
+      selisih_alasan: alasan || null,
+      selisih_acc_by: selisih !== 0 ? sup.id : null,
+      selisih_acc_at: selisih !== 0 ? new Date().toISOString() : null,
+      closed_by: sup.id,
+      closed_at: new Date().toISOString()
+    };
+    const { error } = await db.from('carcass_sessions').update(updateData).eq('id', currentSession.id);
+    if (error) throw error;
+    closeModal('modal-close');
+    showToast(`Sesi ${currentSession.session_code} berhasil ditutup`, 'success');
+    currentSession = null;
+    updateSessionBadge(null);
+    showEl('btn-buka-sesi', true);
+    showState('no-session');
+    const desc = document.getElementById('no-session-desc');
+    if (desc) desc.textContent = `Sesi produksi batch ${currentBatch.batch_code} telah ditutup.`;
+  } catch(e) {
+    console.error(e);
+    errEl.textContent = 'Gagal menutup sesi: ' + e.message;
+    errEl.style.display = 'block';
+  }
+}
+
+// ============================================================
+// PIN SUPERVISOR
+// ============================================================
+async function verifySupervisorPin(pin) {
+  if (!pin) return null;
+  const { data } = await db.from('users')
+    .select('id, nama, role, pin')
+    .eq('role', 'SUPERVISOR')
+    .eq('aktif', true);
+  const sup = (data || []).find(u => u.pin === pin);
+  return sup || null;
+}
+function clearPinError(elId) {
+  const el = document.getElementById(elId);
+  if (el) el.style.display = 'none';
+}
+
+// ============================================================
+// MODAL PIN KONFIRMASI — reusable
+// Pemakaian: showPinConfirm({ title, desc, onConfirm(supervisor) })
+// ============================================================
+let _mpcCallback = null;
+function showPinConfirm({ title = '🔑 Konfirmasi Supervisor', desc = 'Masukkan PIN Supervisor untuk melanjutkan.', onConfirm }) {
+  _mpcCallback = onConfirm;
+  setEl('mpc-title', title);
+  setEl('mpc-desc', desc);
+  document.getElementById('mpc-pin').value = '';
+  document.getElementById('mpc-pin-error').style.display = 'none';
+  document.getElementById('mpc-err').style.display = 'none';
+  openModal('modal-pin-confirm');
+  setTimeout(() => document.getElementById('mpc-pin').focus(), 200);
+}
+async function mpcSubmit() {
+  const pin = document.getElementById('mpc-pin').value.trim();
+  const errEl = document.getElementById('mpc-err');
+  errEl.style.display = 'none';
+  if (!pin) { errEl.textContent = 'PIN wajib diisi.'; errEl.style.display = 'block'; return; }
+  const btn = document.getElementById('mpc-ok-btn');
+  btn.disabled = true; btn.textContent = 'Memverifikasi…';
+  try {
+    const sup = await verifySupervisorPin(pin);
+    if (!sup) {
+      document.getElementById('mpc-pin-error').style.display = 'block';
+      return;
+    }
+    closeModal('modal-pin-confirm');
+    if (_mpcCallback) await _mpcCallback(sup);
+    _mpcCallback = null;
+  } finally {
+    btn.disabled = false; btn.textContent = '✓ Konfirmasi';
+  }
+}
+function mpcCancel() {
+  _mpcCallback = null;
+  closeModal('modal-pin-confirm');
+}
+
+// ============================================================
+// MODAL HELPERS
+// ============================================================
+function openModal(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.add('open');
+}
+function closeModal(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.remove('open');
+}
+
+// ============================================================
+// INIT
+// ============================================================
+window.addEventListener('DOMContentLoaded', () => {
+  const stored = localStorage.getItem('rpa_user');
+  if (stored) {
+    try {
+      currentUser = JSON.parse(stored);
+      startApp();
+    } catch(e) { /* stay on login */ }
+  }
+  // Close modal on backdrop click
+  document.querySelectorAll('.modal-overlay').forEach(overlay => {
+    overlay.addEventListener('click', e => {
+      if (e.target === overlay) overlay.classList.remove('open');
+    });
+  });
+  // Keyboard ESC to close modals
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      document.querySelectorAll('.modal-overlay.open').forEach(m => m.classList.remove('open'));
+    }
+  });
+  // Enter key for login
+  document.getElementById('inp-password')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') doLogin();
+  });
+});
+</script>
+</body>
+</html>

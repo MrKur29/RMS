@@ -1,0 +1,1710 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blasting — Kurnia's Food</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f2f5;color:#111827;font-size:14px}
+button{cursor:pointer;font-family:inherit}
+a{text-decoration:none}
+
+/* LOGIN */
+#login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(135deg,#0f172a 0%,#134e4a 60%,#0d9488 100%)}
+.login-card{background:white;border-radius:16px;padding:44px 40px;width:400px;box-shadow:0 25px 60px rgba(0,0,0,.4)}
+.login-logo{text-align:center;margin-bottom:36px}
+.login-logo .icon{font-size:48px;display:block;margin-bottom:12px}
+.login-logo h1{font-size:22px;font-weight:800;color:#111827}
+.login-logo p{font-size:13px;color:#6b7280;margin-top:4px}
+.form-group{margin-bottom:20px}
+.form-group label{display:block;font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
+.form-group input,.form-group select,.form-group textarea{width:100%;padding:11px 14px;border:1.5px solid #d1d5db;border-radius:8px;font-size:15px;transition:border-color .2s,box-shadow .2s;color:#111827;background:white;font-family:inherit}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{outline:none;border-color:#0d9488;box-shadow:0 0 0 3px rgba(13,148,136,.12)}
+.form-group textarea{resize:vertical;min-height:72px;font-size:14px}
+.btn-login{width:100%;padding:13px;background:#0d9488;color:white;border:none;border-radius:8px;font-size:15px;font-weight:700;transition:background .2s}
+.btn-login:hover{background:#0f766e}
+.btn-login:disabled{background:#5eead4;cursor:not-allowed}
+.login-error{background:#fee2e2;color:#dc2626;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:18px;border:1px solid #fecaca;display:none}
+.login-version{text-align:center;margin-top:20px;font-size:11px;color:#9ca3af}
+
+/* APP LAYOUT */
+#app-screen{display:none;height:100vh;overflow:hidden}
+.app-layout{display:flex;height:100%}
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:90}
+.sidebar-overlay.visible{display:block}
+
+/* SIDEBAR */
+.sidebar{width:230px;flex-shrink:0;background:#0f172a;color:white;display:flex;flex-direction:column;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.1) transparent;transition:transform .28s cubic-bezier(.4,0,.2,1);z-index:100}
+.sidebar-brand{padding:20px 18px 16px;border-bottom:1px solid rgba(255,255,255,.08)}
+.sidebar-brand h2{font-size:15px;font-weight:800;color:#f8fafc;display:flex;align-items:center;gap:8px}
+.sidebar-brand p{font-size:11px;color:rgba(255,255,255,.4);margin-top:3px}
+.sidebar-nav{flex:1;padding:10px 0}
+.nav-section-label{font-size:10px;font-weight:700;color:rgba(255,255,255,.3);text-transform:uppercase;letter-spacing:1px;padding:12px 18px 4px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 18px;font-size:13px;color:rgba(255,255,255,.65);cursor:pointer;transition:all .15s;border-left:3px solid transparent}
+.nav-item:hover:not(.disabled){background:rgba(255,255,255,.07);color:white}
+.nav-item.active{background:rgba(13,148,136,.2);color:#5eead4;border-left-color:#0d9488}
+.nav-item.disabled{opacity:.3;cursor:not-allowed}
+.nav-icon{font-size:15px;width:22px;text-align:center;flex-shrink:0}
+.nav-label-text{flex:1}
+.nav-tag{font-size:9px;font-weight:700;padding:2px 5px;border-radius:4px;background:rgba(13,148,136,.3);color:#5eead4}
+.sidebar-footer{padding:14px 18px;border-top:1px solid rgba(255,255,255,.08)}
+.user-card{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.user-avatar{width:34px;height:34px;border-radius:50%;background:#0d9488;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:white;flex-shrink:0}
+.user-info-text .user-name{font-size:13px;font-weight:700;color:#f8fafc}
+.user-info-text .user-role{font-size:11px;color:rgba(255,255,255,.45);margin-top:1px}
+.btn-logout{width:100%;padding:8px 12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.6);border-radius:6px;font-size:12px;font-weight:600;transition:all .15s}
+.btn-logout:hover{background:rgba(220,38,38,.25);border-color:rgba(220,38,38,.5);color:#fca5a5}
+
+/* MAIN */
+.main-area{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.topbar{background:white;height:58px;padding:0 20px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e5e7eb;box-shadow:0 1px 4px rgba(0,0,0,.05);gap:12px}
+.topbar-left{display:flex;align-items:center;gap:12px;min-width:0}
+.topbar-left h1{font-size:17px;font-weight:800;color:#111827;white-space:nowrap}
+.topbar-left p{font-size:12px;color:#9ca3af;margin-top:1px}
+.topbar-left-text{min-width:0}
+.topbar-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.btn-hamburger{display:none;align-items:center;justify-content:center;width:40px;height:40px;border-radius:8px;background:#f3f4f6;border:1.5px solid #e5e7eb;font-size:18px;color:#374151;flex-shrink:0}
+.btn-hamburger:hover{background:#e5e7eb}
+.clock-display{font-size:14px;font-weight:700;color:#374151;background:#f9fafb;padding:6px 10px;border-radius:6px;border:1px solid #e5e7eb;white-space:nowrap}
+
+/* TAB BAR */
+.tab-bar{background:white;border-bottom:2px solid #e5e7eb;padding:0 20px;display:flex;gap:0;flex-shrink:0}
+.tab-btn{padding:12px 20px;font-size:13px;font-weight:700;color:#6b7280;border:none;background:none;border-bottom:3px solid transparent;margin-bottom:-2px;transition:all .15s;white-space:nowrap}
+.tab-btn:hover{color:#0d9488;background:#f0fdfa}
+.tab-btn.active{color:#0d9488;border-bottom-color:#0d9488}
+
+/* CONTENT */
+.content-area{flex:1;overflow-y:auto;padding:20px 24px 32px}
+.tab-pane{display:none}
+.tab-pane.active{display:block}
+
+/* SUMMARY CARDS */
+.cards-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;margin-bottom:16px}
+.summary-card{background:white;border-radius:10px;padding:14px;border-left:4px solid #e5e7eb;box-shadow:0 1px 3px rgba(0,0,0,.06);transition:transform .15s,box-shadow .15s}
+.summary-card:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.1)}
+.summary-card.c-teal{border-left-color:#0d9488}
+.summary-card.c-blue{border-left-color:#2563eb}
+.summary-card.c-green{border-left-color:#16a34a}
+.summary-card.c-amber{border-left-color:#d97706}
+.summary-card.c-red{border-left-color:#dc2626}
+.sc-label{font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.6px}
+.sc-value{font-size:26px;font-weight:900;color:#111827;line-height:1.1;margin:4px 0 2px}
+.sc-value.small{font-size:18px}
+.sc-sub{font-size:11px;color:#9ca3af}
+
+/* PANEL */
+.panel{background:white;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden;margin-bottom:14px}
+.panel:last-child{margin-bottom:0}
+.panel-head{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:1px solid #f3f4f6;gap:8px;flex-wrap:wrap}
+.panel-title{font-size:14px;font-weight:800;color:#111827}
+.panel-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.panel-pill{font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;background:#f3f4f6;color:#374151}
+.panel-pill.alert{background:#fee2e2;color:#dc2626}
+.panel-pill.ok{background:#d1fae5;color:#065f46}
+.panel-pill.warn{background:#fef3c7;color:#92400e}
+.panel-pill.info{background:#ccfbf1;color:#134e4a}
+
+/* TABLE */
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl thead th{text-align:left;padding:9px 14px;font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;background:#f9fafb;border-bottom:1px solid #f0f2f5;white-space:nowrap}
+.tbl tbody td{padding:10px 14px;border-bottom:1px solid #f9fafb;vertical-align:middle}
+.tbl tbody tr:last-child td{border-bottom:none}
+.tbl tbody tr:hover td{background:#fafafa}
+.tbl-sub{font-size:11px;color:#6b7280;margin-top:2px}
+
+/* SECTION TOOLBAR */
+.section-toolbar{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid #f3f4f6;flex-wrap:wrap;background:#fafafa}
+.search-wrap{position:relative;flex:1;min-width:160px}
+.search-wrap .s-icon{position:absolute;left:9px;top:50%;transform:translateY(-50%);font-size:13px;pointer-events:none;color:#9ca3af}
+.search-inp{width:100%;padding:6px 10px 6px 28px;border:1.5px solid #e5e7eb;border-radius:7px;font-size:13px;color:#111827;font-family:inherit;background:white;transition:border-color .2s}
+.search-inp:focus{outline:none;border-color:#0d9488;box-shadow:0 0 0 2px rgba(13,148,136,.1)}
+
+/* GROUPED STOK */
+.grp-row{cursor:pointer;user-select:none}
+.grp-row td{background:#f0fdfa;padding:10px 14px;border-bottom:1px solid #99f6e4;font-weight:700;font-size:13px}
+.grp-row:hover td{background:#ccfbf1}
+.grp-arrow{display:inline-block;width:16px;transition:transform .2s;font-style:normal;font-size:11px}
+.grp-row.expanded .grp-arrow{transform:rotate(90deg)}
+.sub-row td{padding:8px 14px 8px 30px;border-bottom:1px solid #f3f4f6;background:#f8fffe;font-size:12px}
+.sub-row:hover td{background:#e6fffa}
+.sub-row.last-sub td{border-bottom:2px solid #99f6e4}
+
+/* BADGES */
+.badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:12px;font-size:11px;font-weight:700;white-space:nowrap}
+.b-pending{background:#fef3c7;color:#92400e}
+.b-allocated{background:#ccfbf1;color:#134e4a}
+.b-frozen{background:#dbeafe;color:#1e40af}
+.b-open{background:#f3f4f6;color:#374151}
+.b-completed{background:#d1fae5;color:#065f46}
+.b-cancelled{background:#fee2e2;color:#991b1b}
+
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 12px;border-radius:6px;border:none;font-size:12px;font-weight:700;transition:all .15s;min-height:34px;touch-action:manipulation;white-space:nowrap}
+.btn-primary{background:#0d9488;color:white}
+.btn-primary:hover{background:#0f766e}
+.btn-green{background:#16a34a;color:white}
+.btn-green:hover{background:#15803d}
+.btn-amber{background:#d97706;color:white}
+.btn-amber:hover{background:#b45309}
+.btn-red{background:#dc2626;color:white}
+.btn-red:hover{background:#b91c1c}
+.btn-ghost{background:#f3f4f6;color:#374151}
+.btn-ghost:hover{background:#e5e7eb}
+.btn-outline{background:white;color:#374151;border:1.5px solid #d1d5db}
+.btn-outline:hover{background:#f9fafb}
+.btn-sm{padding:5px 9px;font-size:11px;min-height:28px}
+.btn:disabled{opacity:.45;cursor:not-allowed;pointer-events:none}
+.btn-refresh{display:flex;align-items:center;gap:5px;padding:7px 14px;background:#f3f4f6;border:1.5px solid #e5e7eb;border-radius:7px;font-size:12px;font-weight:700;color:#374151;transition:all .15s}
+.btn-refresh:hover{background:#e5e7eb}
+
+/* TWO GRID */
+.two-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;align-items:start}
+
+/* MODAL */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;align-items:flex-start;justify-content:center;padding:32px 16px;overflow-y:auto}
+.modal-overlay.open{display:flex}
+.modal-box{background:white;border-radius:14px;padding:28px;width:480px;max-width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);animation:modal-in .2s ease;margin:auto}
+.modal-box.modal-sm{width:400px}
+.modal-box.modal-lg{width:640px}
+@keyframes modal-in{from{transform:scale(.92);opacity:0}to{transform:scale(1);opacity:1}}
+.modal-title{font-size:16px;font-weight:800;margin-bottom:4px;color:#111827}
+.modal-desc{font-size:13px;color:#6b7280;margin-bottom:20px}
+.modal-info-box{background:#f9fafb;border-radius:8px;padding:14px;border:1px solid #e5e7eb;margin-bottom:16px}
+.modal-info-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #f0f2f5;font-size:13px;gap:8px}
+.modal-info-row:last-child{border-bottom:none}
+.modal-info-label{color:#6b7280}
+.modal-info-val{font-weight:700;color:#111827;text-align:right}
+.modal-footer{display:flex;justify-content:flex-end;gap:10px;margin-top:22px;padding-top:18px;border-top:1px solid #f0f2f5;flex-wrap:wrap}
+
+/* EMPTY */
+.empty{text-align:center;padding:28px 16px;color:#9ca3af;font-size:13px}
+.empty .e-icon{font-size:28px;margin-bottom:8px}
+
+/* TOAST */
+#toast{position:fixed;bottom:28px;right:28px;padding:13px 20px;border-radius:10px;font-size:13px;font-weight:700;box-shadow:0 8px 24px rgba(0,0,0,.2);display:none;z-index:999;animation:toast-in .25s ease}
+#toast.show{display:block}
+#toast.success{background:#065f46;color:white}
+#toast.error{background:#991b1b;color:white}
+#toast.warning{background:#92400e;color:white}
+@keyframes toast-in{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+
+/* RAK GRID */
+.rak-grid{display:grid;grid-template-columns:260px 1fr;gap:14px;align-items:start}
+.rak-card{padding:12px 14px;border-bottom:1px solid #f3f4f6;cursor:pointer;transition:background .12s}
+.rak-card:hover{background:#f0fdfa}
+.rak-card.active{background:#ccfbf1;border-left:3px solid #0d9488}
+.rak-card-no{font-size:14px;font-weight:800;color:#111827}
+.rak-card-sub{font-size:11px;color:#6b7280;margin-top:2px}
+.rak-card-badges{display:flex;gap:4px;margin-top:4px;flex-wrap:wrap}
+
+/* BATCH CARD */
+.batch-card{background:white;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:12px;overflow:hidden;border-left:4px solid #e5e7eb}
+.batch-card.bc-open{border-left-color:#0d9488}
+.batch-card.bc-completed{border-left-color:#16a34a}
+.batch-card.bc-cancelled{border-left-color:#6b7280}
+.batch-card-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;gap:8px;flex-wrap:wrap}
+.batch-card-code{font-size:15px;font-weight:800;font-family:monospace;color:#111827}
+.batch-card-body{padding:0 16px 14px;display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px}
+.batch-stat{font-size:11px}
+.batch-stat-label{color:#6b7280;text-transform:uppercase;letter-spacing:.4px}
+.batch-stat-val{font-size:15px;font-weight:800;color:#111827;margin-top:1px}
+
+/* RESPONSIVE */
+@media(max-width:1023px){
+  .sidebar{position:fixed;top:0;left:0;height:100vh;transform:translateX(-100%)}
+  .sidebar.open{transform:translateX(0)}
+  .btn-hamburger{display:flex}
+  .two-grid{grid-template-columns:1fr}
+  .rak-grid{grid-template-columns:1fr}
+  .cards-row{grid-template-columns:repeat(auto-fill,minmax(130px,1fr))}
+}
+@media(max-width:600px){
+  .content-area{padding:14px 14px 24px}
+  .topbar{padding:0 14px}
+  .modal-box{padding:20px}
+  .tab-btn{padding:10px 12px;font-size:12px}
+}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <span class="icon">🧊</span>
+      <h1>RPA Management System</h1>
+      <p>Blasting — Login</p>
+    </div>
+    <div class="login-error" id="login-error"></div>
+    <div class="form-group">
+      <label>Username</label>
+      <input type="text" id="inp-username" placeholder="Masukkan username" autocomplete="username"
+             onkeydown="if(event.key==='Enter')document.getElementById('inp-password').focus()">
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input type="password" id="inp-password" placeholder="Masukkan password" autocomplete="current-password"
+             onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button class="btn-login" id="btn-login" onclick="doLogin()">Masuk →</button>
+    <p class="login-version">v1.0 — RPA System</p>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app-screen">
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+<div class="app-layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <img src="logo.png" style="height:36px;width:auto;object-fit:contain;">
+        <span style="font-size:15px;font-weight:800;color:#f8fafc;">Kurnia's Food</span>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section-label">Utama</div>
+      <div class="nav-item" onclick="navTo('Dashboard.html')">
+        <span class="nav-icon">🏠</span><span class="nav-label-text">Dashboard</span>
+      </div>
+      <div class="nav-section-label">Produksi</div>
+      <div class="nav-item" onclick="navTo('BatchAyamHidup.html')">
+        <span class="nav-icon">🐔</span><span class="nav-label-text">Batch Ayam Hidup</span>
+      </div>
+      <div class="nav-item" onclick="navTo('ProduksiKarkas.html')">
+        <span class="nav-icon">⚙️</span><span class="nav-label-text">Produksi Karkas</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Thawing.html')">
+        <span class="nav-icon">🌡️</span><span class="nav-label-text">Thawing</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Chiller.html')">
+        <span class="nav-icon">❄️</span><span class="nav-label-text">Chiller</span>
+      </div>
+      <div class="nav-item" onclick="navTo('WorkOrder.html')">
+        <span class="nav-icon">📋</span><span class="nav-label-text">Work Order</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Parting.html')">
+        <span class="nav-icon">✂️</span><span class="nav-label-text">Parting</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Boneless.html')">
+        <span class="nav-icon">🥩</span><span class="nav-label-text">Boneless</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Marinasi.html')">
+        <span class="nav-icon">🌶️</span><span class="nav-label-text">Marinasi</span>
+      </div>
+      <div class="nav-item active">
+        <span class="nav-icon">🧊</span><span class="nav-label-text">Blasting</span>
+        <span class="nav-tag">Aktif</span>
+      </div>
+      <div class="nav-item" onclick="navTo('ByProductKarkas.html')">
+        <span class="nav-icon">📦</span><span class="nav-label-text">By-product Karkas</span>
+      </div>
+      <div class="nav-section-label">Penjualan</div>
+      <div class="nav-item disabled"><span class="nav-icon">🛒</span><span class="nav-label-text">Penjualan</span></div>
+      <div class="nav-section-label">Manajemen</div>
+      <div class="nav-item disabled"><span class="nav-icon">📊</span><span class="nav-label-text">Traceability</span></div>
+      <div class="nav-item" onclick="navTo('MasterData.html')">
+        <span class="nav-icon">🗂️</span><span class="nav-label-text">Master Data</span>
+      </div>
+      <div class="nav-item" id="nav-user-mgmt" style="display:none" onclick="navTo('UserManagement.html')">
+        <span class="nav-icon">👥</span><span class="nav-label-text">Manajemen User</span>
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-card">
+        <div class="user-avatar" id="user-avatar">?</div>
+        <div class="user-info-text">
+          <div class="user-name" id="sidebar-name">—</div>
+          <div class="user-role" id="sidebar-role">—</div>
+        </div>
+      </div>
+      <button class="btn-logout" onclick="doLogout()">⬅ Keluar</button>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="main-area">
+    <div class="topbar">
+      <div class="topbar-left">
+        <button class="btn-hamburger" id="btn-hamburger" onclick="toggleSidebar()">☰</button>
+        <div class="topbar-left-text">
+          <h1>🧊 Blasting</h1>
+          <p id="topbar-date">—</p>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <button class="btn-refresh" onclick="loadAll()">🔄 Refresh</button>
+        <div class="clock-display" id="clock">—</div>
+      </div>
+    </div>
+
+    <!-- TAB BAR -->
+    <div class="tab-bar">
+      <button class="tab-btn active" id="tab-btn-masuk"  onclick="switchTab('masuk')">📥 Masuk &amp; Stok</button>
+      <button class="tab-btn"        id="tab-btn-rak"    onclick="switchTab('rak')">🗂️ Rak</button>
+      <button class="tab-btn"        id="tab-btn-batch"  onclick="switchTab('batch')">🔄 Batch Beku</button>
+    </div>
+
+    <!-- CONTENT -->
+    <div class="content-area" id="content-area">
+
+      <!-- ===== TAB 1: MASUK & STOK ===== -->
+      <div class="tab-pane active" id="tab-masuk">
+
+        <!-- Summary Cards -->
+        <div class="cards-row">
+          <div class="summary-card c-amber">
+            <div class="sc-label">Pending Masuk</div>
+            <div class="sc-value" id="sc-pending">—</div>
+            <div class="sc-sub">keranjang antri</div>
+          </div>
+          <div class="summary-card c-teal">
+            <div class="sc-label">Stok Blasting</div>
+            <div class="sc-value" id="sc-stok">—</div>
+            <div class="sc-sub">keranjang aktif</div>
+          </div>
+          <div class="summary-card c-blue">
+            <div class="sc-label">Sudah Dialokasikan</div>
+            <div class="sc-value small" id="sc-alloc">—</div>
+            <div class="sc-sub">ekor di rak</div>
+          </div>
+          <div class="summary-card c-green">
+            <div class="sc-label">Batch Hari Ini</div>
+            <div class="sc-value" id="sc-batch">—</div>
+            <div class="sc-sub">sesi beku</div>
+          </div>
+        </div>
+
+        <div class="two-grid">
+
+          <!-- Panel: Pending Masuk -->
+          <div class="panel">
+            <div class="panel-head">
+              <div class="panel-title">📥 Pending Masuk dari Chiller</div>
+              <div class="panel-actions">
+                <span class="panel-pill alert" id="pill-pending-count">0 item</span>
+                <button class="btn btn-green btn-sm" id="btn-konfirm-semua" onclick="openKonfirmSemua()" style="display:none">✅ Konfirmasi Semua</button>
+              </div>
+            </div>
+            <div class="tbl-wrap">
+              <table class="tbl">
+                <thead>
+                  <tr>
+                    <th>Keranjang</th>
+                    <th>Produk</th>
+                    <th>Qty / Kg</th>
+                    <th>Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="pending-tbody">
+                  <tr><td colspan="4"><div class="empty"><div class="e-icon">✅</div>Tidak ada pending masuk.</div></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Panel: Stok di Blasting -->
+          <div class="panel">
+            <div class="panel-head">
+              <div class="panel-title">📦 Stok di Area Blasting</div>
+              <div class="panel-actions">
+                <span class="panel-pill info" id="pill-stok-count">0 item</span>
+              </div>
+            </div>
+            <div class="section-toolbar">
+              <div class="search-wrap">
+                <span class="s-icon">🔍</span>
+                <input class="search-inp" id="stok-search" placeholder="Cari kode / produk…" oninput="renderStok()">
+              </div>
+            </div>
+            <div class="tbl-wrap">
+              <table class="tbl">
+                <thead>
+                  <tr>
+                    <th>Keranjang / Produk</th>
+                    <th>Sisa / Dialokasikan</th>
+                    <th>Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="stok-tbody">
+                  <tr><td colspan="3"><div class="empty"><div class="e-icon">📦</div>Tidak ada stok di Blasting.</div></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div><!-- /two-grid -->
+      </div><!-- /tab-masuk -->
+
+      <!-- ===== TAB 2: RAK ===== -->
+      <div class="tab-pane" id="tab-rak">
+
+        <div class="cards-row">
+          <div class="summary-card c-teal">
+            <div class="sc-label">Total Rak Aktif</div>
+            <div class="sc-value" id="sc-rak-total">—</div>
+            <div class="sc-sub">rak tersedia</div>
+          </div>
+          <div class="summary-card c-amber">
+            <div class="sc-label">Rak Berisi</div>
+            <div class="sc-value" id="sc-rak-isi">—</div>
+            <div class="sc-sub">ada alokasi aktif</div>
+          </div>
+          <div class="summary-card c-blue">
+            <div class="sc-label">Total Ekor di Rak</div>
+            <div class="sc-value small" id="sc-rak-ekor">—</div>
+            <div class="sc-sub">menunggu batch</div>
+          </div>
+        </div>
+
+        <div class="rak-grid">
+
+          <!-- Panel Kiri: Daftar Rak -->
+          <div class="panel" style="margin-bottom:0">
+            <div class="panel-head">
+              <div class="panel-title">🗂️ Daftar Rak</div>
+              <span class="panel-pill info" id="pill-rak-count">0 rak</span>
+            </div>
+            <div id="rak-list-container">
+              <div class="empty"><div class="e-icon">🗂️</div>Memuat rak…</div>
+            </div>
+          </div>
+
+          <!-- Panel Kanan: Detail Rak Terpilih -->
+          <div class="panel" id="rak-detail-panel" style="margin-bottom:0">
+            <div class="panel-head">
+              <div class="panel-title" id="rak-detail-title">← Pilih rak di kiri</div>
+              <div class="panel-actions" id="rak-detail-actions"></div>
+            </div>
+            <div id="rak-detail-body">
+              <div class="empty" style="padding:40px 16px">
+                <div class="e-icon">👈</div>
+                Pilih rak dari daftar untuk melihat detail dan mengelola alokasi.
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div><!-- /tab-rak -->
+
+      <!-- ===== TAB 3: BATCH BEKU ===== -->
+      <div class="tab-pane" id="tab-batch">
+
+        <div class="cards-row">
+          <div class="summary-card c-teal">
+            <div class="sc-label">Batch Open</div>
+            <div class="sc-value" id="sc-batch-open">—</div>
+            <div class="sc-sub">menunggu dijalankan</div>
+          </div>
+          <div class="summary-card c-green">
+            <div class="sc-label">Selesai Hari Ini</div>
+            <div class="sc-value" id="sc-batch-done">—</div>
+            <div class="sc-sub">batch completed</div>
+          </div>
+          <div class="summary-card c-blue">
+            <div class="sc-label">Total Beku Hari Ini</div>
+            <div class="sc-value small" id="sc-batch-ekor">—</div>
+            <div class="sc-sub">ekor dibekukan</div>
+          </div>
+        </div>
+
+        <!-- Batch Aktif (OPEN) -->
+        <div class="panel">
+          <div class="panel-head">
+            <div class="panel-title">🔄 Batch Aktif (Open)</div>
+            <div class="panel-actions">
+              <span class="panel-pill info" id="pill-batch-open">0 batch</span>
+              <button class="btn btn-primary btn-sm" onclick="openBuatBatch()">＋ Buat Batch Baru</button>
+            </div>
+          </div>
+          <div id="batch-open-container">
+            <div class="empty"><div class="e-icon">🔄</div>Tidak ada batch aktif. Buat batch baru untuk mulai membekukan.</div>
+          </div>
+        </div>
+
+        <!-- Riwayat Batch -->
+        <div class="panel">
+          <div class="panel-head">
+            <div class="panel-title">📋 Riwayat Batch</div>
+            <div class="panel-actions">
+              <span class="panel-pill" id="pill-batch-history">0 batch</span>
+            </div>
+          </div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>Kode Batch</th>
+                  <th>Tanggal</th>
+                  <th>Rak</th>
+                  <th>Total Beku</th>
+                  <th>Status</th>
+                  <th>Selesai</th>
+                </tr>
+              </thead>
+              <tbody id="batch-history-tbody">
+                <tr><td colspan="6"><div class="empty"><div class="e-icon">📋</div>Belum ada riwayat batch.</div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div><!-- /tab-batch -->
+
+    </div><!-- /content-area -->
+  </div><!-- /main-area -->
+</div><!-- /app-layout -->
+</div><!-- /app-screen -->
+
+
+<!-- ==================== MODAL: KONFIRMASI MASUK ==================== -->
+<div class="modal-overlay" id="modal-konfirm">
+  <div class="modal-box modal-sm">
+    <div id="mk-step1">
+      <div class="modal-title">✅ Konfirmasi Masuk Blasting</div>
+      <div class="modal-desc">Pastikan keranjang sudah berada di area Blasting.</div>
+      <div class="modal-info-box">
+        <div class="modal-info-row"><span class="modal-info-label">Kode Keranjang</span><span class="modal-info-val" style="font-family:monospace" id="mk-code">—</span></div>
+        <div class="modal-info-row"><span class="modal-info-label">Produk</span><span class="modal-info-val" id="mk-produk">—</span></div>
+        <div class="modal-info-row"><span class="modal-info-label">Qty / Kg</span><span class="modal-info-val" id="mk-qty-kg">—</span></div>
+        <div class="modal-info-row"><span class="modal-info-label">Dari</span><span class="modal-info-val" id="mk-dari">—</span></div>
+      </div>
+      <div id="mk-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-bottom:8px;display:none"></div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('modal-konfirm')">Batal</button>
+        <button class="btn btn-red btn-sm" onclick="openTolakFromKonfirm()">✗ Tolak</button>
+        <button class="btn btn-green" id="mk-btn-ok" onclick="doKonfirmasi()">✅ Konfirmasi Masuk</button>
+      </div>
+    </div>
+    <div id="mk-step2" style="display:none">
+      <div class="modal-title">✅ Diterima!</div>
+      <div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:8px">Langsung alokasikan ke rak?</div>
+      <div style="background:#f0fdfa;border:1px solid #99f6e4;border-radius:8px;padding:10px 12px;font-size:12px;color:#134e4a">
+        Keranjang: <strong style="font-family:monospace;color:#374151" id="mk-post-code">—</strong><br>
+        Sisa: <strong style="color:#111827" id="mk-post-sisa">—</strong>
+      </div>
+      <div class="modal-footer" style="margin-top:16px">
+        <button class="btn btn-ghost" onclick="closeModal('modal-konfirm')">Lewati</button>
+        <button class="btn btn-primary" onclick="goAlokasiDariKonfirm()">🗂️ Alokasi ke Rak →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== MODAL: TOLAK ==================== -->
+<div class="modal-overlay" id="modal-tolak">
+  <div class="modal-box modal-sm">
+    <div class="modal-title">✗ Tolak Keranjang</div>
+    <div class="modal-desc">Keranjang <strong id="mt-code">—</strong> akan dikembalikan ke pengirim.</div>
+    <div class="form-group" style="margin-bottom:0">
+      <label>Alasan Penolakan <span style="color:#dc2626">*</span></label>
+      <textarea id="mt-alasan" placeholder="Contoh: Produk tidak sesuai, kondisi buruk…" rows="3"></textarea>
+    </div>
+    <div id="mt-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-top:8px;display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-tolak')">Batal</button>
+      <button class="btn btn-red" id="mt-btn-ok" onclick="doTolak()">✗ Tolak Keranjang</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== MODAL: KONFIRMASI SEMUA ==================== -->
+<div class="modal-overlay" id="modal-konfirm-semua">
+  <div class="modal-box modal-sm">
+    <div class="modal-title">✅ Konfirmasi Semua Keranjang</div>
+    <div class="modal-desc" id="mks-desc">Semua keranjang pending akan dikonfirmasi masuk.</div>
+    <div style="background:#fef3c7;border:1.5px solid #fde68a;border-radius:8px;padding:12px;font-size:13px;color:#92400e;margin-bottom:16px">
+      <strong>⚠️ Perhatian:</strong> Pastikan semua keranjang sudah benar-benar berada di area Blasting.
+    </div>
+    <div id="mks-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-bottom:10px;display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-konfirm-semua')">Batal</button>
+      <button class="btn btn-green" id="mks-btn-ok" onclick="doKonfirmasiSemua()">✅ Ya, Konfirmasi Semua</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== MODAL: RETURN KE CHILLER ==================== -->
+<div class="modal-overlay" id="modal-return">
+  <div class="modal-box modal-sm">
+    <div class="modal-title">↩️ Kembalikan ke Chiller</div>
+    <div class="modal-desc">Sisa keranjang yang belum dialokasikan akan dikirim kembali ke Chiller.</div>
+    <div class="modal-info-box">
+      <div class="modal-info-row"><span class="modal-info-label">Keranjang</span><span class="modal-info-val" style="font-family:monospace" id="mr-code">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Produk</span><span class="modal-info-val" id="mr-produk">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Sisa di Blasting</span><span class="modal-info-val" id="mr-sisa">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Sedang di Rak</span><span class="modal-info-val" id="mr-di-rak">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Bisa Dikembalikan</span><span class="modal-info-val" style="color:#0d9488" id="mr-available">—</span></div>
+    </div>
+    <div style="display:flex;gap:10px;margin-bottom:12px">
+      <div class="form-group" style="flex:1;margin-bottom:0">
+        <label>Jumlah Ekor <span style="color:#dc2626">*</span></label>
+        <input type="number" id="mr-ekor" min="1" step="1" placeholder="0">
+      </div>
+      <div class="form-group" style="flex:1;margin-bottom:0">
+        <label>Berat (kg) <span style="color:#dc2626">*</span></label>
+        <input type="number" id="mr-kg" min="0.1" step="0.1" placeholder="0.0">
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:0">
+      <label>Catatan (Opsional)</label>
+      <input type="text" id="mr-catatan" placeholder="Alasan pengembalian…">
+    </div>
+    <div id="mr-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-top:8px;display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-return')">Batal</button>
+      <button class="btn btn-amber" id="mr-btn-ok" onclick="doReturn()">↩️ Kirim ke Chiller</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== MODAL: EDIT ALOKASI ==================== -->
+<div class="modal-overlay" id="modal-edit-alokasi">
+  <div class="modal-box modal-sm">
+    <div class="modal-title">✏️ Edit Alokasi</div>
+    <div class="modal-desc">Ubah jumlah ekor / kg yang dialokasikan ke rak ini.</div>
+    <div class="modal-info-box">
+      <div class="modal-info-row"><span class="modal-info-label">Keranjang</span><span class="modal-info-val" style="font-family:monospace" id="ea-code">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Rak</span><span class="modal-info-val" id="ea-rak">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Sisa tersedia (max)</span><span class="modal-info-val" id="ea-max">—</span></div>
+    </div>
+    <div style="display:flex;gap:10px;margin-bottom:12px">
+      <div class="form-group" style="flex:1;margin-bottom:0">
+        <label>Jumlah Ekor <span style="color:#dc2626">*</span></label>
+        <input type="number" id="ea-ekor" min="1" step="1" placeholder="0">
+      </div>
+      <div class="form-group" style="flex:1;margin-bottom:0">
+        <label>Berat (kg) <span style="color:#dc2626">*</span></label>
+        <input type="number" id="ea-kg" min="0.1" step="0.1" placeholder="0.0">
+      </div>
+    </div>
+    <div id="ea-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-top:4px;display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-edit-alokasi')">Batal</button>
+      <button class="btn btn-primary" id="ea-btn-ok" onclick="doEditAlokasi()">💾 Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== MODAL: BUAT BATCH ==================== -->
+<div class="modal-overlay" id="modal-buat-batch">
+  <div class="modal-box">
+    <div class="modal-title">＋ Buat Batch Pembekuan Baru</div>
+    <div class="modal-desc">Pilih rak yang akan dimasukkan ke batch ini. Rak harus berisi alokasi aktif.</div>
+    <div class="form-group">
+      <label>Pilih Rak <span style="color:#dc2626">*</span> <span style="font-weight:400;color:#6b7280">(bisa pilih lebih dari satu)</span></label>
+      <div id="bb-rak-list" style="border:1.5px solid #e5e7eb;border-radius:8px;max-height:260px;overflow-y:auto">
+        <div class="empty" style="padding:16px">Memuat rak…</div>
+      </div>
+    </div>
+    <div id="bb-selected-info" style="display:none;background:#f0fdfa;border:1px solid #99f6e4;border-radius:8px;padding:10px 12px;font-size:12px;color:#134e4a;margin-bottom:8px">
+      <strong id="bb-selected-count">0 rak dipilih</strong> — <span id="bb-selected-ekor">0 ekor</span> / <span id="bb-selected-kg">0 kg</span>
+    </div>
+    <div class="form-group" style="margin-bottom:0">
+      <label>Catatan (Opsional)</label>
+      <input type="text" id="bb-catatan" placeholder="Catatan batch…">
+    </div>
+    <div id="bb-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-top:8px;display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-buat-batch')">Batal</button>
+      <button class="btn btn-primary" id="bb-btn-ok" onclick="doBuatBatch()">🔄 Buat Batch</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== MODAL: TAMBAH RAK KE BATCH ==================== -->
+<div class="modal-overlay" id="modal-tambah-rak">
+  <div class="modal-box modal-sm">
+    <div class="modal-title">➕ Tambah Rak ke Batch</div>
+    <div class="modal-desc">Batch: <strong id="tr-batch-code">—</strong></div>
+    <div class="form-group" style="margin-bottom:0">
+      <label>Pilih Rak <span style="color:#dc2626">*</span></label>
+      <div id="tr-rak-list" style="border:1.5px solid #e5e7eb;border-radius:8px;max-height:220px;overflow-y:auto">
+        <div class="empty" style="padding:16px">Memuat rak…</div>
+      </div>
+    </div>
+    <div id="tr-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-top:8px;display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-tambah-rak')">Batal</button>
+      <button class="btn btn-primary" id="tr-btn-ok" onclick="doTambahRak()">➕ Tambah</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== MODAL: JALANKAN BATCH ==================== -->
+<div class="modal-overlay" id="modal-jalankan">
+  <div class="modal-box modal-sm">
+    <div class="modal-title">🔥 Jalankan Batch Pembekuan</div>
+    <div class="modal-desc">Semua alokasi aktif di rak-rak dalam batch ini akan ditandai <strong>FROZEN</strong>.</div>
+    <div class="modal-info-box">
+      <div class="modal-info-row"><span class="modal-info-label">Kode Batch</span><span class="modal-info-val" id="jb-code">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Jumlah Rak</span><span class="modal-info-val" id="jb-rak">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Total Ekor</span><span class="modal-info-val" id="jb-ekor">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Total Kg</span><span class="modal-info-val" id="jb-kg">—</span></div>
+    </div>
+    <div style="background:#fef3c7;border:1.5px solid #fde68a;border-radius:8px;padding:12px;font-size:13px;color:#92400e;margin-bottom:16px">
+      ⚠️ Tindakan ini tidak dapat dibatalkan. Pastikan semua rak sudah siap dibekukan.
+    </div>
+    <div id="jb-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-bottom:10px;display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-jalankan')">Batal</button>
+      <button class="btn btn-primary" id="jb-btn-ok" onclick="doJalankanBatch()">🔥 Ya, Jalankan Batch</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<script>
+const SUPABASE_URL = 'https://dxixqyokuqrdprupsvic.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR4aXhxeW9rdXFyZHBydXBzdmljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5NjM3ODcsImV4cCI6MjA5MjUzOTc4N30.D_yaPwNbe4FFg_hmDeJ9cuxzbNvXZT8l1_TyZuq1t1M';
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ── STATE ──
+let currentUser       = null;
+let pendingMovements  = [];
+let blastingStock     = [];   // baskets lokasi=BLASTING
+let racks             = [];   // blasting_racks
+let rackAllocations   = [];   // blasting_rack_allocations (ALLOCATED)
+let activeBatches     = [];   // blasting_batches status=OPEN
+let batchHistory      = [];   // blasting_batches status=COMPLETED/CANCELLED
+let selectedRackId    = null;
+let activeMovementId  = null;
+let lastConfirmedBasketId = null;
+let activeAllocId     = null;
+let activeBatchId     = null;
+let expandedGroups    = new Set();
+let selectedBasketForRak = null; // basket dipilih untuk dialokasikan ke rak
+
+// ── UTILS ──
+async function sha256(str) {
+  const buf = new TextEncoder().encode(str);
+  const hash = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+function fmt(n,d=0){if(n==null||n==='')return'—';return Number(n).toLocaleString('id-ID',{minimumFractionDigits:d,maximumFractionDigits:d})}
+function fmtKg(n){if(n==null)return'—';return Number(n).toLocaleString('id-ID',{minimumFractionDigits:1,maximumFractionDigits:1})+' kg'}
+function fmtDT(s){if(!s)return'—';return new Date(s).toLocaleString('id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}
+function fmtDate(s){if(!s)return'—';return new Date(s).toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'})}
+function todayISO(){return new Date().toLocaleString('sv-SE',{timeZone:'Asia/Jakarta'}).split(' ')[0]}
+function showToast(msg,type='success'){const t=document.getElementById('toast');t.textContent=msg;t.className=`show ${type}`;setTimeout(()=>{t.className=''},3500)}
+function setEl(id,val){const e=document.getElementById(id);if(e)e.textContent=val}
+function navTo(url){closeSidebar();if(currentUser){localStorage.setItem('rpa_user',JSON.stringify(currentUser));sessionStorage.setItem('rpa_user',JSON.stringify(currentUser))}window.location.href=url}
+function openModal(id){document.getElementById(id).classList.add('open')}
+function closeModal(id){document.getElementById(id).classList.remove('open')}
+function showErr(id,msg){const e=document.getElementById(id);if(e){e.textContent=msg;e.style.display=msg?'block':'none'}}
+function lokasiLabel(l){const m={CHILLER:'Chiller',PARTING:'Parting',BONELESS:'Boneless',MARINASI:'Marinasi',BLASTING:'Blasting',SOLD:'Sold',BYPRODUCT_DIRECT:'By-product',LANTAI:'Lantai'};return m[l]||l||'—'}
+
+// ── SIDEBAR ──
+function toggleSidebar(){const s=document.getElementById('sidebar'),o=document.getElementById('sidebar-overlay');s.classList.toggle('open');o.classList.toggle('visible')}
+function closeSidebar(){document.getElementById('sidebar')?.classList.remove('open');document.getElementById('sidebar-overlay')?.classList.remove('visible')}
+
+// ── TAB ──
+function switchTab(tab){
+  ['masuk','rak','batch'].forEach(t=>{
+    document.getElementById(`tab-pane-${t}`)?.classList.remove('active');
+    document.getElementById(`tab-${t}`)?.classList.remove('active');
+    document.getElementById(`tab-btn-${t}`)?.classList.remove('active');
+  });
+  document.getElementById(`tab-${tab}`)?.classList.add('active');
+  document.getElementById(`tab-btn-${tab}`)?.classList.add('active');
+}
+
+// ── AUTH ──
+async function doLogin(){
+  const username=document.getElementById('inp-username').value.trim();
+  const password=document.getElementById('inp-password').value;
+  const errEl=document.getElementById('login-error');
+  errEl.style.display='none';
+  if(!username||!password){errEl.textContent='Username dan password wajib diisi.';errEl.style.display='block';return}
+  const btn=document.getElementById('btn-login');
+  btn.disabled=true;btn.textContent='Memproses…';
+  try{
+    const hash=await sha256(password);
+    const{data,error}=await db.from('users').select('id,nama,username,role,aktif,pin,is_system_admin').eq('username',username).eq('password_hash',hash).eq('aktif',true).maybeSingle();
+    if(error)throw error;
+    if(!data){errEl.textContent='Username atau password salah.';errEl.style.display='block';return}
+    currentUser=data;localStorage.setItem('rpa_user',JSON.stringify(data));startApp();
+  }catch(e){errEl.textContent='Gagal terhubung ke server.';errEl.style.display='block';}
+  finally{btn.disabled=false;btn.textContent='Masuk →'}
+}
+function doLogout(){localStorage.removeItem('rpa_user');currentUser=null;document.getElementById('app-screen').style.display='none';document.getElementById('login-screen').style.display='flex'}
+
+function startApp(){
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('app-screen').style.display='block';
+  const av=document.getElementById('user-avatar');
+  if(av)av.textContent=(currentUser.nama||'?')[0].toUpperCase();
+  setEl('sidebar-name',currentUser.nama);
+  setEl('sidebar-role',currentUser.role+(currentUser.is_system_admin?' (Admin)':''));
+  if(currentUser.is_system_admin){const el=document.getElementById('nav-user-mgmt');if(el)el.style.display='flex'}
+  startClock();loadAll();
+}
+
+function startClock(){
+  function tick(){
+    const now=new Date();
+    setEl('clock',now.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit'}));
+    setEl('topbar-date',now.toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'}));
+  }
+  tick();setInterval(tick,1000);
+}
+
+// ── AUTO LOGIN ──
+window.addEventListener('DOMContentLoaded',()=>{
+  const saved=localStorage.getItem('rpa_user')||sessionStorage.getItem('rpa_user');
+  if(saved){try{currentUser=JSON.parse(saved);startApp();}catch{}}
+});
+
+// ── LOAD ALL ──
+async function loadAll(){
+  await Promise.all([loadPendingMovements(),loadBlastingStock(),loadRacks(),loadRackAllocations(),loadBatches()]);
+  renderSummaryCards();
+  renderPendingList();
+  renderStok();
+  renderRakTab();
+  renderBatchTab();
+}
+
+async function loadPendingMovements(){
+  const{data,error}=await db.from('basket_movements').select(`id,basket_id,qty_pindah,kg_pindah,dari_lokasi,created_at,baskets(basket_code,qty_sisa,kg_sisa,lokasi,product_master(nama_produk,product_code))`).eq('ke_lokasi','BLASTING').eq('status','PENDING').order('created_at');
+  if(!error)pendingMovements=data||[];
+}
+
+async function loadBlastingStock(){
+  const{data,error}=await db.from('baskets').select(`id,basket_code,qty_sisa,kg_sisa,lokasi,status,product_id,updated_at,product_master(id,nama_produk,product_code,kg_min,kg_max)`).eq('lokasi','BLASTING').eq('status','AKTIF').order('updated_at',{ascending:false});
+  if(!error)blastingStock=data||[];
+}
+
+async function loadRacks(){
+  const{data,error}=await db.from('blasting_racks').select('*').eq('aktif',true).order('nomor_rak');
+  if(!error)racks=data||[];
+}
+
+async function loadRackAllocations(){
+  const{data,error}=await db.from('blasting_rack_allocations').select(`id,rack_id,basket_id,ekor,kg,status,catatan,created_at,updated_at,baskets(basket_code,qty_sisa,kg_sisa,product_master(nama_produk,product_code)),blasting_racks(nomor_rak),users!blasting_rack_allocations_created_by_fkey(nama)`).order('created_at',{ascending:false});
+  if(!error)rackAllocations=data||[];
+}
+
+async function loadBatches(){
+  const today=todayISO();
+  const{data:open}=await db.from('blasting_batches').select(`id,batch_code,tanggal,jam_mulai,jam_selesai,status,total_ekor,total_kg,catatan,created_at,blasting_batch_racks(id,rack_id,blasting_racks(nomor_rak))`).eq('status','OPEN').order('created_at',{ascending:false});
+  activeBatches=open||[];
+  const{data:hist}=await db.from('blasting_batches').select(`id,batch_code,tanggal,jam_mulai,jam_selesai,status,total_ekor,total_kg,blasting_batch_racks(id)`).in('status',['COMPLETED','CANCELLED']).order('created_at',{ascending:false}).limit(50);
+  batchHistory=hist||[];
+}
+
+// ── SUMMARY CARDS ──
+function renderSummaryCards(){
+  setEl('sc-pending', pendingMovements.length);
+  setEl('sc-stok', blastingStock.length);
+  const totalAllocEkor = rackAllocations.filter(a=>a.status==='ALLOCATED').reduce((s,a)=>s+(a.ekor||0),0);
+  setEl('sc-alloc', fmt(totalAllocEkor));
+  const today=todayISO();
+  const batchToday=batchHistory.filter(b=>b.tanggal===today&&b.status==='COMPLETED').length + activeBatches.filter(b=>b.tanggal===today).length;
+  setEl('sc-batch', batchToday);
+  // Tab Batch cards
+  setEl('sc-batch-open', activeBatches.length);
+  const doneToday=batchHistory.filter(b=>b.tanggal===today&&b.status==='COMPLETED');
+  setEl('sc-batch-done', doneToday.length);
+  const ekorToday=doneToday.reduce((s,b)=>s+(b.total_ekor||0),0);
+  setEl('sc-batch-ekor', fmt(ekorToday));
+  // Tab Rak cards
+  const allocActive=rackAllocations.filter(a=>a.status==='ALLOCATED');
+  const raksWithAlloc=new Set(allocActive.map(a=>a.rack_id));
+  setEl('sc-rak-total', racks.length);
+  setEl('sc-rak-isi', raksWithAlloc.size);
+  setEl('sc-rak-ekor', fmt(allocActive.reduce((s,a)=>s+(a.ekor||0),0)));
+  const pillRak=document.getElementById('pill-rak-count');
+  if(pillRak)pillRak.textContent=`${racks.length} rak`;
+}
+
+// ── TAB 1: PENDING LIST ──
+function renderPendingList(){
+  const pill=document.getElementById('pill-pending-count');
+  const btnAll=document.getElementById('btn-konfirm-semua');
+  if(pill)pill.textContent=`${pendingMovements.length} item`;
+  if(btnAll)btnAll.style.display=pendingMovements.length>1?'':'none';
+  const tbody=document.getElementById('pending-tbody');
+  if(!pendingMovements.length){
+    tbody.innerHTML='<tr><td colspan="4"><div class="empty"><div class="e-icon">✅</div>Tidak ada pending masuk.</div></td></tr>';
+    return;
+  }
+  tbody.innerHTML=pendingMovements.map(mv=>{
+    const b=mv.baskets||{};const pm=b.product_master||{};
+    return `<tr>
+      <td><span style="font-family:monospace;font-weight:700">${b.basket_code||'—'}</span>
+          <div class="tbl-sub">${lokasiLabel(mv.dari_lokasi)}</div></td>
+      <td>${pm.nama_produk||'—'}</td>
+      <td>${fmt(mv.qty_pindah)} ek<br><span class="tbl-sub">${fmtKg(mv.kg_pindah)}</span></td>
+      <td>
+        <button class="btn btn-green btn-sm" onclick="openKonfirmasi('${mv.id}')">✅ Terima</button>
+        <button class="btn btn-ghost btn-sm" style="margin-top:2px" onclick="openTolak('${mv.id}','${b.basket_code||''}')">✗ Tolak</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ── TAB 1: STOK ──
+function renderStok(){
+  const pill=document.getElementById('pill-stok-count');
+  if(pill)pill.textContent=`${blastingStock.length} item`;
+  const f=(document.getElementById('stok-search')?.value||'').trim().toLowerCase();
+  let list=blastingStock;
+  if(f)list=list.filter(b=>(b.basket_code||'').toLowerCase().includes(f)||(b.product_master?.nama_produk||'').toLowerCase().includes(f));
+
+  const groups={};
+  list.forEach(b=>{
+    const pm=b.product_master||{};
+    const key=pm.product_code||'UNKNOWN';
+    if(!groups[key])groups[key]={key,nama:pm.nama_produk||'—',code:key,baskets:[],totalQty:0,totalKg:0};
+    groups[key].baskets.push(b);
+    groups[key].totalQty+=Number(b.qty_sisa)||0;
+    groups[key].totalKg+=Number(b.kg_sisa)||0;
+  });
+
+  const tbody=document.getElementById('stok-tbody');
+  if(!Object.keys(groups).length){
+    tbody.innerHTML='<tr><td colspan="3"><div class="empty"><div class="e-icon">📦</div>Tidak ada stok di Blasting.</div></td></tr>';
+    return;
+  }
+  let html='';
+  Object.values(groups).forEach(g=>{
+    const isExp=expandedGroups.has(g.key);
+    html+=`<tr class="grp-row${isExp?' expanded':''}" onclick="toggleGroup('${g.key}')">
+      <td colspan="2"><i class="grp-arrow">▶</i> <strong>${g.nama}</strong>
+        <span style="font-size:11px;font-weight:400;color:#4b5563;margin-left:6px">${g.code}</span></td>
+      <td><strong>${fmt(g.totalQty)}</strong> ek &nbsp;·&nbsp; <strong>${fmtKg(g.totalKg)}</strong> &nbsp;·&nbsp; ${g.baskets.length} krj</td>
+    </tr>`;
+    if(isExp){
+      g.baskets.forEach((b,i)=>{
+        const alloc=rackAllocations.filter(a=>a.basket_id===b.id&&a.status==='ALLOCATED');
+        const allocEkor=alloc.reduce((s,a)=>s+(a.ekor||0),0);
+        const availEkor=(b.qty_sisa||0)-allocEkor;
+        html+=`<tr class="sub-row${i===g.baskets.length-1?' last-sub':''}">
+          <td style="font-family:monospace;font-weight:700">${b.basket_code}</td>
+          <td><span style="color:#111827">${fmt(b.qty_sisa)} ek / ${fmtKg(b.kg_sisa)}</span>
+            ${allocEkor?`<span class="badge b-allocated" style="margin-left:4px">${fmt(allocEkor)} ek di rak</span>`:''}
+            ${availEkor>0?`<div class="tbl-sub">Tersedia: ${fmt(availEkor)} ek</div>`:'<div class="tbl-sub" style="color:#dc2626">Semua sudah dialokasikan</div>'}</td>
+          <td style="display:flex;flex-wrap:wrap;gap:4px;padding:8px 14px">
+            <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();goToRakTab('${b.id}')">🗂️ Alokasi ke Rak</button>
+            <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openReturn('${b.id}')" ${availEkor<=0?'disabled':''}>↩️ Return</button>
+          </td>
+        </tr>`;
+      });
+    }
+  });
+  tbody.innerHTML=html;
+}
+
+function toggleGroup(key){if(expandedGroups.has(key))expandedGroups.delete(key);else expandedGroups.add(key);renderStok()}
+
+// ── TAB 1: KONFIRMASI ──
+function openKonfirmasi(mvId){
+  activeMovementId=mvId;
+  document.getElementById('mk-step1').style.display='';
+  document.getElementById('mk-step2').style.display='none';
+  const mv=pendingMovements.find(m=>m.id===mvId);
+  if(!mv)return;
+  const b=mv.baskets||{};const pm=b.product_master||{};
+  setEl('mk-code',b.basket_code||'—');
+  setEl('mk-produk',pm.nama_produk||'—');
+  setEl('mk-qty-kg',`${fmt(mv.qty_pindah)} ekor / ${fmtKg(mv.kg_pindah)}`);
+  setEl('mk-dari',lokasiLabel(mv.dari_lokasi));
+  showErr('mk-err','');
+  openModal('modal-konfirm');
+}
+
+async function doKonfirmasi(){
+  if(!activeMovementId)return;
+  const btn=document.getElementById('mk-btn-ok');
+  btn.disabled=true;btn.textContent='Memproses…';
+  try{
+    const mv=pendingMovements.find(m=>m.id===activeMovementId);
+    lastConfirmedBasketId=mv?.basket_id||null;
+    const mvCode=mv?.baskets?.basket_code||'—';
+    const mvQtyKg=mv?`${fmt(mv.qty_pindah)} ekor / ${fmtKg(mv.kg_pindah)}`:'—';
+    const{data,error}=await db.rpc('konfirmasi_movement',{p_movement_id:activeMovementId,p_user_id:currentUser.id});
+    if(error)throw error;
+    const r=typeof data==='string'?JSON.parse(data):data;
+    if(!(r.ok??r.success))throw new Error(r.error||'Konfirmasi gagal');
+    await loadAll();
+    document.getElementById('mk-step1').style.display='none';
+    document.getElementById('mk-step2').style.display='';
+    setEl('mk-post-code',mvCode);
+    setEl('mk-post-sisa',mvQtyKg);
+  }catch(e){showErr('mk-err','Gagal konfirmasi: '+(e.message||''));}
+  finally{btn.disabled=false;btn.textContent='✅ Konfirmasi Masuk'}
+}
+
+function openTolakFromKonfirm(){
+  closeModal('modal-konfirm');
+  const mv=pendingMovements.find(m=>m.id===activeMovementId);
+  openTolak(activeMovementId,mv?.baskets?.basket_code||'—');
+}
+
+function goAlokasiDariKonfirm(){
+  closeModal('modal-konfirm');
+  if(!lastConfirmedBasketId)return;
+  goToRakTab(lastConfirmedBasketId);
+}
+
+function goToRakTab(basketId){
+  switchTab('rak');
+  // Simpan basket yg perlu dialokasikan — akan di-highlight di daftar manual
+  selectedBasketForRak = basketId;
+  renderRakTab();
+  showToast('Pilih rak tujuan dari daftar kiri, lalu alokasikan keranjang.','success');
+}
+
+function openTolak(mvId,basketCode){
+  activeMovementId=mvId;
+  setEl('mt-code',basketCode);
+  document.getElementById('mt-alasan').value='';
+  showErr('mt-err','');
+  openModal('modal-tolak');
+}
+
+async function doTolak(){
+  const alasan=document.getElementById('mt-alasan').value.trim();
+  if(!alasan){showErr('mt-err','Alasan penolakan wajib diisi.');return}
+  const btn=document.getElementById('mt-btn-ok');
+  btn.disabled=true;btn.textContent='Memproses…';
+  try{
+    const{error}=await db.rpc('tolak_movement',{p_movement_id:activeMovementId,p_user_id:currentUser.id,p_alasan:alasan});
+    if(error)throw error;
+    showToast('Keranjang berhasil ditolak.','warning');
+    closeModal('modal-tolak');
+    await loadAll();
+  }catch(e){showErr('mt-err','Gagal menolak: '+(e.message||''));}
+  finally{btn.disabled=false;btn.textContent='✗ Tolak Keranjang'}
+}
+
+function openKonfirmSemua(){
+  const desc=document.getElementById('mks-desc');
+  if(desc)desc.textContent=`${pendingMovements.length} keranjang pending akan dikonfirmasi masuk ke area Blasting.`;
+  showErr('mks-err','');
+  openModal('modal-konfirm-semua');
+}
+
+async function doKonfirmasiSemua(){
+  const btn=document.getElementById('mks-btn-ok');
+  btn.disabled=true;btn.textContent='Memproses…';
+  let ok=0,fail=0;
+  for(const mv of pendingMovements){
+    try{
+      const{data,error}=await db.rpc('konfirmasi_movement',{p_movement_id:mv.id,p_user_id:currentUser.id});
+      if(error){fail++;continue}
+      const r=typeof data==='string'?JSON.parse(data):data;
+      if(r.ok??r.success)ok++;else fail++;
+    }catch{fail++}
+  }
+  btn.disabled=false;btn.textContent='✅ Ya, Konfirmasi Semua';
+  closeModal('modal-konfirm-semua');
+  showToast(`${ok} keranjang dikonfirmasi${fail?`, ${fail} gagal`:''}!`,fail?'warning':'success');
+  await loadAll();
+}
+
+// ── TAB 1: RETURN KE CHILLER ──
+function openReturn(basketId){
+  const b=blastingStock.find(x=>x.id===basketId);
+  if(!b)return;
+  const pm=b.product_master||{};
+  const allocEkor=rackAllocations.filter(a=>a.basket_id===basketId&&a.status==='ALLOCATED').reduce((s,a)=>s+(a.ekor||0),0);
+  const allocKg=rackAllocations.filter(a=>a.basket_id===basketId&&a.status==='ALLOCATED').reduce((s,a)=>s+(Number(a.kg)||0),0);
+  const availEkor=Math.max(0,(b.qty_sisa||0)-allocEkor);
+  const availKg=Math.max(0,(Number(b.kg_sisa)||0)-allocKg);
+  setEl('mr-code',b.basket_code);
+  setEl('mr-produk',pm.nama_produk||'—');
+  setEl('mr-sisa',`${fmt(b.qty_sisa)} ekor / ${fmtKg(b.kg_sisa)}`);
+  setEl('mr-di-rak',allocEkor>0?`${fmt(allocEkor)} ekor / ${fmtKg(allocKg)}`:'Tidak ada');
+  setEl('mr-available',`${fmt(availEkor)} ekor / ${fmtKg(availKg)}`);
+  document.getElementById('mr-ekor').value=availEkor||'';
+  document.getElementById('mr-kg').value=availKg?availKg.toFixed(1):'';
+  document.getElementById('mr-catatan').value='';
+  showErr('mr-err','');
+  document.getElementById('mr-btn-ok')._basketId=basketId;
+  document.getElementById('mr-btn-ok')._availEkor=availEkor;
+  document.getElementById('mr-btn-ok')._availKg=availKg;
+  openModal('modal-return');
+}
+
+async function doReturn(){
+  const btn=document.getElementById('mr-btn-ok');
+  const basketId=btn._basketId;
+  const availEkor=btn._availEkor;
+  const availKg=btn._availKg;
+  const ekor=parseInt(document.getElementById('mr-ekor').value)||0;
+  const kg=parseFloat(document.getElementById('mr-kg').value)||0;
+  if(ekor<=0){showErr('mr-err','Jumlah ekor harus diisi.');return}
+  if(kg<=0){showErr('mr-err','Berat harus diisi.');return}
+  if(ekor>availEkor){showErr('mr-err',`Melebihi sisa tersedia (${fmt(availEkor)} ekor).`);return}
+  if(kg>availKg+0.05){showErr('mr-err',`Kg melebihi sisa tersedia (${fmtKg(availKg)}).`);return}
+  const catatan=document.getElementById('mr-catatan').value.trim();
+  btn.disabled=true;btn.textContent='Memproses…';
+  try{
+    const b=blastingStock.find(x=>x.id===basketId);
+    const{error:mvErr}=await db.from('basket_movements').insert({
+      basket_id:basketId,dari_lokasi:'BLASTING',ke_lokasi:'CHILLER',
+      qty_pindah:ekor,kg_pindah:kg,status:'PENDING',
+      catatan:catatan||null,submitted_by:currentUser.id
+    });
+    if(mvErr)throw mvErr;
+    const newQty=Math.max(0,(b.qty_sisa||0)-ekor);
+    const newKg=Math.max(0,Math.round(((Number(b.kg_sisa)||0)-kg)*10)/10);
+    await db.from('baskets').update({qty_sisa:newQty,kg_sisa:newKg,status:newQty<=0?'HABIS':'AKTIF'}).eq('id',basketId);
+    showToast('Keranjang dikirim ke Chiller (menunggu konfirmasi Chiller).','success');
+    closeModal('modal-return');
+    await loadAll();
+  }catch(e){showErr('mr-err','Gagal: '+(e.message||''));}
+  finally{btn.disabled=false;btn.textContent='↩️ Kirim ke Chiller'}
+}
+
+// ── TAB 2: RAK ──
+function renderRakTab(){
+  renderRakList();
+  if(selectedRackId)renderRakDetail(selectedRackId);
+}
+
+function renderRakList(){
+  const container=document.getElementById('rak-list-container');
+  if(!racks.length){
+    container.innerHTML='<div class="empty"><div class="e-icon">🗂️</div>Tidak ada rak terdaftar.</div>';
+    return;
+  }
+  container.innerHTML=racks.map(r=>{
+    const allocs=rackAllocations.filter(a=>a.rack_id===r.id&&a.status==='ALLOCATED');
+    const totalEkor=allocs.reduce((s,a)=>s+(a.ekor||0),0);
+    const totalKg=allocs.reduce((s,a)=>s+(Number(a.kg)||0),0);
+    const inBatch=activeBatches.some(b=>b.blasting_batch_racks?.some(br=>br.rack_id===r.id));
+    const isActive=r.id===selectedRackId;
+    return `<div class="rak-card${isActive?' active':''}" onclick="selectRak('${r.id}')">
+      <div class="rak-card-no">${r.nomor_rak}</div>
+      <div class="rak-card-sub">${allocs.length?`${allocs.length} keranjang · ${fmt(totalEkor)} ekor · ${fmtKg(totalKg)}`:'Kosong'}</div>
+      <div class="rak-card-badges">
+        ${allocs.length?`<span class="badge b-allocated">${fmt(totalEkor)} ek</span>`:''}
+        ${inBatch?`<span class="badge b-frozen">Di Batch</span>`:''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function selectRak(rackId){
+  selectedRackId=rackId;
+  renderRakList();
+  renderRakDetail(rackId);
+}
+
+function renderRakDetail(rackId){
+  const rack=racks.find(r=>r.id===rackId);
+  if(!rack)return;
+  const allocs=rackAllocations.filter(a=>a.rack_id===rackId);
+  const allocActive=allocs.filter(a=>a.status==='ALLOCATED');
+  const allocFrozen=allocs.filter(a=>a.status==='FROZEN');
+  const inBatch=activeBatches.find(b=>b.blasting_batch_racks?.some(br=>br.rack_id===rackId));
+
+  setEl('rak-detail-title',`🗂️ ${rack.nomor_rak}`);
+  const actionsEl=document.getElementById('rak-detail-actions');
+  actionsEl.innerHTML=inBatch
+    ?`<span class="badge b-frozen" style="padding:5px 10px">Di Batch: ${inBatch.batch_code}</span>`:'';
+
+  // Keranjang yang ada di lantai blasting dengan sisa belum dialokasikan penuh
+  const availBaskets=blastingStock.filter(b=>{
+    const allocEkor=rackAllocations.filter(a=>a.basket_id===b.id&&a.status==='ALLOCATED').reduce((s,a)=>s+(a.ekor||0),0);
+    return (b.qty_sisa||0)-allocEkor>0;
+  });
+
+  let html='';
+
+  // ── SECTION 1: Tambah ke Rak (scan + pilih manual) ──
+  if(!inBatch){
+    html+=`<div style="padding:14px 16px;border-bottom:2px solid #e5e7eb;background:#f8fffe">
+      <div style="font-size:11px;font-weight:700;color:#0d9488;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">
+        ➕ Tambah Keranjang ke ${rack.nomor_rak}
+      </div>
+
+      <!-- Scan -->
+      <div style="position:relative;margin-bottom:10px">
+        <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:18px;pointer-events:none">📷</span>
+        <input type="text" id="rak-scan-input"
+          placeholder="Scan atau ketik kode keranjang…"
+          style="width:100%;padding:10px 10px 10px 40px;border:2px solid #0d9488;border-radius:8px;font-size:14px;font-weight:700;font-family:monospace;background:#f0fdfa;outline:none"
+          oninput="doScanRak('${rackId}')" autocomplete="off" spellcheck="false">
+      </div>
+
+      <!-- Pilih manual -->
+      <div style="font-size:11px;font-weight:700;color:#374151;margin-bottom:6px">
+        STOK LANTAI BLASTING TERSEDIA (${availBaskets.length})
+      </div>
+      <div id="rak-basket-list" style="max-height:200px;overflow-y:auto;border:1.5px solid #e5e7eb;border-radius:8px">
+        ${availBaskets.length
+          ? availBaskets.map(b=>{
+              const allocEkor=rackAllocations.filter(a=>a.basket_id===b.id&&a.status==='ALLOCATED').reduce((s,a)=>s+(a.ekor||0),0);
+              const allocKg=rackAllocations.filter(a=>a.basket_id===b.id&&a.status==='ALLOCATED').reduce((s,a)=>s+(Number(a.kg)||0),0);
+              const availEkor=(b.qty_sisa||0)-allocEkor;
+              const availKg=Math.max(0,(Number(b.kg_sisa)||0)-allocKg);
+              const isPre=b.id===selectedBasketForRak;
+              return `<div class="rak-basket-item${isPre?' selected':''}" id="rbi-${b.id}"
+                onclick="selectBasketForRak('${b.id}',${availEkor},${availKg},'${b.basket_code}','${(b.product_master?.nama_produk||'').replace(/'/g,"\\'")}',${b.product_master?.kg_min||'null'},${b.product_master?.kg_max||'null'})">
+                <div style="font-family:monospace;font-weight:700;font-size:13px">${b.basket_code}</div>
+                <div style="font-size:11px;color:#374151">${b.product_master?.nama_produk||'—'}</div>
+                <div style="font-size:11px;color:#0d9488;font-weight:700;margin-top:2px">Tersedia: ${fmt(availEkor)} ekor / ${fmtKg(availKg)}</div>
+              </div>`;
+            }).join('')
+          : '<div class="empty" style="padding:16px"><div class="e-icon" style="font-size:20px">📭</div>Tidak ada stok lantai yang belum dialokasikan.</div>'
+        }
+      </div>
+
+      <!-- Form qty (muncul setelah keranjang dipilih) -->
+      <div id="rak-alloc-form" style="display:none;margin-top:12px;background:white;border:2px solid #0d9488;border-radius:8px;padding:12px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+          <div>
+            <div style="font-size:13px;font-weight:800;color:#111827;font-family:monospace" id="raf-code">—</div>
+            <div style="font-size:12px;color:#374151;margin-top:2px" id="raf-produk">—</div>
+            <div style="font-size:11px;color:#0d9488;font-weight:700;margin-top:2px" id="raf-available">—</div>
+          </div>
+          <button onclick="clearRakSelection()" style="background:none;border:none;color:#9ca3af;font-size:22px;cursor:pointer;line-height:1;padding:0">×</button>
+        </div>
+        <div style="display:flex;gap:10px;margin-bottom:8px">
+          <div style="flex:1">
+            <label style="font-size:10px;font-weight:700;color:#374151;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px">Jumlah Ekor *</label>
+            <input type="number" id="raf-ekor" min="1" step="1"
+              style="width:100%;padding:10px;border:1.5px solid #d1d5db;border-radius:6px;font-size:18px;font-weight:800;text-align:center;font-family:inherit"
+              oninput="checkRafRatio()">
+          </div>
+          <div style="flex:1">
+            <label style="font-size:10px;font-weight:700;color:#374151;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px">Berat (kg) *</label>
+            <input type="number" id="raf-kg" min="0.1" step="0.1"
+              style="width:100%;padding:10px;border:1.5px solid #d1d5db;border-radius:6px;font-size:18px;font-weight:800;text-align:center;font-family:inherit"
+              oninput="checkRafRatio()">
+          </div>
+        </div>
+        <div id="raf-ratio-warn" style="display:none;background:#fef3c7;border:1px solid #fde68a;border-radius:6px;padding:7px 10px;font-size:11px;color:#92400e;margin-bottom:8px"></div>
+        <div id="raf-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-bottom:8px;display:none"></div>
+        <button class="btn btn-primary" id="raf-btn-save" onclick="doAlokasiInline('${rackId}')" style="width:100%">
+          💾 Simpan ke ${rack.nomor_rak}
+        </button>
+      </div>
+    </div>`;
+  } else {
+    html+=`<div style="padding:12px 16px;background:#fef3c7;border-bottom:1px solid #fde68a;font-size:12px;color:#92400e;font-weight:700">
+      ⚠️ Rak ini sedang dalam batch aktif (${inBatch.batch_code}). Tidak bisa ditambah alokasi baru.
+    </div>`;
+  }
+
+  // ── SECTION 2: Alokasi Aktif ──
+  html+=`<div style="padding:12px 16px;border-bottom:1px solid #f3f4f6">
+    <div style="font-size:11px;font-weight:700;color:#0d9488;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">
+      Alokasi Aktif (${allocActive.length})
+    </div>`;
+  if(!allocActive.length){
+    html+=`<div class="empty" style="padding:12px"><div class="e-icon" style="font-size:20px">📭</div>Belum ada alokasi di rak ini.</div>`;
+  } else {
+    const totEkor=allocActive.reduce((s,a)=>s+(a.ekor||0),0);
+    const totKg=allocActive.reduce((s,a)=>s+(Number(a.kg)||0),0);
+    html+=`<table class="tbl"><thead><tr><th>Keranjang</th><th>Produk</th><th>Ekor / Kg</th><th>Aksi</th></tr></thead><tbody>`;
+    html+=allocActive.map(a=>{
+      const b=a.baskets||{};const pm=b.product_master||{};
+      return `<tr>
+        <td><span style="font-family:monospace;font-weight:700">${b.basket_code||'—'}</span></td>
+        <td style="font-size:12px">${pm.nama_produk||'—'}</td>
+        <td>${fmt(a.ekor)} ek<div class="tbl-sub">${fmtKg(a.kg)}</div></td>
+        <td>
+          <button class="btn btn-ghost btn-sm" onclick="openEditAlokasi('${a.id}')">✏️</button>
+          <button class="btn btn-red btn-sm" onclick="doHapusAlokasi('${a.id}')" ${inBatch?'disabled':''}>🗑️</button>
+        </td>
+      </tr>`;
+    }).join('');
+    html+=`</tbody></table>
+    <div style="padding:8px 14px;font-size:12px;font-weight:700;color:#134e4a;background:#f0fdfa;border-top:1px solid #99f6e4">
+      Total: ${fmt(totEkor)} ekor / ${fmtKg(totKg)}
+    </div>`;
+  }
+  html+=`</div>`;
+
+  // ── SECTION 3: Riwayat Frozen ──
+  if(allocFrozen.length){
+    html+=`<div style="padding:12px 16px">
+      <div style="font-size:11px;font-weight:700;color:#1e40af;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">
+        Sudah Dibekukan (${allocFrozen.length})
+      </div>
+      <table class="tbl"><thead><tr><th>Keranjang</th><th>Ekor / Kg</th><th>Batch</th><th>Waktu</th></tr></thead><tbody>`;
+    html+=allocFrozen.map(a=>{
+      const b=a.baskets||{};
+      const bCode=batchHistory.find(bt=>bt.id===a.batch_id)?.batch_code||'—';
+      return `<tr>
+        <td style="font-family:monospace;font-weight:700;font-size:12px">${b.basket_code||'—'}</td>
+        <td>${fmt(a.ekor)} ek / ${fmtKg(a.kg)}</td>
+        <td><span class="badge b-frozen">${bCode}</span></td>
+        <td style="font-size:11px;color:#6b7280">${fmtDT(a.frozen_at)}</td>
+      </tr>`;
+    }).join('');
+    html+=`</tbody></table></div>`;
+  }
+
+  document.getElementById('rak-detail-body').innerHTML=html;
+
+  // Auto-scroll ke form jika ada basket pre-selected
+  if(selectedBasketForRak){
+    const b=blastingStock.find(x=>x.id===selectedBasketForRak);
+    if(b){
+      const allocEkor=rackAllocations.filter(a=>a.basket_id===b.id&&a.status==='ALLOCATED').reduce((s,a)=>s+(a.ekor||0),0);
+      const allocKg=rackAllocations.filter(a=>a.basket_id===b.id&&a.status==='ALLOCATED').reduce((s,a)=>s+(Number(a.kg)||0),0);
+      const availEkor=Math.max(0,(b.qty_sisa||0)-allocEkor);
+      const availKg=Math.max(0,(Number(b.kg_sisa)||0)-allocKg);
+      selectBasketForRak(b.id,availEkor,availKg,b.basket_code,b.product_master?.nama_produk||'—',b.product_master?.kg_min||null,b.product_master?.kg_max||null);
+      selectedBasketForRak=null;
+    }
+  }
+}
+
+// ── SCAN INPUT ──
+function doScanRak(rackId){
+  const val=(document.getElementById('rak-scan-input')?.value||'').trim().toUpperCase();
+  if(!val)return;
+  // Cari basket yang match
+  const allocEkorMap={};
+  blastingStock.forEach(b=>{
+    const e=rackAllocations.filter(a=>a.basket_id===b.id&&a.status==='ALLOCATED').reduce((s,a)=>s+(a.ekor||0),0);
+    allocEkorMap[b.id]=e;
+  });
+  const match=blastingStock.find(b=>(b.basket_code||'').toUpperCase()===val);
+  if(match){
+    const allocEkor=allocEkorMap[match.id]||0;
+    const allocKg=rackAllocations.filter(a=>a.basket_id===match.id&&a.status==='ALLOCATED').reduce((s,a)=>s+(Number(a.kg)||0),0);
+    const availEkor=Math.max(0,(match.qty_sisa||0)-allocEkor);
+    const availKg=Math.max(0,(Number(match.kg_sisa)||0)-allocKg);
+    if(availEkor<=0){
+      showToast('Keranjang ini sudah penuh dialokasikan ke rak.','warning');
+      return;
+    }
+    selectBasketForRak(match.id,availEkor,availKg,match.basket_code,match.product_master?.nama_produk||'—',match.product_master?.kg_min||null,match.product_master?.kg_max||null);
+    if(document.getElementById('rak-scan-input'))document.getElementById('rak-scan-input').value='';
+    // Scroll form ke tampilan
+    document.getElementById('rak-alloc-form')?.scrollIntoView({behavior:'smooth',block:'nearest'});
+  }
+}
+
+// ── PILIH BASKET ──
+function selectBasketForRak(basketId,availEkor,availKg,code,produk,kgMin,kgMax){
+  // Update highlight di list
+  document.querySelectorAll('.rak-basket-item').forEach(el=>el.classList.remove('selected'));
+  document.getElementById(`rbi-${basketId}`)?.classList.add('selected');
+
+  // Isi form
+  setEl('raf-code',code);
+  setEl('raf-produk',produk);
+  setEl('raf-available',`Tersedia: ${fmt(availEkor)} ekor / ${fmtKg(availKg)}`);
+  document.getElementById('raf-ekor').value=availEkor||'';
+  document.getElementById('raf-kg').value=availKg?Number(availKg).toFixed(1):'';
+  document.getElementById('raf-ratio-warn').style.display='none';
+  showErr('raf-err','');
+  document.getElementById('raf-btn-save')._basketId=basketId;
+  document.getElementById('raf-btn-save')._availEkor=availEkor;
+  document.getElementById('raf-btn-save')._availKg=availKg;
+  document.getElementById('raf-btn-save')._kgMin=kgMin;
+  document.getElementById('raf-btn-save')._kgMax=kgMax;
+  document.getElementById('rak-alloc-form').style.display='';
+  document.getElementById('raf-ekor').focus();
+}
+
+function clearRakSelection(){
+  document.querySelectorAll('.rak-basket-item').forEach(el=>el.classList.remove('selected'));
+  document.getElementById('rak-alloc-form').style.display='none';
+  if(document.getElementById('rak-scan-input'))document.getElementById('rak-scan-input').value='';
+  showErr('raf-err','');
+}
+
+function checkRafRatio(){
+  const btn=document.getElementById('raf-btn-save');
+  if(!btn)return;
+  const kgMin=btn._kgMin;const kgMax=btn._kgMax;
+  if(!kgMin||!kgMax)return;
+  const ekor=parseFloat(document.getElementById('raf-ekor')?.value);
+  const kg=parseFloat(document.getElementById('raf-kg')?.value);
+  const warn=document.getElementById('raf-ratio-warn');
+  if(!ekor||!kg){warn.style.display='none';return}
+  const mn=+(ekor*kgMin).toFixed(2);const mx=+(ekor*kgMax).toFixed(2);
+  if(kg<mn||kg>mx){warn.textContent=`⚠️ Berat tidak wajar untuk ${ekor} ekor. Rentang normal: ${mn}–${mx} kg`;warn.style.display='';}
+  else warn.style.display='none';
+}
+
+async function doAlokasiInline(rackId){
+  const btn=document.getElementById('raf-btn-save');
+  const basketId=btn._basketId;
+  const availEkor=btn._availEkor;
+  const availKg=btn._availKg;
+  const ekor=parseInt(document.getElementById('raf-ekor').value)||0;
+  const kg=parseFloat(document.getElementById('raf-kg').value)||0;
+  if(!basketId){showErr('raf-err','Pilih keranjang terlebih dahulu.');return}
+  if(ekor<=0){showErr('raf-err','Jumlah ekor harus diisi.');return}
+  if(kg<=0){showErr('raf-err','Berat harus diisi.');return}
+  if(ekor>availEkor){showErr('raf-err',`Melebihi sisa tersedia (${fmt(availEkor)} ekor).`);return}
+  if(kg>availKg+0.05){showErr('raf-err',`Kg melebihi sisa tersedia (${fmtKg(availKg)}).`);return}
+  btn.disabled=true;btn.textContent='Menyimpan…';
+  try{
+    const{error}=await db.from('blasting_rack_allocations').insert({
+      rack_id:rackId,basket_id:basketId,ekor,kg,created_by:currentUser.id
+    });
+    if(error)throw error;
+    const rack=racks.find(r=>r.id===rackId);
+    showToast(`${fmt(ekor)} ekor berhasil ditambahkan ke ${rack?.nomor_rak||'rak'}!`,'success');
+    clearRakSelection();
+    await loadAll();
+    renderRakDetail(rackId);
+  }catch(e){showErr('raf-err','Gagal: '+(e.message||''));}
+  finally{btn.disabled=false;const rack=racks.find(r=>r.id===rackId);btn.textContent=`💾 Simpan ke ${rack?.nomor_rak||'Rak'}`}
+}
+
+// ── TAB 3: BATCH ──
+function renderBatchTab(){
+  renderActiveBatches();
+  renderBatchHistory();
+  const openPill=document.getElementById('pill-batch-open');
+  if(openPill)openPill.textContent=`${activeBatches.length} batch`;
+  const histPill=document.getElementById('pill-batch-history');
+  if(histPill)histPill.textContent=`${batchHistory.length} batch`;
+}
+
+function renderActiveBatches(){
+  const container=document.getElementById('batch-open-container');
+  if(!activeBatches.length){
+    container.innerHTML='<div class="empty"><div class="e-icon">🔄</div>Tidak ada batch aktif. Buat batch baru untuk mulai membekukan.</div>';
+    return;
+  }
+  container.innerHTML=activeBatches.map(b=>{
+    const bRacks=b.blasting_batch_racks||[];
+    // Hitung total ekor/kg dari alokasi aktif di rak-rak dalam batch ini
+    const rackIds=new Set(bRacks.map(br=>br.rack_id));
+    const allocs=rackAllocations.filter(a=>rackIds.has(a.rack_id)&&a.status==='ALLOCATED');
+    const totEkor=allocs.reduce((s,a)=>s+(a.ekor||0),0);
+    const totKg=allocs.reduce((s,a)=>s+(Number(a.kg)||0),0);
+    const rakNama=bRacks.map(br=>br.blasting_racks?.nomor_rak||'—').join(', ');
+    return `<div class="batch-card bc-open">
+      <div class="batch-card-head">
+        <div>
+          <div class="batch-card-code">${b.batch_code}</div>
+          <div style="font-size:11px;color:#6b7280;margin-top:2px">${fmtDate(b.tanggal)} · Dibuat ${fmtDT(b.created_at)}</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-sm" onclick="openTambahRak('${b.id}','${b.batch_code}')">➕ Tambah Rak</button>
+          <button class="btn btn-amber btn-sm" onclick="openJalankanBatch('${b.id}')" ${!bRacks.length?'disabled':''}>🔥 Jalankan</button>
+        </div>
+      </div>
+      <div style="padding:0 16px 14px">
+        <div style="font-size:12px;color:#374151;margin-bottom:8px">
+          <strong>Rak:</strong> ${rakNama||'Belum ada rak'}
+        </div>
+        <div class="batch-card-body">
+          <div class="batch-stat"><div class="batch-stat-label">Jumlah Rak</div><div class="batch-stat-val">${bRacks.length}</div></div>
+          <div class="batch-stat"><div class="batch-stat-label">Total Ekor</div><div class="batch-stat-val">${fmt(totEkor)}</div></div>
+          <div class="batch-stat"><div class="batch-stat-label">Total Kg</div><div class="batch-stat-val">${fmtKg(totKg)}</div></div>
+        </div>
+        ${bRacks.length?`<div style="margin-top:10px">
+          ${bRacks.map(br=>{
+            const rackId=br.rack_id;
+            const rAllocEkor=rackAllocations.filter(a=>a.rack_id===rackId&&a.status==='ALLOCATED').reduce((s,a)=>s+(a.ekor||0),0);
+            return `<div style="display:inline-flex;align-items:center;gap:6px;background:#f0fdfa;border:1px solid #99f6e4;border-radius:6px;padding:4px 10px;margin:2px;font-size:12px">
+              <span style="font-weight:700">${br.blasting_racks?.nomor_rak||'—'}</span>
+              <span style="color:#6b7280">${fmt(rAllocEkor)} ek</span>
+              <button onclick="doRemoveRakFromBatch('${br.id}','${b.id}')" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:13px;padding:0;line-height:1" title="Hapus rak dari batch">×</button>
+            </div>`;
+          }).join('')}
+        </div>`:''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderBatchHistory(){
+  const tbody=document.getElementById('batch-history-tbody');
+  if(!batchHistory.length){
+    tbody.innerHTML='<tr><td colspan="6"><div class="empty"><div class="e-icon">📋</div>Belum ada riwayat batch.</div></td></tr>';
+    return;
+  }
+  tbody.innerHTML=batchHistory.map(b=>{
+    const statusBadge={
+      COMPLETED:`<span class="badge b-completed">✅ Selesai</span>`,
+      CANCELLED:`<span class="badge b-cancelled">✗ Dibatalkan</span>`
+    }[b.status]||`<span class="badge">${b.status}</span>`;
+    return `<tr>
+      <td><span style="font-family:monospace;font-weight:700">${b.batch_code}</span></td>
+      <td>${fmtDate(b.tanggal)}</td>
+      <td>${(b.blasting_batch_racks||[]).length} rak</td>
+      <td>${fmt(b.total_ekor)} ek<br><span class="tbl-sub">${fmtKg(b.total_kg)}</span></td>
+      <td>${statusBadge}</td>
+      <td style="font-size:11px;color:#6b7280">${fmtDT(b.jam_selesai)}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── BATCH: BUAT ──
+function openBuatBatch(){
+  // Rak yang punya alokasi ALLOCATED dan tidak sedang di batch lain
+  const inBatchRacks=new Set(activeBatches.flatMap(b=>(b.blasting_batch_racks||[]).map(br=>br.rack_id)));
+  const raksAvail=racks.filter(r=>{
+    if(inBatchRacks.has(r.id))return false;
+    return rackAllocations.some(a=>a.rack_id===r.id&&a.status==='ALLOCATED');
+  });
+  const listEl=document.getElementById('bb-rak-list');
+  if(!raksAvail.length){
+    listEl.innerHTML='<div class="empty" style="padding:16px"><div class="e-icon">📭</div>Tidak ada rak dengan alokasi aktif yang tersedia.</div>';
+  } else {
+    listEl.innerHTML=raksAvail.map(r=>{
+      const allocs=rackAllocations.filter(a=>a.rack_id===r.id&&a.status==='ALLOCATED');
+      const totEkor=allocs.reduce((s,a)=>s+(a.ekor||0),0);
+      const totKg=allocs.reduce((s,a)=>s+(Number(a.kg)||0),0);
+      return `<label style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #f3f4f6;cursor:pointer;transition:background .12s" onmouseover="this.style.background='#f0fdfa'" onmouseout="this.style.background=''">
+        <input type="checkbox" value="${r.id}" data-ekor="${totEkor}" data-kg="${totKg}" onchange="updateBBSelected()" style="width:16px;height:16px;accent-color:#0d9488">
+        <div style="flex:1">
+          <div style="font-weight:700;font-size:13px">${r.nomor_rak}</div>
+          <div style="font-size:11px;color:#6b7280">${allocs.length} keranjang · ${fmt(totEkor)} ekor · ${fmtKg(totKg)}</div>
+        </div>
+      </label>`;
+    }).join('');
+  }
+  document.getElementById('bb-catatan').value='';
+  document.getElementById('bb-selected-info').style.display='none';
+  showErr('bb-err','');
+  openModal('modal-buat-batch');
+}
+
+function updateBBSelected(){
+  const checks=document.querySelectorAll('#bb-rak-list input[type=checkbox]:checked');
+  const info=document.getElementById('bb-selected-info');
+  if(!checks.length){info.style.display='none';return;}
+  const totEkor=Array.from(checks).reduce((s,c)=>s+(parseInt(c.dataset.ekor)||0),0);
+  const totKg=Array.from(checks).reduce((s,c)=>s+(parseFloat(c.dataset.kg)||0),0);
+  setEl('bb-selected-count',`${checks.length} rak dipilih`);
+  setEl('bb-selected-ekor',`${fmt(totEkor)} ekor`);
+  setEl('bb-selected-kg',fmtKg(totKg));
+  info.style.display='';
+}
+
+async function doBuatBatch(){
+  const checks=Array.from(document.querySelectorAll('#bb-rak-list input[type=checkbox]:checked'));
+  if(!checks.length){showErr('bb-err','Pilih minimal satu rak.');return}
+  const catatan=document.getElementById('bb-catatan').value.trim();
+  const btn=document.getElementById('bb-btn-ok');
+  btn.disabled=true;btn.textContent='Membuat…';
+  try{
+    // Generate kode batch
+    const{data:codeData,error:codeErr}=await db.rpc('generate_blast_batch_code');
+    if(codeErr)throw codeErr;
+    // Buat batch
+    const{data:batchData,error:batchErr}=await db.from('blasting_batches').insert({
+      batch_code:codeData,tanggal:todayISO(),catatan:catatan||null,created_by:currentUser.id
+    }).select('id').single();
+    if(batchErr)throw batchErr;
+    const batchId=batchData.id;
+    // Tambah rak ke batch
+    const batchRacks=checks.map(c=>({batch_id:batchId,rack_id:c.value}));
+    const{error:rakErr}=await db.from('blasting_batch_racks').insert(batchRacks);
+    if(rakErr)throw rakErr;
+    showToast(`Batch ${codeData} berhasil dibuat!`,'success');
+    closeModal('modal-buat-batch');
+    await loadAll();
+  }catch(e){showErr('bb-err','Gagal: '+(e.message||''));}
+  finally{btn.disabled=false;btn.textContent='🔄 Buat Batch'}
+}
+
+// ── BATCH: TAMBAH RAK ──
+function openTambahRak(batchId,batchCode){
+  activeBatchId=batchId;
+  setEl('tr-batch-code',batchCode);
+  const batch=activeBatches.find(b=>b.id===batchId);
+  const existRacks=new Set((batch?.blasting_batch_racks||[]).map(br=>br.rack_id));
+  const inOtherBatch=new Set(activeBatches.filter(b=>b.id!==batchId).flatMap(b=>(b.blasting_batch_racks||[]).map(br=>br.rack_id)));
+  const raksAvail=racks.filter(r=>{
+    if(existRacks.has(r.id))return false;
+    if(inOtherBatch.has(r.id))return false;
+    return rackAllocations.some(a=>a.rack_id===r.id&&a.status==='ALLOCATED');
+  });
+  const listEl=document.getElementById('tr-rak-list');
+  if(!raksAvail.length){
+    listEl.innerHTML='<div class="empty" style="padding:16px">Tidak ada rak tersedia.</div>';
+  } else {
+    listEl.innerHTML=raksAvail.map(r=>{
+      const allocs=rackAllocations.filter(a=>a.rack_id===r.id&&a.status==='ALLOCATED');
+      const totEkor=allocs.reduce((s,a)=>s+(a.ekor||0),0);
+      return `<label style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #f3f4f6;cursor:pointer">
+        <input type="checkbox" value="${r.id}" style="width:16px;height:16px;accent-color:#0d9488">
+        <div><div style="font-weight:700">${r.nomor_rak}</div>
+          <div style="font-size:11px;color:#6b7280">${fmt(totEkor)} ekor</div></div>
+      </label>`;
+    }).join('');
+  }
+  showErr('tr-err','');
+  openModal('modal-tambah-rak');
+}
+
+async function doTambahRak(){
+  const checks=Array.from(document.querySelectorAll('#tr-rak-list input[type=checkbox]:checked'));
+  if(!checks.length){showErr('tr-err','Pilih minimal satu rak.');return}
+  const btn=document.getElementById('tr-btn-ok');
+  btn.disabled=true;btn.textContent='Menambahkan…';
+  try{
+    const rows=checks.map(c=>({batch_id:activeBatchId,rack_id:c.value}));
+    const{error}=await db.from('blasting_batch_racks').insert(rows);
+    if(error)throw error;
+    showToast('Rak berhasil ditambahkan ke batch.','success');
+    closeModal('modal-tambah-rak');
+    await loadAll();
+  }catch(e){showErr('tr-err','Gagal: '+(e.message||''));}
+  finally{btn.disabled=false;btn.textContent='➕ Tambah'}
+}
+
+async function doRemoveRakFromBatch(batchRackId,batchId){
+  if(!confirm('Hapus rak ini dari batch?'))return;
+  try{
+    const{error}=await db.from('blasting_batch_racks').delete().eq('id',batchRackId);
+    if(error)throw error;
+    showToast('Rak dihapus dari batch.','warning');
+    await loadAll();
+  }catch(e){showToast('Gagal: '+(e.message||''),'error')}
+}
+
+// ── BATCH: JALANKAN ──
+function openJalankanBatch(batchId){
+  activeBatchId=batchId;
+  const batch=activeBatches.find(b=>b.id===batchId);
+  if(!batch)return;
+  const bRacks=batch.blasting_batch_racks||[];
+  const rackIds=new Set(bRacks.map(br=>br.rack_id));
+  const allocs=rackAllocations.filter(a=>rackIds.has(a.rack_id)&&a.status==='ALLOCATED');
+  const totEkor=allocs.reduce((s,a)=>s+(a.ekor||0),0);
+  const totKg=allocs.reduce((s,a)=>s+(Number(a.kg)||0),0);
+  setEl('jb-code',batch.batch_code);
+  setEl('jb-rak',`${bRacks.length} rak`);
+  setEl('jb-ekor',`${fmt(totEkor)} ekor`);
+  setEl('jb-kg',fmtKg(totKg));
+  showErr('jb-err','');
+  openModal('modal-jalankan');
+}
+
+async function doJalankanBatch(){
+  if(!activeBatchId)return;
+  const btn=document.getElementById('jb-btn-ok');
+  btn.disabled=true;btn.textContent='Memproses…';
+  try{
+    const{data,error}=await db.rpc('complete_blasting_batch',{p_batch_id:activeBatchId,p_user_id:currentUser.id});
+    if(error)throw error;
+    const r=typeof data==='string'?JSON.parse(data):data;
+    if(!r.ok)throw new Error(r.error||'Gagal menjalankan batch');
+    showToast(`Batch selesai! ${fmt(r.total_ekor)} ekor / ${fmtKg(r.total_kg)} dibekukan.`,'success');
+    closeModal('modal-jalankan');
+    await loadAll();
+  }catch(e){showErr('jb-err','Gagal: '+(e.message||''));}
+  finally{btn.disabled=false;btn.textContent='🔥 Ya, Jalankan Batch'}
+}
+
+</script>
+</body>
+</html>
