@@ -973,13 +973,6 @@ a{text-decoration:none}
         <option value="">— Pilih Produk —</option>
       </select>
     </div>
-    <div class="form-group">
-      <label>Tipe Output <span style="color:#dc2626">*</span></label>
-      <div style="display:flex;gap:8px">
-        <button type="button" id="ro-type-primary"   onclick="selectOutputType('PRIMARY')"   style="flex:1" class="btn btn-outline">🏆 PRIMARY</button>
-        <button type="button" id="ro-type-byproduct" onclick="selectOutputType('BYPRODUCT')" style="flex:1" class="btn btn-outline">📦 BYPRODUCT</button>
-      </div>
-    </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div class="form-group" style="margin-bottom:0">
         <label>Qty Ekor <span style="color:#dc2626">*</span></label>
@@ -1264,7 +1257,7 @@ async function loadActiveWOs() {
   const { data, error } = await db
     .from('processing_orders')
     .select(`
-      id, order_code, status, target_kg, target_qty_ekor, catatan, tanggal, created_at,
+      id, order_code, status, tipe, target_kg, target_qty_ekor, catatan, tanggal, created_at,
       product_master ( nama_produk, product_code ),
       wo_workstations (
         workstation_id, target_kg, target_qty_ekor, selesai_at, selesai_by,
@@ -1274,10 +1267,52 @@ async function loadActiveWOs() {
       processing_inputs ( id, basket_id, workstation_id, kg_diambil, qty_input ),
       processing_outputs ( id, output_type, kg_output, qty_output, worker_id, workstation_id, tanggal_produksi )
     `)
-    .eq('tipe', 'PARTING')
+    .in('tipe', ['PARTING', 'MULTI'])
     .in('status', ['OPEN','IN_PROGRESS'])
     .order('created_at');
-  if (!error) activeWOs = data || [];
+  if (!error) {
+    activeWOs = data || [];
+    await loadPartingWOStages();
+  }
+}
+
+// Load work_order_stages untuk activeWOs, attach ke masing-masing WO.
+// Filter: untuk WO tipe MULTI, hanya tampilkan jika punya stage PARTING.
+async function loadPartingWOStages() {
+  if (!activeWOs.length) return;
+  try {
+    const woIds = activeWOs.map(w => w.id);
+    const { data, error } = await db
+      .from('work_order_stages')
+      .select(`
+        id, wo_id, stage_order, process_type, status,
+        output_product:product_master!work_order_stages_output_product_id_fkey ( nama_produk, product_code )
+      `)
+      .in('wo_id', woIds)
+      .order('stage_order', { ascending: true });
+    if (error) throw error;
+
+    // Group stages by wo_id
+    const stagesMap = {};
+    (data || []).forEach(s => {
+      if (!stagesMap[s.wo_id]) stagesMap[s.wo_id] = [];
+      stagesMap[s.wo_id].push(s);
+    });
+
+    // Attach stages dan filter MULTI WO yang tidak punya stage PARTING
+    activeWOs = activeWOs.filter(wo => {
+      wo.stages = stagesMap[wo.id] || null;
+      if (wo.tipe === 'MULTI') {
+        return (wo.stages || []).some(s => s.process_type === 'PARTING');
+      }
+      return true; // WO tipe PARTING biasa selalu ditampilkan
+    });
+  } catch(e) {
+    // Tabel belum ada — tampilkan WO PARTING biasa saja, MULTI disembunyikan
+    if (!e.message?.includes('does not exist')) console.warn('loadPartingWOStages:', e.message);
+    activeWOs = activeWOs.filter(wo => wo.tipe === 'PARTING');
+    activeWOs.forEach(wo => { wo.stages = null; });
+  }
 }
 
 async function loadClosedWOs() {
@@ -1828,46 +1863,32 @@ async function onWOSelectChange() {
   const totQty = Object.values(allocMap).reduce((s,a) => s + a.qty, 0);
   document.getElementById('mp-wo-info-alloc').textContent = `${fmt(totQty)} ekor / ${fmtKg(totKg)} kg`;
 
-  // ── Render kartu WS ──
-  const wsList = (wo.wo_workstations||[]).map(wws => ({
-    id:            wws.workstations?.id,
-    kode:          wws.workstations?.kode,
-    nama:          wws.workstations?.nama,
-    ws_target_kg:  wws.target_kg,
-    ws_target_ekor:wws.target_qty_ekor
-  })).filter(ws => ws.id);
+  // ── Render kartu WS (semua WS Parting yang aktif) ──
+  const wsList = allWorkstations.map(ws => ({
+    id:   ws.id,
+    kode: ws.kode,
+    nama: ws.nama
+  }));
 
   if (!wsList.length) {
-    cardsEl.innerHTML = '<div style="text-align:center;padding:12px;color:#dc2626;font-size:12px">⚠️ Tidak ada WS yang di-assign ke WO ini.</div>';
+    cardsEl.innerHTML = '<div style="text-align:center;padding:12px;color:#dc2626;font-size:12px">⚠️ Tidak ada workstation Parting yang tersedia.</div>';
     return;
   }
 
   cardsEl.innerHTML = wsList.map(ws => {
-    const alloc      = allocMap[ws.id] || { kg: 0, qty: 0 };
-    const targetKg   = Number(ws.ws_target_kg)   || 0;
-    const targetEkor = Number(ws.ws_target_ekor) || 0;
-    const sisaKg     = Math.max(0, targetKg   - alloc.kg);
-    const sisaEkor   = Math.max(0, targetEkor - alloc.qty);
-    const pctKg      = targetKg > 0 ? Math.min(100, Math.round(alloc.kg / targetKg * 100)) : 0;
-    const full       = targetKg > 0 && alloc.kg >= targetKg;
-    const sisaColor  = sisaKg > 0 ? '#16a34a' : '#dc2626';
+    const alloc = allocMap[ws.id] || { kg: 0, qty: 0 };
+    const hasAlloc = alloc.qty > 0 || alloc.kg > 0;
     return `
       <div class="ws-alloc-card" data-wsid="${ws.id}"
            onclick="selectWsCard('${ws.id}', this)"
            style="border:1.5px solid #d1d5db;border-radius:8px;padding:10px 12px;
-                  cursor:${full?'not-allowed':'pointer'};background:${full?'#f9fafb':'white'};
-                  opacity:${full?0.55:1};transition:border-color .15s,background .15s">
+                  cursor:pointer;background:white;transition:border-color .15s,background .15s">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
           <span style="font-weight:800;color:#374151;font-size:13px">${ws.kode} — ${ws.nama}</span>
-          ${full ? '<span style="font-size:10px;background:#e5e7eb;color:#6b7280;padding:2px 6px;border-radius:10px">PENUH</span>' : ''}
+          ${hasAlloc ? '<span style="font-size:10px;background:#dbeafe;color:#1d4ed8;padding:2px 6px;border-radius:10px">Ada Input</span>' : ''}
         </div>
         <div style="font-size:11px;color:#6b7280;display:flex;gap:14px;flex-wrap:wrap">
-          <span>Target: <strong style="color:#374151">${fmt(targetEkor)} ek / ${fmtKg(targetKg)}</strong></span>
           <span>BB Terkirim: <strong style="color:#2563eb">${fmt(alloc.qty)} ek / ${fmtKg(alloc.kg)}</strong></span>
-          <span>Sisa: <strong style="color:${sisaColor}">${fmt(sisaEkor)} ek / ${fmtKg(sisaKg)}</strong></span>
-        </div>
-        <div style="margin-top:6px;background:#f3f4f6;border-radius:4px;height:4px;overflow:hidden">
-          <div style="height:100%;width:${pctKg}%;background:${pctKg>=100?'#dc2626':'#2563eb'};transition:width .3s"></div>
         </div>
       </div>`;
   }).join('');
@@ -1932,6 +1953,13 @@ async function doPindahKeluar() {
         created_by:     currentUser.id
       });
       if (inpErr) throw inpErr;
+
+      // Auto-register WS ke WO (upsert agar tidak duplikat)
+      await db.from('wo_workstations').upsert({
+        order_id:       woId,
+        workstation_id: wsId,
+        assigned_by:    currentUser.id
+      }, { onConflict: 'order_id,workstation_id', ignoreDuplicates: true });
 
       // Update WO ke IN_PROGRESS bila masih OPEN
       const wo = (activeWOs||[]).find(w => w.id === woId);
@@ -2033,6 +2061,39 @@ function statusBadge(s) {
 }
 
 // ============================================================
+// STAGE HELPERS
+// ============================================================
+const PROCESS_ICON  = { PARTING: '✂️', BONELESS: '🥩', MARINASI: '🌶️' };
+const PROCESS_LABEL = { PARTING: 'Parting', BONELESS: 'Boneless', MARINASI: 'Marinasi' };
+
+// Kembalikan info stage untuk WO ini di modul tertentu (process_type)
+// { stageOrder, totalStages, nextStage } atau null jika single-stage
+function getStageInfo(wo, processType) {
+  if (!wo.stages || wo.stages.length <= 1) return null;
+  const idx  = wo.stages.findIndex(s => s.process_type === processType);
+  if (idx < 0) return null;
+  return {
+    stageOrder:  idx + 1,
+    totalStages: wo.stages.length,
+    currentStage: wo.stages[idx],
+    nextStage:   wo.stages[idx + 1] || null
+  };
+}
+
+// HTML badge "Stage X/Y" + anak panah ke proses berikutnya
+function stageBadgeHtml(wo, processType) {
+  const info = getStageInfo(wo, processType);
+  if (!info) return '';
+  const nextIcon  = info.nextStage ? (PROCESS_ICON[info.nextStage.process_type]  || '⚙️') : '';
+  const nextLabel = info.nextStage ? (PROCESS_LABEL[info.nextStage.process_type] || info.nextStage.process_type) : '';
+  const nextHtml  = info.nextStage
+    ? ` <span style="color:#6b7280">→</span> <span style="color:#7c3aed;font-weight:700">${nextIcon} ${nextLabel}</span>`
+    : ' <span style="color:#6b7280">(tahap terakhir)</span>';
+  return `<div style="margin-top:3px;display:inline-flex;align-items:center;gap:3px;background:#ede9fe;color:#5b21b6;border-radius:8px;padding:1px 7px;font-size:10px;font-weight:700">` +
+    `🔀 Stage ${info.stageOrder}/${info.totalStages}${nextHtml}</div>`;
+}
+
+// ============================================================
 // TAB 2 — RENDER WO TABLE
 // ============================================================
 function renderWOTab() {
@@ -2064,8 +2125,10 @@ function renderWOTab() {
     const canClose   = wo.status === 'IN_PROGRESS';
     const isExpanded = woDetailId === wo.id;
     const bgRow      = isExpanded ? 'background:#eff6ff' : (allSelesai ? 'background:#f0fdf4' : '');
+    const stageBadge = stageBadgeHtml(wo, 'PARTING');
     return '<tr style="' + bgRow + '">' +
       '<td style="font-family:monospace;font-weight:800;font-size:12px">' + wo.order_code +
+        stageBadge +
         (wo.catatan ? '<div class="tbl-sub" style="font-style:italic;white-space:normal">' + wo.catatan + '</div>' : '') + '</td>' +
       '<td>' + (pm.nama_produk||'—') + '<div class="tbl-sub">' + (pm.product_code||'') + '</div></td>' +
       '<td>' + fmtKg(wo.target_kg) + '<div class="tbl-sub">' + fmt(wo.target_qty_ekor) + ' ekor</div></td>' +
@@ -2115,7 +2178,12 @@ async function openWODetail(woId) {
   if (!wo || !panel) return;
   const pm = wo.product_master || {};
   if (title) title.textContent = '📋 Detail: ' + wo.order_code;
-  if (sub)   sub.textContent   = (pm.nama_produk || '—') + ' · Target ' + fmtKg(wo.target_kg) + ' / ' + fmt(wo.target_qty_ekor) + ' ekor · ' + wo.status;
+  const stageInfo = getStageInfo(wo, 'PARTING');
+  const stageSub  = stageInfo
+    ? ` · 🔀 Stage ${stageInfo.stageOrder}/${stageInfo.totalStages}` +
+      (stageInfo.nextStage ? ` → ${PROCESS_ICON[stageInfo.nextStage.process_type]||''} ${PROCESS_LABEL[stageInfo.nextStage.process_type]||''}` : '')
+    : '';
+  if (sub) sub.textContent = (pm.nama_produk || '—') + ' · Target ' + fmtKg(wo.target_kg) + ' / ' + fmt(wo.target_qty_ekor) + ' ekor · ' + wo.status + stageSub;
   panel.style.display = '';
   if (body) body.innerHTML = '<div style="padding:24px;text-align:center;color:#6b7280;font-size:13px">⏳ Memuat…</div>';
   renderWOTab();
@@ -2158,6 +2226,24 @@ async function renderWODetailContent(woId) {
   // All inputs not tied to a WS
   const noWSIn  = iList.filter(i => !i.workstation_id);
   const noWSOut = oList.filter(o => !o.workstation_id);
+
+  // Banner multi-stage
+  const stageInfo = getStageInfo(wo, 'PARTING');
+  let stageBanner = '';
+  if (stageInfo) {
+    const nextIcon  = stageInfo.nextStage ? (PROCESS_ICON[stageInfo.nextStage.process_type]  || '⚙️') : '';
+    const nextLabel = stageInfo.nextStage ? (PROCESS_LABEL[stageInfo.nextStage.process_type] || '') : '';
+    const nextProd  = stageInfo.nextStage?.output_product?.nama_produk || '';
+    const curProd   = stageInfo.currentStage?.output_product?.nama_produk || '';
+    const nextInfo  = stageInfo.nextStage
+      ? `<span style="margin-left:12px;padding-left:12px;border-left:1px solid #c4b5fd">Setelah ini: <strong>${nextIcon} ${nextLabel}</strong>${nextProd ? ' → ' + nextProd : ''}</span>`
+      : `<span style="margin-left:12px;padding-left:12px;border-left:1px solid #c4b5fd;color:#065f46">Ini adalah tahap terakhir.</span>`;
+    stageBanner = `<div style="margin:0 16px 12px;padding:10px 14px;background:#ede9fe;border:1.5px solid #c4b5fd;border-radius:8px;font-size:12px;color:#4c1d95;display:flex;align-items:center;flex-wrap:wrap;gap:4px">` +
+      `<strong>🔀 Stage ${stageInfo.stageOrder} dari ${stageInfo.totalStages}</strong>` +
+      `<span style="margin:0 8px;color:#a78bfa">·</span>Output tahap ini: <strong>${curProd || '—'}</strong>` +
+      nextInfo +
+      `</div>`;
+  }
 
   let html = '<div style="padding:12px 16px 0">' +
     '<div class="tbl-wrap"><table class="tbl"><thead><tr>' +
@@ -2210,7 +2296,7 @@ async function renderWODetailContent(woId) {
   }
 
   html += '</tbody></table></div></div>';
-  body.innerHTML = html;
+  body.innerHTML = stageBanner + html;
 
   // Jika ada WS yang terbuka, render rincian-nya
   if (woDetailWSId) {
@@ -2962,7 +3048,6 @@ function openRecordOutput(woId) {
   document.getElementById('ro-qty').value     = '';
   document.getElementById('ro-kg').value      = '';
   showErr('ro-err', '');
-  selectOutputType('PRIMARY');
   openModal('modal-record-output');
 }
 
@@ -3017,24 +3102,26 @@ async function doRecordOutput() {
     // 1. Generate basket code
     const basketCode = await generatePRTBasketCode();
 
-    // 2. Get product info for label
+    // 2. Get product info for label; auto-derive output_type from kategori
     const produk = allProducts.find(p => p.id === produkId) || {};
+    const autoOutputType = ['BYPRODUCT_KARKAS','BYPRODUCT_PARTING','BYPRODUCT_BONELESS'].includes(produk.kategori) ? 'BYPRODUCT' : 'PRIMARY';
 
     // 3. Insert basket baru (lokasi PARTING, status AKTIF)
     const { data: newBasket, error: bErr } = await db
       .from('baskets')
       .insert({
-        basket_code: basketCode,
-        basket_type: 'PARTING',
-        product_id:  produkId,
-        batch_id:    null,
-        lokasi:      'PARTING',
-        status:      'AKTIF',
-        qty_awal:    qty,
-        qty_sisa:    qty,
-        kg_awal:     Number(kg.toFixed(1)),
-        kg_sisa:     Number(kg.toFixed(1)),
-        created_by:  currentUser.id
+        basket_code:      basketCode,
+        basket_type:      'PARTING',
+        product_id:       produkId,
+        batch_id:         null,
+        tanggal_produksi: tanggal,   // wajib untuk hitung umur di Chiller
+        lokasi:           'PARTING',
+        status:           'AKTIF',
+        qty_awal:         qty,
+        qty_sisa:         qty,
+        kg_awal:          Number(kg.toFixed(1)),
+        kg_sisa:          Number(kg.toFixed(1)),
+        created_by:       currentUser.id
       })
       .select('id')
       .single();
@@ -3051,7 +3138,7 @@ async function doRecordOutput() {
         workstation_id:   selectedWSId,
         qty_output:       qty,
         kg_output:        Number(kg.toFixed(1)),
-        output_type:      selectedOutputType,
+        output_type:      autoOutputType,
         tanggal_produksi: tanggal,
         tujuan_lokasi:    'PARTING',
         created_by:       currentUser.id
@@ -3078,7 +3165,7 @@ async function doRecordOutput() {
       wo_catatan:   wo?.catatan || '',
       ws_kode:      ws?.kode || '—',
       tanggal,
-      output_type:  selectedOutputType,
+      output_type:  autoOutputType,
       worker_name:  currentUser.nama
     };
 

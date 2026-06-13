@@ -138,6 +138,7 @@ a{text-decoration:none}
 .b-parting{background:#dbeafe;color:#1e40af}
 .b-boneless{background:#fce7f3;color:#9d174d}
 .b-marinasi{background:#fef9c3;color:#854d0e}
+.b-multi{background:#ede9fe;color:#5b21b6}
 
 /* WS CHIPS */
 .ws-chips{display:flex;flex-wrap:wrap;gap:4px}
@@ -178,7 +179,7 @@ a{text-decoration:none}
 .modal-overlay.open{display:flex}
 .modal-box{background:white;border-radius:14px;padding:28px;width:520px;max-width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);animation:modal-in .2s ease;margin:auto}
 .modal-box.modal-sm{width:420px}
-.modal-box.modal-lg{width:680px}
+.modal-box.modal-lg{width:700px}
 @keyframes modal-in{from{transform:scale(.92);opacity:0}to{transform:scale(1);opacity:1}}
 .modal-title{font-size:16px;font-weight:800;margin-bottom:4px;color:#111827}
 .modal-desc{font-size:13px;color:#6b7280;margin-bottom:20px}
@@ -224,6 +225,44 @@ a{text-decoration:none}
 #toast.warning{background:#92400e;color:white}
 @keyframes toast-in{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
 
+/* ===== STAGE BUILDER ===== */
+.stage-builder-wrap{margin-bottom:12px}
+.stage-builder-label{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.stage-builder-label span{font-size:12px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:.5px}
+.stage-builder-label small{font-size:10px;color:#9ca3af}
+.stage-card-create{border:1.5px solid #e5e7eb;border-radius:9px;margin-bottom:8px;overflow:hidden;transition:border-color .15s}
+.stage-card-create:hover{border-color:#c7d2fe}
+.stage-card-header{display:flex;align-items:center;gap:8px;padding:8px 12px;background:#f8f9ff;border-bottom:1px solid #e5e7eb}
+.stage-num-badge{font-size:10px;font-weight:800;background:#2563eb;color:white;padding:2px 9px;border-radius:10px;flex-shrink:0}
+.stage-process-select{flex:1;padding:4px 8px;border:1.5px solid #d1d5db;border-radius:6px;font-size:12px;font-weight:600;color:#111827;background:white;font-family:inherit}
+.stage-process-select:focus{outline:none;border-color:#2563eb}
+.stage-card-body{padding:10px 12px;display:grid;grid-template-columns:1fr 28px 1fr;gap:6px;align-items:end}
+.stage-prod-group{display:flex;flex-direction:column;gap:3px}
+.stage-prod-label{font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.4px}
+.stage-prod-label.auto-fill{color:#2563eb}
+.stage-prod-select{width:100%;padding:5px 8px;border:1.5px solid #d1d5db;border-radius:6px;font-size:11px;color:#111827;background:white;font-family:inherit;transition:border-color .15s}
+.stage-prod-select:focus{outline:none;border-color:#2563eb}
+.stage-prod-select:disabled{background:#f0f7ff;border-color:#bfdbfe;color:#3b82f6;font-weight:600}
+.stage-arrow{text-align:center;color:#9ca3af;font-size:16px;padding-bottom:6px}
+.btn-add-stage{width:100%;padding:7px;border:1.5px dashed #c7d2fe;border-radius:7px;background:#f8f9ff;color:#2563eb;font-size:12px;font-weight:700;transition:all .15s;margin-bottom:14px}
+.btn-add-stage:hover{background:#ede9fe;border-color:#a5b4fc}
+.stage-flow-display{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+.stage-flow-arrow{font-size:10px;color:#9ca3af;margin:0 1px}
+
+/* STAGES in detail modal */
+.stages-timeline{display:flex;flex-direction:column;gap:0}
+.stage-timeline-item{display:flex;gap:12px;padding:10px 0}
+.stage-timeline-item:not(:last-child){border-bottom:1px solid #f3f4f6}
+.stage-tl-left{display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0}
+.stage-tl-num{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0}
+.stage-tl-num.done{background:#d1fae5;color:#065f46}
+.stage-tl-num.active{background:#dbeafe;color:#1e40af}
+.stage-tl-num.pending{background:#f3f4f6;color:#6b7280}
+.stage-tl-line{width:2px;flex:1;background:#e5e7eb;min-height:12px}
+.stage-tl-right{flex:1;padding-bottom:4px}
+.stage-tl-title{font-size:12px;font-weight:700;color:#111827;margin-bottom:3px}
+.stage-tl-detail{font-size:11px;color:#6b7280}
+
 /* RESPONSIVE */
 @media(max-width:1023px){
   .sidebar{position:fixed;top:0;left:0;height:100vh;transform:translateX(-100%)}
@@ -232,11 +271,14 @@ a{text-decoration:none}
   .cards-row{grid-template-columns:repeat(auto-fill,minmax(130px,1fr))}
   .ws-grid{grid-template-columns:1fr}
   .form-row-2{grid-template-columns:1fr}
+  .stage-card-body{grid-template-columns:1fr 20px 1fr}
 }
 @media(max-width:600px){
   .content-area{padding:14px 14px 24px}
   .topbar{padding:0 14px}
   .modal-box{padding:20px}
+  .stage-card-body{grid-template-columns:1fr;gap:4px}
+  .stage-arrow{display:none}
 }
 </style>
 </head>
@@ -262,7 +304,7 @@ a{text-decoration:none}
              onkeydown="if(event.key==='Enter')doLogin()">
     </div>
     <button class="btn-login" id="btn-login" onclick="doLogin()">Masuk →</button>
-    <p class="login-version">v1.0 — RPA System</p>
+    <p class="login-version">v1.1 — RPA System</p>
   </div>
 </div>
 
@@ -354,6 +396,7 @@ a{text-decoration:none}
           <option value="PARTING">Parting</option>
           <option value="BONELESS">Boneless</option>
           <option value="MARINASI">Marinasi</option>
+          <option value="MULTI">Multi-Stage</option>
         </select>
         <label>Status</label>
         <select id="flt-status" onchange="applyFilter()">
@@ -418,8 +461,8 @@ a{text-decoration:none}
             <thead>
               <tr>
                 <th>Kode WO</th>
-                <th>Tipe</th>
-                <th>Produk Target</th>
+                <th>Proses</th>
+                <th>Produk Akhir</th>
                 <th>Target</th>
                 <th>Progress</th>
                 <th>Status</th>
@@ -451,26 +494,21 @@ a{text-decoration:none}
 
 <!-- ==================== MODAL: BUAT WO ==================== -->
 <div class="modal-overlay" id="modal-create">
-  <div class="modal-box">
+  <div class="modal-box modal-lg">
     <div class="modal-title">＋ Buat Work Order Baru</div>
-    <div class="modal-desc">Buat WO untuk proses Parting, Boneless, atau Marinasi.</div>
-    <div class="form-row-2">
-      <div class="form-group">
-        <label>Tipe <span style="color:#dc2626">*</span></label>
-        <select id="crt-tipe" onchange="onCreateTipeChange()">
-          <option value="">— Pilih Tipe —</option>
-          <option value="PARTING">Parting</option>
-          <option value="BONELESS">Boneless</option>
-          <option value="MARINASI">Marinasi</option>
-        </select>
+    <div class="modal-desc">Atur tahapan proses. Default 1 tahap — klik <strong>+ Tambah Stage</strong> jika produk perlu diproses lebih dari sekali.</div>
+
+    <!-- STAGE BUILDER -->
+    <div class="stage-builder-wrap">
+      <div class="stage-builder-label">
+        <span>Tahapan Proses</span>
+        <small id="crt-stage-hint">1 tahap</small>
       </div>
-      <div class="form-group">
-        <label>Produk Target <span style="color:#dc2626">*</span></label>
-        <select id="crt-produk">
-          <option value="">— Pilih tipe dulu —</option>
-        </select>
-      </div>
+      <div id="stage-builder"></div>
+      <button type="button" class="btn-add-stage" onclick="addStage()">＋ Tambah Stage</button>
     </div>
+
+    <!-- TARGET & CATATAN -->
     <div class="form-row-2">
       <div class="form-group">
         <label>Target Ekor / Qty <span style="color:#dc2626">*</span></label>
@@ -501,13 +539,19 @@ a{text-decoration:none}
     <div class="modal-desc" id="det-subtitle">—</div>
     <div class="modal-info-box">
       <div class="modal-info-row"><span class="modal-info-label">Kode WO</span><span class="modal-info-val" id="det-code">—</span></div>
-      <div class="modal-info-row"><span class="modal-info-label">Tipe</span><span class="modal-info-val" id="det-tipe">—</span></div>
-      <div class="modal-info-row"><span class="modal-info-label">Produk Target</span><span class="modal-info-val" id="det-produk">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Proses</span><span class="modal-info-val" id="det-tipe">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Produk Akhir</span><span class="modal-info-val" id="det-produk">—</span></div>
       <div class="modal-info-row"><span class="modal-info-label">Target</span><span class="modal-info-val" id="det-target">—</span></div>
       <div class="modal-info-row"><span class="modal-info-label">Actual Output (Primary)</span><span class="modal-info-val" id="det-actual">—</span></div>
       <div class="modal-info-row"><span class="modal-info-label">Selisih</span><span class="modal-info-val" id="det-selisih">—</span></div>
       <div class="modal-info-row"><span class="modal-info-label">Status</span><span class="modal-info-val" id="det-status">—</span></div>
       <div class="modal-info-row"><span class="modal-info-label">Tanggal</span><span class="modal-info-val" id="det-tanggal">—</span></div>
+    </div>
+
+    <!-- STAGES TIMELINE (tampil jika multi-stage) -->
+    <div id="det-stages-wrap" style="display:none">
+      <div class="modal-section-title">🗺️ Tahapan Proses</div>
+      <div class="stages-timeline" id="det-stages-list"></div>
     </div>
 
     <!-- WORKSTATIONS -->
@@ -538,33 +582,8 @@ a{text-decoration:none}
     <div id="det-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-top:10px;display:none"></div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('modal-detail')">Tutup</button>
-      <button class="btn btn-outline btn-sm" id="det-btn-ws" onclick="openAssignWS()">🏭 Assign Workstation</button>
       <button class="btn btn-red btn-sm" id="det-btn-cancel" onclick="openCancelWO()">✗ Batalkan WO</button>
       <button class="btn btn-green" id="det-btn-approve" onclick="openApproveWO()" style="display:none">✅ Selesaikan WO</button>
-    </div>
-  </div>
-</div>
-
-
-<!-- ==================== MODAL: ASSIGN WORKSTATION ==================== -->
-<div class="modal-overlay" id="modal-assign-ws">
-  <div class="modal-box">
-    <div class="modal-title">🏭 Assign Workstation</div>
-    <div class="modal-desc" id="aws-subtitle">Pilih workstation yang akan mengerjakan WO ini.</div>
-    <!-- Target WO reference -->
-    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px;display:flex;gap:24px">
-      <span>🎯 Target WO: <strong id="aws-wo-ekor">—</strong> ekor &nbsp;|&nbsp; <strong id="aws-wo-kg">—</strong> kg</span>
-    </div>
-    <div class="ws-grid" id="aws-ws-grid"><!-- diisi JS --></div>
-    <!-- Running total -->
-    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 14px;margin-top:10px;font-size:12px;display:flex;justify-content:space-between;align-items:center">
-      <span>✅ Teralokasi: <strong id="aws-alloc-ekor">0</strong> ekor &nbsp;|&nbsp; <strong id="aws-alloc-kg">0.0</strong> kg</span>
-      <span id="aws-sisa-wrap">Sisa: <strong id="aws-sisa-ekor" style="color:#dc2626">—</strong> ekor &nbsp;|&nbsp; <strong id="aws-sisa-kg" style="color:#dc2626">—</strong> kg</span>
-    </div>
-    <div id="aws-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-top:10px;display:none"></div>
-    <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeModal('modal-assign-ws')">Batal</button>
-      <button class="btn btn-primary" id="aws-btn-ok" onclick="doAssignWS()">💾 Simpan Workstation</button>
     </div>
   </div>
 </div>
@@ -626,13 +645,23 @@ const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 // ============================================================
 let currentUser    = null;
 let allWOs         = [];
-let allWorkstations= [];
 let allProducts    = [];
 let filteredWOs    = [];
 let woPage         = 0;
-let currentWOId    = null;   // for detail / approve / cancel
+let currentWOId    = null;
 let currentWOData  = null;
 const ROWS         = 15;
+
+// Stage builder state
+// Each stage: { process_type, output_product_id }
+let createStages   = [];
+
+// Kategori produk yang valid sebagai OUTPUT per proses
+const OUTPUT_KAT = {
+  'PARTING':  ['CU', 'EXT', 'PART', 'BYPRODUCT_PARTING', 'BYPRODUCT_BONELESS'],
+  'BONELESS': ['BONELESS', 'EXT', 'PART', 'BYPRODUCT_BONELESS', 'BYPRODUCT_PARTING'],
+  'MARINASI': ['MARINASI']
+};
 
 // ============================================================
 // UTILITY
@@ -652,9 +681,9 @@ function setEl(id,val){const e=document.getElementById(id);if(e)e.textContent=va
 function navTo(url) {
   closeSidebar();
   if (currentUser) {
-        localStorage.setItem('rpa_user', JSON.stringify(currentUser));
-        sessionStorage.setItem('rpa_user', JSON.stringify(currentUser));
-    }
+    localStorage.setItem('rpa_user', JSON.stringify(currentUser));
+    sessionStorage.setItem('rpa_user', JSON.stringify(currentUser));
+  }
   window.location.href = url;
 }
 function openModal(id){document.getElementById(id).classList.add('open')}
@@ -676,20 +705,47 @@ function getSelisihPct(wo) {
 
 function statusBadge(s) {
   const map = {
-    'OPEN':            '<span class="badge b-open">Open</span>',
-    'IN_PROGRESS':     '<span class="badge b-inprog">In Progress</span>',
-    'DRAFT':           '<span class="badge b-pending">📝 Draft</span>',
-    'COMPLETED':       '<span class="badge b-approved">✅ Completed</span>',
-    'CANCELLED':       '<span class="badge b-cancelled">✗ Cancelled</span>'
+    'OPEN':        '<span class="badge b-open">Open</span>',
+    'IN_PROGRESS': '<span class="badge b-inprog">In Progress</span>',
+    'DRAFT':       '<span class="badge b-pending">📝 Draft</span>',
+    'COMPLETED':   '<span class="badge b-approved">✅ Completed</span>',
+    'CANCELLED':   '<span class="badge b-cancelled">✗ Cancelled</span>'
   };
   return map[s] || `<span class="badge">${s}</span>`;
 }
 
-function tipeBadge(t) {
-  if (t === 'PARTING')   return '<span class="badge b-parting">✂️ Parting</span>';
-  if (t === 'BONELESS')  return '<span class="badge b-boneless">🥩 Boneless</span>';
-  if (t === 'MARINASI')  return '<span class="badge b-marinasi">🌶️ Marinasi</span>';
-  return `<span class="badge">${t}</span>`;
+function processIcon(t) {
+  if (t==='PARTING')  return '✂️';
+  if (t==='BONELESS') return '🥩';
+  if (t==='MARINASI') return '🌶️';
+  return '⚙️';
+}
+
+function processLabel(t) {
+  if (t==='PARTING')  return 'Parting';
+  if (t==='BONELESS') return 'Boneless';
+  if (t==='MARINASI') return 'Marinasi';
+  return t||'—';
+}
+
+// tipeBadge: accepts tipe string + optional stages array
+function tipeBadge(t, stages) {
+  // Multi-stage: show flow of all stages
+  if (stages && stages.length > 1) {
+    return `<div class="stage-flow-display">
+      ${stages.map((s,i) => {
+        const cls = s.process_type==='PARTING' ? 'b-parting' : s.process_type==='BONELESS' ? 'b-boneless' : s.process_type==='MARINASI' ? 'b-marinasi' : '';
+        return (i>0?'<span class="stage-flow-arrow">→</span>':'') +
+          `<span class="badge ${cls}" style="font-size:10px">${processIcon(s.process_type)} ${processLabel(s.process_type)}</span>`;
+      }).join('')}
+    </div>`;
+  }
+  // Single stage
+  if (t==='PARTING')  return '<span class="badge b-parting">✂️ Parting</span>';
+  if (t==='BONELESS') return '<span class="badge b-boneless">🥩 Boneless</span>';
+  if (t==='MARINASI') return '<span class="badge b-marinasi">🌶️ Marinasi</span>';
+  if (t==='MULTI')    return '<span class="badge b-multi">🔀 Multi-Stage</span>';
+  return `<span class="badge">${t||'—'}</span>`;
 }
 
 function progressBar(wo) {
@@ -710,7 +766,7 @@ function progressBar(wo) {
 
 function wsList(wo) {
   const wss = (wo.wo_workstations||[]).map(w => w.workstations);
-  if (!wss.length) return '<span style="font-size:11px;color:#9ca3af">Belum assign</span>';
+  if (!wss.length) return '<span style="font-size:11px;color:#9ca3af">Belum ada yang mengerjakan</span>';
   const tipe = (wo.tipe||'').toLowerCase();
   return `<div class="ws-chips">${wss.map(w=>w?`<span class="ws-chip ${tipe==='boneless'?'boneless':''}">${w.kode}</span>`:'').join('')}</div>`;
 }
@@ -788,7 +844,8 @@ function startClock() {
 // DATA LOADING
 // ============================================================
 async function loadAll() {
-  await Promise.all([loadWOs(), loadWorkstations(), loadProducts()]);
+  await Promise.all([loadWOs(), loadProducts()]);
+  await loadWOStages(); // attach stages to WOs (graceful if table doesn't exist yet)
   renderSummary();
   applyFilter();
 }
@@ -807,9 +864,10 @@ async function loadWOs() {
       ),
       processing_outputs (
         id, output_type, kg_output, qty_output,
-        tanggal_produksi, worker_id,
+        tanggal_produksi, worker_id, workstation_id,
         users!processing_outputs_worker_id_fkey ( nama ),
-        product_master!processing_outputs_product_id_fkey ( nama_produk )
+        product_master!processing_outputs_product_id_fkey ( nama_produk ),
+        workstations ( kode )
       )
     `)
     .order('created_at', { ascending: false });
@@ -817,9 +875,30 @@ async function loadWOs() {
   allWOs = data || [];
 }
 
-async function loadWorkstations() {
-  const { data } = await db.from('workstations').select('*').eq('aktif', true).order('kode');
-  allWorkstations = data || [];
+async function loadWOStages() {
+  try {
+    const { data, error } = await db
+      .from('work_order_stages')
+      .select(`
+        id, wo_id, stage_order, process_type, status,
+        input_product_id, output_product_id,
+        input_product:product_master!work_order_stages_input_product_id_fkey ( nama_produk, product_code ),
+        output_product:product_master!work_order_stages_output_product_id_fkey ( nama_produk, product_code )
+      `)
+      .order('stage_order', { ascending: true });
+    if (error) throw error;
+    // Group by wo_id and attach to WOs
+    const stagesMap = {};
+    (data || []).forEach(s => {
+      if (!stagesMap[s.wo_id]) stagesMap[s.wo_id] = [];
+      stagesMap[s.wo_id].push(s);
+    });
+    allWOs.forEach(wo => { wo.stages = stagesMap[wo.id] || null; });
+  } catch(e) {
+    // Table doesn't exist yet — graceful fallback
+    if (!e.message?.includes('does not exist')) console.warn('work_order_stages:', e.message);
+    allWOs.forEach(wo => { wo.stages = null; });
+  }
 }
 
 async function loadProducts() {
@@ -884,16 +963,21 @@ function renderWOList() {
     const target = `${fmtKg(wo.target_kg)}<div class="tbl-sub">${fmt(wo.target_qty_ekor)} ekor</div>`;
     const canCancel   = ['OPEN','IN_PROGRESS'].includes(wo.status);
     const canComplete = ['OPEN','IN_PROGRESS'].includes(wo.status);
+    // Stage count badge
+    const stageCount  = wo.stages ? wo.stages.length : null;
+    const stageInfo   = stageCount && stageCount > 1
+      ? `<div class="tbl-sub" style="margin-top:3px"><span class="badge b-multi" style="font-size:9px;padding:1px 5px">${stageCount} stage</span></div>`
+      : '';
     return `<tr>
       <td style="font-family:monospace;font-weight:800;font-size:12px">${wo.order_code}</td>
-      <td>${tipeBadge(wo.tipe)}</td>
+      <td>${tipeBadge(wo.tipe, wo.stages)}${stageInfo}</td>
       <td>${produkName}</td>
       <td>${target}</td>
       <td>${progressBar(wo)}</td>
       <td>${statusBadge(wo.status)}</td>
       <td>${wsList(wo)}</td>
       <td style="font-size:12px;white-space:nowrap">${fmtDate(wo.tanggal)}<div class="tbl-sub">${fmtDT(wo.created_at)}</div></td>
-      <td style="font-size:12px;white-space:nowrap">${wo.approved_at ? fmtDate(wo.approved_at) + '<div class="tbl-sub">' + fmtDT(wo.approved_at) + '</div>' : '<span style="color:#9ca3af">—</span>'}</td>
+      <td style="font-size:12px;white-space:nowrap">${wo.approved_at ? fmtDate(wo.approved_at)+'<div class="tbl-sub">'+fmtDT(wo.approved_at)+'</div>' : '<span style="color:#9ca3af">—</span>'}</td>
       <td>
         <div style="display:flex;gap:4px;flex-wrap:wrap">
           <button class="btn btn-ghost btn-sm" onclick="openDetailWO('${wo.id}')">🔍 Detail</button>
@@ -914,11 +998,89 @@ function renderWOList() {
 }
 
 // ============================================================
+// STAGE BUILDER
+// ============================================================
+function initStages() {
+  createStages = [{ process_type: '', output_product_id: '' }];
+  renderStageBuilder();
+}
+
+function addStage() {
+  createStages.push({ process_type: '', output_product_id: '' });
+  renderStageBuilder();
+  const modal = document.querySelector('#modal-create .modal-box');
+  if (modal) modal.scrollTop = modal.scrollHeight;
+}
+
+function removeStage(idx) {
+  if (createStages.length <= 1) return;
+  createStages.splice(idx, 1);
+  renderStageBuilder();
+}
+
+function onStageProcessChange(idx, val) {
+  createStages[idx].process_type     = val;
+  createStages[idx].output_product_id = ''; // reset output saat proses berubah
+  renderStageBuilder();
+}
+
+function onStageOutputChange(idx, val) {
+  createStages[idx].output_product_id = val;
+}
+
+// Build <option> list. Pass allowedKat array to filter by kategori, or null for all.
+function buildProductOptions(selectedId, allowedKat) {
+  const list = allowedKat
+    ? allProducts.filter(p => allowedKat.includes(p.kategori))
+    : allProducts;
+  if (!list.length) return '<option value="" disabled>— Tidak ada produk untuk proses ini —</option>';
+  return list.map(p =>
+    `<option value="${p.id}" ${p.id === selectedId ? 'selected' : ''}>${p.nama_produk} (${p.product_code})</option>`
+  ).join('');
+}
+
+function renderStageBuilder() {
+  const container = document.getElementById('stage-builder');
+  const hint      = document.getElementById('crt-stage-hint');
+  if (!container) return;
+
+  const n = createStages.length;
+  if (hint) hint.textContent = n === 1 ? '1 tahap' : `${n} tahap`;
+
+  container.innerHTML = createStages.map((stage, idx) => {
+    const canRemove = n > 1;
+    return `<div class="stage-card-create">
+      <div class="stage-card-header">
+        <span class="stage-num-badge">Stage ${idx + 1}</span>
+        <select class="stage-process-select" onchange="onStageProcessChange(${idx}, this.value)">
+          <option value="" ${!stage.process_type?'selected':''}>— Pilih Proses —</option>
+          <option value="PARTING"  ${stage.process_type==='PARTING'?'selected':''}>✂️ Parting</option>
+          <option value="BONELESS" ${stage.process_type==='BONELESS'?'selected':''}>🥩 Boneless</option>
+          <option value="MARINASI" ${stage.process_type==='MARINASI'?'selected':''}>🌶️ Marinasi</option>
+        </select>
+        ${canRemove ? `<button type="button" class="btn btn-ghost btn-sm" onclick="removeStage(${idx})" style="padding:2px 7px;font-size:11px;margin-left:auto">✕</button>` : ''}
+      </div>
+      <div style="padding:10px 12px">
+        <div class="stage-prod-label">
+          Output Produk <span style="color:#dc2626">*</span>
+          ${stage.process_type ? `<span style="font-size:9px;color:#6b7280;font-weight:400;margin-left:4px">(${(OUTPUT_KAT[stage.process_type]||[]).join(', ')})</span>` : ''}
+        </div>
+        <select class="stage-prod-select" style="width:100%;margin-top:4px" id="s-out-${idx}"
+                onchange="onStageOutputChange(${idx}, this.value)"
+                ${!stage.process_type ? 'disabled' : ''}>
+          <option value="">${stage.process_type ? '— Pilih Produk —' : '— Pilih proses dulu —'}</option>
+          ${stage.process_type ? buildProductOptions(stage.output_product_id, OUTPUT_KAT[stage.process_type]) : ''}
+        </select>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ============================================================
 // CREATE WO
 // ============================================================
 function openCreateWO() {
-  document.getElementById('crt-tipe').value = '';
-  document.getElementById('crt-produk').innerHTML = '<option value="">— Pilih tipe dulu —</option>';
+  initStages();
   document.getElementById('crt-target-kg').value  = '';
   document.getElementById('crt-target-qty').value = '';
   document.getElementById('crt-catatan').value    = '';
@@ -926,44 +1088,42 @@ function openCreateWO() {
   openModal('modal-create');
 }
 
-function onCreateTipeChange() {
-  const tipe = document.getElementById('crt-tipe').value;
-  const sel  = document.getElementById('crt-produk');
-  if (!tipe) { sel.innerHTML = '<option value="">— Pilih tipe dulu —</option>'; return; }
-  // Filter produk berdasarkan tipe
-  const validKat = tipe === 'PARTING'
-    ? ['CU', 'EXT', 'PART', 'BYPRODUCT_PARTING', 'BYPRODUCT_BONELESS']
-    : tipe === 'MARINASI'
-    ? ['MARINASI']
-    : ['BONELESS', 'EXT', 'PART', 'BYPRODUCT_BONELESS', 'BYPRODUCT_PARTING'];
-  const filtered = allProducts.filter(p => validKat.includes(p.kategori));
-  sel.innerHTML = '<option value="">— Pilih Produk —</option>'
-    + filtered.map(p => `<option value="${p.id}">${p.nama_produk} (${p.product_code})</option>`).join('');
-}
-
 async function doCreateWO() {
-  const tipe      = document.getElementById('crt-tipe').value;
-  const produkId  = document.getElementById('crt-produk').value;
+  showErr('crt-err', '');
+
+  // Validate stages
+  for (let i = 0; i < createStages.length; i++) {
+    const s = createStages[i];
+    if (!s.process_type)      { showErr('crt-err', `Stage ${i+1}: pilih tipe proses.`); return; }
+    if (!s.output_product_id) { showErr('crt-err', `Stage ${i+1}: pilih output produk.`); return; }
+  }
+
   const targetKg  = parseFloat(document.getElementById('crt-target-kg').value);
   const targetQty = parseInt(document.getElementById('crt-target-qty').value);
   const catatan   = document.getElementById('crt-catatan').value.trim();
-  showErr('crt-err', '');
 
-  if (!tipe)            { showErr('crt-err', 'Pilih tipe WO.'); return; }
-  if (!produkId)        { showErr('crt-err', 'Pilih produk target.'); return; }
-  if (!targetKg || targetKg <= 0) { showErr('crt-err', 'Target Kg harus lebih dari 0.'); return; }
+  if (!targetKg || targetKg <= 0)   { showErr('crt-err', 'Target Kg harus lebih dari 0.'); return; }
   if (!targetQty || targetQty <= 0) { showErr('crt-err', 'Target Ekor harus lebih dari 0.'); return; }
+
+  // Determine tipe: single = process_type, multi = 'MULTI'
+  const isMulti    = createStages.length > 1;
+  const woTipe     = isMulti ? 'MULTI' : createStages[0].process_type;
+  // Final product = output of last stage
+  const lastStage  = createStages[createStages.length - 1];
+  const produkId   = lastStage.output_product_id;
 
   const btn = document.getElementById('crt-btn-ok');
   btn.disabled = true; btn.textContent = 'Menyimpan…';
   try {
-    // Generate WO code
-    const { data: woCode, error: codeErr } = await db.rpc('generate_wo_code', { p_tipe: tipe });
+    // Generate WO code (use first stage's type for single, or MULTI for multi)
+    const codeType = isMulti ? createStages[0].process_type : woTipe;
+    const { data: woCode, error: codeErr } = await db.rpc('generate_wo_code', { p_tipe: codeType });
     if (codeErr) throw codeErr;
 
+    // Insert WO header
     const { data: wo, error: insertErr } = await db.from('processing_orders').insert({
       order_code:      woCode,
-      tipe:            tipe,
+      tipe:            woTipe,
       tanggal:         todayISO(),
       produk_id:       produkId,
       target_kg:       targetKg,
@@ -974,7 +1134,27 @@ async function doCreateWO() {
     }).select().single();
     if (insertErr) throw insertErr;
 
-    showToast(`WO ${woCode} berhasil dibuat!`, 'success');
+    // Insert stages (only if work_order_stages table exists)
+    if (createStages.length > 0) {
+      const stageRows = createStages.map((s, idx) => ({
+        wo_id:             wo.id,
+        stage_order:       idx + 1,
+        process_type:      s.process_type,
+        output_product_id: s.output_product_id,
+        status:            idx === 0 ? 'PENDING' : 'LOCKED'
+      }));
+      const { error: stagesErr } = await db.from('work_order_stages').insert(stageRows);
+      if (stagesErr) {
+        // Table doesn't exist yet — warn but don't fail the WO creation
+        if (stagesErr.message?.includes('does not exist')) {
+          console.warn('work_order_stages table not yet created. Run migration to enable multi-stage tracking.');
+        } else {
+          throw stagesErr;
+        }
+      }
+    }
+
+    showToast(`WO ${woCode} berhasil dibuat!${isMulti ? ` (${createStages.length} stage)` : ''}`, 'success');
     closeModal('modal-create');
     await loadAll();
   } catch(e) {
@@ -1002,7 +1182,8 @@ async function openDetailWO(woId) {
 
   setEl('det-subtitle', `${wo.order_code} — ${wo.tipe}`);
   setEl('det-code', wo.order_code);
-  document.getElementById('det-tipe').innerHTML = tipeBadge(wo.tipe);
+  // Tipe: show flow if multi-stage
+  document.getElementById('det-tipe').innerHTML = tipeBadge(wo.tipe, wo.stages);
   setEl('det-produk', pm ? `${pm.nama_produk} (${pm.product_code})` : '—');
   setEl('det-target', `${fmtKg(wo.target_kg)} / ${fmt(wo.target_qty_ekor)} ekor`);
   setEl('det-actual', `${fmtKg(actualKg)} / ${fmt(actualQty)} ekor`);
@@ -1014,12 +1195,46 @@ async function openDetailWO(woId) {
   document.getElementById('det-status').innerHTML  = statusBadge(wo.status);
   setEl('det-tanggal', fmtDate(wo.tanggal));
 
+  // === STAGES TIMELINE ===
+  const stagesWrap = document.getElementById('det-stages-wrap');
+  const stagesList = document.getElementById('det-stages-list');
+  if (wo.stages && wo.stages.length > 1) {
+    stagesWrap.style.display = '';
+    stagesList.innerHTML = wo.stages.map((s, idx) => {
+      const stageStatus = s.status || 'PENDING';
+      const numClass = stageStatus==='DONE' ? 'done' : stageStatus==='IN_PROGRESS' ? 'active' : 'pending';
+      const numIcon  = stageStatus==='DONE' ? '✓' : (idx + 1);
+      const isLast   = idx === wo.stages.length - 1;
+      const inProd   = s.input_product?.nama_produk  || '—';
+      const outProd  = s.output_product?.nama_produk || '—';
+      const stsBadge = stageStatus==='DONE'
+        ? '<span class="badge b-approved" style="font-size:10px">✅ Selesai</span>'
+        : stageStatus==='IN_PROGRESS'
+        ? '<span class="badge b-inprog" style="font-size:10px">▶ Berlangsung</span>'
+        : stageStatus==='LOCKED'
+        ? '<span class="badge b-open" style="font-size:10px">🔒 Terkunci</span>'
+        : '<span class="badge b-pending" style="font-size:10px">⏳ Menunggu</span>';
+      return `<div class="stage-timeline-item">
+        <div class="stage-tl-left">
+          <div class="stage-tl-num ${numClass}">${numIcon}</div>
+          ${!isLast ? '<div class="stage-tl-line"></div>' : ''}
+        </div>
+        <div class="stage-tl-right">
+          <div class="stage-tl-title">${processIcon(s.process_type)} ${processLabel(s.process_type)} ${stsBadge}</div>
+          <div class="stage-tl-detail">Output: ${outProd}</div>
+        </div>
+      </div>`;
+    }).join('');
+  } else {
+    stagesWrap.style.display = 'none';
+  }
+
   // Workstations
   const wss = (wo.wo_workstations||[]).map(w=>w.workstations).filter(Boolean);
   const tipeL = (wo.tipe||'').toLowerCase();
   document.getElementById('det-ws-list').innerHTML = wss.length
     ? `<div class="ws-chips">${wss.map(w=>`<span class="ws-chip ${tipeL==='boneless'?'boneless':''}">${w.kode} — ${w.nama}</span>`).join('')}</div>`
-    : '<span style="font-size:12px;color:#9ca3af">Belum ada workstation yang di-assign.</span>';
+    : '<span style="font-size:12px;color:#9ca3af">Belum ada workstation yang mengerjakan WO ini.</span>';
 
   // Output per worker
   const outputs = wo.processing_outputs || [];
@@ -1029,7 +1244,7 @@ async function openDetailWO(woId) {
   } else {
     detTbody.innerHTML = outputs.map(o => {
       const workerName = o.users?.nama || '—';
-      const wsName     = (wo.wo_workstations||[]).find(w=>w.workstation_id === o.workstation_id)?.workstations?.kode || '—';
+      const wsName     = o.workstations?.kode || '—';
       const prodName   = o.product_master?.nama_produk || '—';
       const typeBadge  = o.output_type === 'PRIMARY'
         ? '<span class="badge b-approved" style="font-size:10px">Primary</span>'
@@ -1047,176 +1262,10 @@ async function openDetailWO(woId) {
   }
 
   showErr('det-err', '');
-  // Buttons
   document.getElementById('det-btn-cancel').style.display  = canCancel   ? '' : 'none';
   document.getElementById('det-btn-approve').style.display = needApprove ? '' : 'none';
-  // Only allow assign WS when not closed
-  document.getElementById('det-btn-ws').disabled = ['COMPLETED','CANCELLED'].includes(wo.status);
 
   openModal('modal-detail');
-}
-
-// ============================================================
-// ASSIGN WORKSTATION
-// ============================================================
-function openAssignWS() {
-  if (!currentWOData) return;
-  const wo         = currentWOData;
-  const tipeFilter = wo.tipe;
-  const wsForType  = allWorkstations.filter(ws => ws.tipe === tipeFilter);
-  const assignedMap = {};
-  (wo.wo_workstations||[]).forEach(w => { assignedMap[w.workstation_id] = w; });
-
-  setEl('aws-subtitle', `Assign workstation untuk WO ${wo.order_code} (${wo.tipe})`);
-  setEl('aws-wo-ekor', fmt(wo.target_qty_ekor) + ' ekor');
-  setEl('aws-wo-kg',   fmtKg(wo.target_kg));
-
-  const grid = document.getElementById('aws-ws-grid');
-  if (!wsForType.length) {
-    grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:16px;color:#9ca3af">Tidak ada workstation tipe ${tipeFilter}.</div>`;
-  } else {
-    grid.innerHTML = wsForType.map(ws => {
-      const existing = assignedMap[ws.id];
-      const checked  = !!existing;
-      const boneCls  = tipeFilter === 'BONELESS' ? 'boneless' : '';
-      const prevQty  = existing?.target_qty_ekor || '';
-      const prevKg   = existing?.target_kg       || '';
-      return `
-        <div class="ws-check-item ${checked ? `checked ${boneCls}` : ''}" id="wsitem-${ws.id}" style="flex-direction:column;align-items:stretch;gap:8px">
-          <label style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="toggleWsCheck('${ws.id}','${boneCls}')">
-            <input type="checkbox" id="wscb-${ws.id}" ${checked ? 'checked' : ''} onclick="event.stopPropagation();toggleWsCheck('${ws.id}','${boneCls}')">
-            <div><div class="ws-name">${ws.nama}</div><div class="ws-kode">${ws.kode}</div></div>
-          </label>
-          <div id="wsalloc-${ws.id}" style="display:${checked?'grid':'none'};grid-template-columns:1fr 1fr;gap:6px;padding-top:4px;border-top:1px solid rgba(0,0,0,.08)">
-            <div>
-              <div style="font-size:10px;color:#6b7280;margin-bottom:2px">Target Ekor</div>
-              <input type="number" id="wsqty-${ws.id}" value="${prevQty}" min="0" placeholder="ekor"
-                style="width:100%;padding:5px 8px;border:1.5px solid #d1d5db;border-radius:6px;font-size:13px"
-                oninput="recalcAlokasi()">
-            </div>
-            <div>
-              <div style="font-size:10px;color:#6b7280;margin-bottom:2px">Target Kg</div>
-              <input type="number" id="wskg-${ws.id}" value="${prevKg}" min="0" step="0.1" placeholder="kg"
-                style="width:100%;padding:5px 8px;border:1.5px solid #d1d5db;border-radius:6px;font-size:13px"
-                oninput="recalcAlokasi()">
-            </div>
-          </div>
-        </div>`;
-    }).join('');
-  }
-  recalcAlokasi();
-  showErr('aws-err', '');
-  openModal('modal-assign-ws');
-}
-
-function toggleWsCheck(wsId, boneCls) {
-  const cb    = document.getElementById(`wscb-${wsId}`);
-  const item  = document.getElementById(`wsitem-${wsId}`);
-  const alloc = document.getElementById(`wsalloc-${wsId}`);
-  cb.checked = !cb.checked;
-  if (cb.checked) {
-    item.classList.add('checked');
-    if (boneCls) item.classList.add(boneCls);
-    if (alloc) alloc.style.display = 'grid';
-  } else {
-    item.classList.remove('checked', boneCls);
-    if (alloc) alloc.style.display = 'none';
-    // Reset nilai saat uncheck
-    const qtyEl = document.getElementById(`wsqty-${wsId}`);
-    const kgEl  = document.getElementById(`wskg-${wsId}`);
-    if (qtyEl) qtyEl.value = '';
-    if (kgEl)  kgEl.value  = '';
-  }
-  recalcAlokasi();
-}
-
-function recalcAlokasi() {
-  if (!currentWOData) return;
-  const wo         = currentWOData;
-  const wsForType  = allWorkstations.filter(ws => ws.tipe === wo.tipe);
-  const checked    = wsForType.filter(ws => document.getElementById(`wscb-${ws.id}`)?.checked);
-
-  let totalEkor = 0, totalKg = 0;
-  checked.forEach(ws => {
-    totalEkor += Number(document.getElementById(`wsqty-${ws.id}`)?.value || 0);
-    totalKg   += Number(document.getElementById(`wskg-${ws.id}`)?.value  || 0);
-  });
-
-  setEl('aws-alloc-ekor', fmt(totalEkor));
-  setEl('aws-alloc-kg',   fmtKg(totalKg));
-
-  const targetEkor = Number(wo.target_qty_ekor) || 0;
-  const targetKg   = Number(wo.target_kg)       || 0;
-
-  const sisaEkor = targetEkor - totalEkor;
-  const sisaKg   = targetKg   - totalKg;
-
-  const sisaEkorEl = document.getElementById('aws-sisa-ekor');
-  const sisaKgEl   = document.getElementById('aws-sisa-kg');
-  if (sisaEkorEl) {
-    sisaEkorEl.textContent = (sisaEkor >= 0 ? '+' : '') + fmt(sisaEkor * -1 === 0 ? 0 : sisaEkor);
-    sisaEkorEl.style.color = sisaEkor === 0 ? '#16a34a' : '#dc2626';
-  }
-  if (sisaKgEl) {
-    sisaKgEl.textContent = (sisaKg >= 0 ? '+' : '') + Number(sisaKg.toFixed(1)) + ' kg';
-    sisaKgEl.style.color = Math.abs(sisaKg) < 0.1 ? '#16a34a' : '#dc2626';
-  }
-}
-
-async function doAssignWS() {
-  if (!currentWOId) return;
-  const wo         = currentWOData;
-  const tipeFilter = wo.tipe;
-  const wsForType  = allWorkstations.filter(ws => ws.tipe === tipeFilter);
-  const selected   = wsForType.filter(ws => document.getElementById(`wscb-${ws.id}`)?.checked);
-  showErr('aws-err','');
-  if (!selected.length) { showErr('aws-err','Pilih minimal 1 workstation.'); return; }
-
-  // Baca target per WS
-  const rows = selected.map(ws => ({
-    order_id:        currentWOId,
-    workstation_id:  ws.id,
-    assigned_by:     currentUser.id,
-    target_qty_ekor: Number(document.getElementById(`wsqty-${ws.id}`)?.value) || null,
-    target_kg:       Number(document.getElementById(`wskg-${ws.id}`)?.value)  || null,
-  }));
-
-  // Validasi: total alokasi harus sama dengan target WO
-  const targetEkor = Number(wo.target_qty_ekor) || 0;
-  const targetKg   = Number(wo.target_kg)       || 0;
-  const totalEkor  = rows.reduce((s,r) => s + (r.target_qty_ekor||0), 0);
-  const totalKg    = rows.reduce((s,r) => s + (r.target_kg||0), 0);
-
-  if (targetEkor > 0 && totalEkor !== targetEkor) {
-    showErr('aws-err', `Total ekor (${fmt(totalEkor)}) harus sama dengan target WO (${fmt(targetEkor)} ekor).`);
-    return;
-  }
-  if (targetKg > 0 && Math.abs(totalKg - targetKg) > 0.1) {
-    showErr('aws-err', `Total kg (${fmtKg(totalKg)}) harus sama dengan target WO (${fmtKg(targetKg)}).`);
-    return;
-  }
-
-  const btn = document.getElementById('aws-btn-ok');
-  btn.disabled = true; btn.textContent = 'Menyimpan…';
-  try {
-    await db.from('wo_workstations').delete().eq('order_id', currentWOId);
-    const { error } = await db.from('wo_workstations').insert(rows);
-    if (error) throw error;
-
-    if (wo.status === 'OPEN') {
-      await db.from('processing_orders').update({ status: 'IN_PROGRESS' }).eq('id', currentWOId);
-    }
-
-    showToast('Workstation berhasil di-assign!', 'success');
-    closeModal('modal-assign-ws');
-    closeModal('modal-detail');
-    await loadAll();
-  } catch(e) {
-    console.error(e);
-    showErr('aws-err', 'Gagal menyimpan: ' + (e.message||''));
-  } finally {
-    btn.disabled = false; btn.textContent = '💾 Simpan Workstation';
-  }
 }
 
 // ============================================================
@@ -1257,7 +1306,6 @@ async function doApproveWO() {
   const btn = document.getElementById('apr-btn-ok');
   btn.disabled = true; btn.textContent = 'Memverifikasi…';
   try {
-    // Cek PIN supervisor
     const { data: sup, error: supErr } = await db.from('users')
       .select('id, nama, role, is_system_admin')
       .eq('pin', pin).eq('aktif', true)
@@ -1272,6 +1320,11 @@ async function doApproveWO() {
       approved_at: new Date().toISOString()
     }).eq('id', currentWOId);
     if (updErr) throw updErr;
+
+    // Also mark all stages as DONE if stages exist
+    try {
+      await db.from('work_order_stages').update({ status: 'DONE' }).eq('wo_id', currentWOId);
+    } catch(e) { /* table may not exist yet, ignore */ }
 
     showToast(`WO ${currentWOData?.order_code} berhasil diselesaikan oleh ${sup.nama}!`, 'success');
     closeModal('modal-approve');
@@ -1335,10 +1388,11 @@ async function doCancelWO() {
 // ============================================================
 function exportWOExcel() {
   if (typeof XLSX === 'undefined') { showToast('Library Excel belum siap. Coba refresh.', 'error'); return; }
-  const headers = ['Kode WO','Tipe','Produk Target','Target Kg','Target Ekor','Actual Kg','Actual Ekor','Selisih %','Status','Workstations','Tanggal'];
+  const headers = ['Kode WO','Tipe','Jumlah Stage','Produk Akhir','Target Kg','Target Ekor','Actual Kg','Actual Ekor','Selisih %','Status','Workstations','Tanggal'];
   const rows = filteredWOs.map(wo => [
     wo.order_code,
     wo.tipe,
+    wo.stages ? wo.stages.length : 1,
     wo.product_master?.nama_produk || '—',
     wo.target_kg,
     wo.target_qty_ekor,
@@ -1352,10 +1406,8 @@ function exportWOExcel() {
   const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Work Order');
-  const wb2 = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb2, ws, 'Work Order');
   const today = new Date().toISOString().split('T')[0].replace(/-/g,'');
-  XLSX.writeFile(wb2, 'work_order_' + today + '.xlsx');
+  XLSX.writeFile(wb, 'work_order_' + today + '.xlsx');
 }
 
 // ============================================================

@@ -173,7 +173,7 @@ a{text-decoration:none}
 .scan-result.error{border-color:#fecaca;background:#fff5f5}
 .scan-result-code{font-size:13px;font-weight:800;color:#111827;margin-bottom:6px}
 .scan-result-detail{font-size:12px;color:#374151;line-height:1.7}
-.scan-dest-btns{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:12px}
+.scan-dest-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
 .btn-dest{padding:10px 4px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;transition:all .15s;text-align:center}
 .btn-dest-chiller{background:#dbeafe;color:#1e40af}
 .btn-dest-chiller:hover{background:#2563eb;color:white}
@@ -181,6 +181,8 @@ a{text-decoration:none}
 .btn-dest-parting:hover{background:#2563eb;color:white}
 .btn-dest-boneless{background:#fce7f3;color:#9d174d}
 .btn-dest-boneless:hover{background:#db2777;color:white}
+.btn-dest-marinasi{background:#fef3c7;color:#92400e}
+.btn-dest-marinasi:hover{background:#d97706;color:white}
 .btn-dest.selected{outline:3px solid #111827;transform:scale(1.04)}
 
 /* ===== PARTIAL TRANSFER ===== */
@@ -619,9 +621,10 @@ a{text-decoration:none}
                   <div class="scan-result-code" id="scan-result-code">—</div>
                   <div class="scan-result-detail" id="scan-result-detail">—</div>
                   <div class="scan-dest-btns" id="scan-dest-btns" style="display:none">
-                    <button class="btn-dest btn-dest-chiller" id="scan-dest-CHILLER" onclick="pkSelectScanDest('CHILLER')">❄️ Chiller</button>
-                    <button class="btn-dest btn-dest-parting" id="scan-dest-PARTING" onclick="pkSelectScanDest('PARTING')">✂️ Parting</button>
+                    <button class="btn-dest btn-dest-chiller"  id="scan-dest-CHILLER"  onclick="pkSelectScanDest('CHILLER')">❄️ Chiller</button>
+                    <button class="btn-dest btn-dest-parting"  id="scan-dest-PARTING"  onclick="pkSelectScanDest('PARTING')">✂️ Parting</button>
                     <button class="btn-dest btn-dest-boneless" id="scan-dest-BONELESS" onclick="pkSelectScanDest('BONELESS')">🥩 Boneless</button>
+                    <button class="btn-dest btn-dest-marinasi" id="scan-dest-MARINASI" onclick="pkSelectScanDest('MARINASI')">🌶️ Marinasi</button>
                   </div>
                   <!-- Partial section scan -->
                   <div class="pk-partial-wrap" id="scan-partial-wrap" style="display:none">
@@ -764,9 +767,10 @@ a{text-decoration:none}
       </div>
       <div style="font-size:13px;font-weight:700;color:#374151;margin-bottom:10px;text-align:center">Pindahkan keranjang ini ke:</div>
       <div class="scan-dest-btns" style="margin-bottom:8px">
-        <button class="btn-dest btn-dest-chiller" id="mod-dest-CHILLER" onclick="pkSelectModalDest('CHILLER')">❄️<br>Chiller</button>
-        <button class="btn-dest btn-dest-parting" id="mod-dest-PARTING" onclick="pkSelectModalDest('PARTING')">✂️<br>Parting</button>
+        <button class="btn-dest btn-dest-chiller"  id="mod-dest-CHILLER"  onclick="pkSelectModalDest('CHILLER')">❄️<br>Chiller</button>
+        <button class="btn-dest btn-dest-parting"  id="mod-dest-PARTING"  onclick="pkSelectModalDest('PARTING')">✂️<br>Parting</button>
         <button class="btn-dest btn-dest-boneless" id="mod-dest-BONELESS" onclick="pkSelectModalDest('BONELESS')">🥩<br>Boneless</button>
+        <button class="btn-dest btn-dest-marinasi" id="mod-dest-MARINASI" onclick="pkSelectModalDest('MARINASI')">🌶️<br>Marinasi</button>
       </div>
       <!-- Partial section modal -->
       <div class="pk-partial-wrap" id="mod-partial-wrap" style="display:none">
@@ -1375,8 +1379,8 @@ function renderLantaiList() {
     let statusHtml = '';
     let cancelBtn  = '';
     if (b.pendingTo) {
-      const destMap = {CHILLER:'b-chiller',PARTING:'b-parting',BONELESS:'b-boneless'};
-      const destLbl = {CHILLER:'→ Chiller',PARTING:'→ Parting',BONELESS:'→ Boneless'};
+      const destMap = {CHILLER:'b-chiller',PARTING:'b-parting',BONELESS:'b-boneless',MARINASI:'b-pending'};
+      const destLbl = {CHILLER:'→ Chiller',PARTING:'→ Parting',BONELESS:'→ Boneless',MARINASI:'→ Marinasi'};
       const efektif = b.qty_sisa - b.pendingQty;
       const efInfo  = efektif > 0 ? ` · sisa efektif ${fmt(efektif)} ekor` : '';
       statusHtml = `<span class="badge ${destMap[b.pendingTo]||'b-pending'}" style="font-size:10px">${destLbl[b.pendingTo]||b.pendingTo} (menunggu${efInfo})</span>`;
@@ -1707,7 +1711,7 @@ let pkModalKgMin    = null, pkModalKgMax = null;
 async function pkSelectScanDest(dest) {
   pkScanDest    = dest;
   pkScanPartial = false;
-  ['CHILLER','PARTING','BONELESS'].forEach(d => {
+  ['CHILLER','PARTING','BONELESS','MARINASI'].forEach(d => {
     const el = document.getElementById(`scan-dest-${d}`);
     if (el) el.classList.toggle('selected', d === dest);
   });
@@ -1807,7 +1811,7 @@ async function pkConfirmScan() {
 function pkSelectModalDest(dest) {
   pkModalDest    = dest;
   pkModalPartial = false;
-  ['CHILLER','PARTING','BONELESS'].forEach(d => {
+  ['CHILLER','PARTING','BONELESS','MARINASI'].forEach(d => {
     const el = document.getElementById(`mod-dest-${d}`);
     if (el) el.classList.toggle('selected', d === dest);
   });
@@ -1990,7 +1994,7 @@ async function lookupBasket(code) {
     return;
   }
   if (data.lokasi !== 'LANTAI') {
-    const lokasiLbl = {CHILLER:'Chiller',PARTING:'Parting',BONELESS:'Boneless',BLASTING:'Blasting'}[data.lokasi] || data.lokasi;
+    const lokasiLbl = {CHILLER:'Chiller',PARTING:'Parting',BONELESS:'Boneless',BLASTING:'Blasting',MARINASI:'Marinasi'}[data.lokasi] || data.lokasi;
     // Check if pending
     const { data: mvPending } = await db.from('basket_movements')
       .select('ke_lokasi').eq('basket_id', data.id).eq('status', 'PENDING').maybeSingle();
@@ -2045,7 +2049,7 @@ async function doSubmitPindah(basketId, dest, qty, kg, isPartial=false) {
       submitted_by: currentUser.id
     });
     if (error) throw error;
-    const destLbl = {CHILLER:'Chiller',PARTING:'Parting',BONELESS:'Boneless'}[dest] || dest;
+    const destLbl = {CHILLER:'Chiller',PARTING:'Parting',BONELESS:'Boneless',MARINASI:'Marinasi'}[dest] || dest;
     const partialInfo = isPartial ? ` (${fmt(qty)} ekor / ${fmtKg(kg)})` : '';
     showToast(`Keranjang dikirim ke ${destLbl}${partialInfo} — menunggu konfirmasi`, 'success');
     return true;

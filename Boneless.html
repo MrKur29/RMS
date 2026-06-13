@@ -771,8 +771,8 @@ a{text-decoration:none}
     <!-- Panel WO + WS: muncul saat pilih Work Station -->
     <div id="mp-ws-panel" style="display:none;margin-top:12px">
 
-      <!-- Step 1: Pilih WO -->
-      <div style="font-size:11px;font-weight:700;color:#2563eb;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">① Pilih Work Order</div>
+      <!-- Pilih WO -->
+      <div style="font-size:11px;font-weight:700;color:#2563eb;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Pilih Work Order</div>
       <select id="mp-wo-select" style="width:100%;padding:8px 10px;border:1.5px solid #d1d5db;border-radius:6px;font-size:13px;margin-bottom:8px" onchange="onWOSelectChange()">
         <option value="">— Pilih Work Order —</option>
       </select>
@@ -790,11 +790,8 @@ a{text-decoration:none}
         <div id="mp-wo-info-memo" style="margin-top:6px;color:#6b7280;font-style:italic;font-size:11px"></div>
       </div>
 
-      <!-- Step 2: Pilih WS -->
-      <div style="font-size:11px;font-weight:700;color:#2563eb;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">② Pilih Workstation</div>
-      <div id="mp-ws-cards" style="display:flex;flex-direction:column;gap:6px">
-        <div style="text-align:center;padding:12px;color:#9ca3af;font-size:12px">Pilih Work Order dulu.</div>
-      </div>
+      <!-- WS cards disembunyikan — Boneless input di level WO, tidak per WS -->
+      <div id="mp-ws-cards" style="display:none"></div>
 
     </div>
     <!-- Jumlah yang dipindahkan -->
@@ -961,6 +958,7 @@ a{text-decoration:none}
     <div class="modal-info-box">
       <div class="modal-info-row"><span class="modal-info-label">WO</span><span class="modal-info-val" id="ro-wo-code">—</span></div>
       <div class="modal-info-row"><span class="modal-info-label">Workstation</span><span class="modal-info-val" id="ro-ws-name">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Produk Target</span><span class="modal-info-val" id="ro-wo-produk">—</span></div>
       <div class="modal-info-row"><span class="modal-info-label">Progress Saat Ini</span><span class="modal-info-val" id="ro-progress">—</span></div>
     </div>
     <div class="form-group">
@@ -968,13 +966,6 @@ a{text-decoration:none}
       <select id="ro-produk" onchange="updateROKgHint()">
         <option value="">— Pilih Produk —</option>
       </select>
-    </div>
-    <div class="form-group">
-      <label>Tipe Output <span style="color:#dc2626">*</span></label>
-      <div style="display:flex;gap:8px">
-        <button type="button" id="ro-type-primary"   onclick="selectOutputType('PRIMARY')"   style="flex:1" class="btn btn-outline">🏆 PRIMARY</button>
-        <button type="button" id="ro-type-byproduct" onclick="selectOutputType('BYPRODUCT')" style="flex:1" class="btn btn-outline">📦 BYPRODUCT</button>
-      </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div class="form-group" style="margin-bottom:0">
@@ -1260,7 +1251,7 @@ async function loadActiveWOs() {
   const { data, error } = await db
     .from('processing_orders')
     .select(`
-      id, order_code, status, target_kg, target_qty_ekor, catatan, tanggal, created_at,
+      id, order_code, status, target_kg, target_qty_ekor, catatan, tanggal, created_at, produk_id,
       product_master ( nama_produk, product_code ),
       wo_workstations (
         workstation_id, target_kg, target_qty_ekor, selesai_at, selesai_by,
@@ -1268,7 +1259,7 @@ async function loadActiveWOs() {
         users!selesai_by ( nama )
       ),
       processing_inputs ( id, basket_id, workstation_id, kg_diambil, qty_input ),
-      processing_outputs ( id, output_type, kg_output, qty_output, worker_id, workstation_id, tanggal_produksi )
+      processing_outputs ( id, product_id, output_type, kg_output, qty_output, worker_id, workstation_id, tanggal_produksi, product_master ( kategori ) )
     `)
     .eq('tipe', 'BONELESS')
     .in('status', ['OPEN','IN_PROGRESS'])
@@ -1291,10 +1282,10 @@ async function loadClosedWOs() {
 
   let q = db.from('processing_orders')
     .select(`
-      id, order_code, status, target_kg, target_qty_ekor, tanggal, updated_at,
+      id, order_code, status, target_kg, target_qty_ekor, tanggal, updated_at, produk_id,
       product_master ( nama_produk, product_code ),
       wo_workstations ( workstation_id, selesai_at, workstations ( kode ) ),
-      processing_outputs ( id, output_type, kg_output, qty_output )
+      processing_outputs ( id, product_id, output_type, kg_output, qty_output, product_master ( kategori ) )
     `)
     .eq('tipe', 'BONELESS')
     .in('status', ['COMPLETED','CANCELLED'])
@@ -1326,10 +1317,10 @@ function renderClosedWOs() {
     const wwsList  = wo.wo_workstations || [];
     const wsStr    = wwsList.map(w => w.workstations?.kode || '').filter(Boolean).join(', ') || '—';
     const outKg    = (wo.processing_outputs || [])
-      .filter(o => o.output_type === 'PRIMARY')
+      .filter(o => o.product_id === wo.produk_id)
       .reduce((s, o) => s + (Number(o.kg_output) || 0), 0);
     const outQty   = (wo.processing_outputs || [])
-      .filter(o => o.output_type === 'PRIMARY')
+      .filter(o => o.product_id === wo.produk_id)
       .reduce((s, o) => s + (Number(o.qty_output) || 0), 0);
     const pct      = wo.target_kg > 0 ? Math.round(outKg / wo.target_kg * 100) : null;
     const pctColor = pct === null ? '' : (pct >= 90 ? 'color:#166534' : (pct >= 70 ? 'color:#92400e' : 'color:#991b1b'));
@@ -1373,14 +1364,19 @@ async function toggleClosedWODetail(woId) {
       .select('workstation_id, kg_diambil, qty_input, baskets(basket_code), product_master(nama_produk)')
       .eq('order_id', woId);
     const { data: outputs } = await db.from('processing_outputs')
-      .select('workstation_id, kg_output, qty_output, output_type, baskets(basket_code), product_master(nama_produk), users!worker_id(nama)')
+      .select('workstation_id, kg_output, qty_output, output_type, product_id, baskets(basket_code), product_master(nama_produk, kategori), users!worker_id(nama)')
       .eq('order_id', woId).order('created_at', { ascending: false });
 
     const iList  = inputs  || [];
     const oList  = outputs || [];
+    // Fetch produk_id WO untuk klasifikasi output
+    const { data: woData } = await db.from('processing_orders').select('produk_id').eq('id', woId).maybeSingle();
+    const woProdukId = woData?.produk_id || null;
+
     const totalInKg  = iList.reduce((s, i) => s + (Number(i.kg_diambil) || 0), 0);
-    const totalOutKg = oList.filter(o => o.output_type === 'PRIMARY').reduce((s, o) => s + (Number(o.kg_output) || 0), 0);
-    const totalByKg  = oList.filter(o => o.output_type === 'BYPRODUCT').reduce((s, o) => s + (Number(o.kg_output) || 0), 0);
+    const totalOutKg = oList.filter(o => o.product_id === woProdukId).reduce((s, o) => s + (Number(o.kg_output) || 0), 0);
+    const totalOthKg = oList.filter(o => classifyOutput(o, woProdukId) === 'OTHER').reduce((s, o) => s + (Number(o.kg_output) || 0), 0);
+    const totalByKg  = oList.filter(o => classifyOutput(o, woProdukId) === 'BYPRODUCT').reduce((s, o) => s + (Number(o.kg_output) || 0), 0);
 
     let html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">';
 
@@ -1396,13 +1392,19 @@ async function toggleClosedWODetail(woId) {
     html += '</div>';
 
     // Output side
-    html += '<div><div style="font-size:11px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">📦 Output (Primary ' + fmtKg(totalOutKg) + ' · Byproduct ' + fmtKg(totalByKg) + ')</div>';
+    const outSummary = fmtKg(totalOutKg) +
+      (totalOthKg > 0 ? ' · Others ' + fmtKg(totalOthKg) : '') +
+      (totalByKg  > 0 ? ' · Byproduct ' + fmtKg(totalByKg) : '');
+    html += '<div><div style="font-size:11px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">📦 Output (' + outSummary + ')</div>';
     if (oList.length) {
       html += '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Keranjang</th><th>Produk</th><th>Qty / Kg</th><th>Tipe</th></tr></thead><tbody>' +
         oList.map(o => {
-          const badge = o.output_type === 'PRIMARY'
-            ? '<span class="badge b-aktif">Primary</span>'
-            : '<span class="badge" style="background:#fce7f3;color:#9d174d">Byproduct</span>';
+          const cls = classifyOutput(o, woProdukId);
+          const badge = cls === 'MAIN'
+            ? '<span class="badge b-aktif">Main</span>'
+            : cls === 'BYPRODUCT'
+            ? '<span class="badge" style="background:#fce7f3;color:#9d174d">Byproduct</span>'
+            : '<span class="badge" style="background:#fef9c3;color:#854d0e">Others</span>';
           return '<tr><td style="font-family:monospace;font-size:11px">' + (o.baskets?.basket_code || '—') + '</td>' +
             '<td>' + (o.product_master?.nama_produk || '—') + '</td>' +
             '<td>' + fmt(o.qty_output) + ' ekor<div class="tbl-sub">' + fmtKg(o.kg_output) + '</div></td>' +
@@ -1436,11 +1438,11 @@ function renderSummaryCards() {
   setEl('sc-stok',     bonelessStock.length);
   setEl('sc-wo-aktif', activeWOs.filter(w=>w.status==='IN_PROGRESS').length);
 
-  // Output hari ini (kg primary)
+  // Output hari ini (kg sesuai produk WO)
   const todayStr = todayISO();
   const todayOutputKg = activeWOs.reduce((sum, wo) => {
     return sum + (wo.processing_outputs||[])
-      .filter(o => o.output_type==='PRIMARY' && (o.tanggal_produksi||'').startsWith(todayStr))
+      .filter(o => o.product_id === wo.produk_id && (o.tanggal_produksi||'').startsWith(todayStr))
       .reduce((s,o) => s + (Number(o.kg_output)||0), 0);
   }, 0);
   setEl('sc-output-kg', fmtKg(todayOutputKg));
@@ -1807,66 +1809,17 @@ async function onWOSelectChange() {
   else            { memoEl.style.display = 'none'; }
   infoEl.style.display = '';
 
-  // ── Ambil alokasi existing dari DB ──
-  cardsEl.innerHTML = '<div style="text-align:center;padding:12px;color:#9ca3af;font-size:12px">Memuat data workstation…</div>';
+  // ── Boneless: input di level WO, tidak perlu pilih WS ──
+  // Tampilkan ringkasan input yang sudah ada untuk WO ini
   const { data: inputs } = await db.from('processing_inputs')
-    .select('workstation_id, kg_diambil, qty_input').eq('order_id', woId);
+    .select('kg_diambil, qty_input').eq('order_id', woId);
 
-  const allocMap = {};
-  (inputs||[]).forEach(inp => {
-    if (!allocMap[inp.workstation_id]) allocMap[inp.workstation_id] = { kg: 0, qty: 0 };
-    allocMap[inp.workstation_id].kg  += Number(inp.kg_diambil)||0;
-    allocMap[inp.workstation_id].qty += Number(inp.qty_input) ||0;
-  });
-
-  // Update total teralokasi di info box
-  const totKg  = Object.values(allocMap).reduce((s,a) => s + a.kg,  0);
-  const totQty = Object.values(allocMap).reduce((s,a) => s + a.qty, 0);
+  const totKg  = (inputs||[]).reduce((s,i) => s + (Number(i.kg_diambil)||0), 0);
+  const totQty = (inputs||[]).reduce((s,i) => s + (Number(i.qty_input) ||0), 0);
   document.getElementById('mp-wo-info-alloc').textContent = `${fmt(totQty)} ekor / ${fmtKg(totKg)} kg`;
 
-  // ── Render kartu WS ──
-  const wsList = (wo.wo_workstations||[]).map(wws => ({
-    id:            wws.workstations?.id,
-    kode:          wws.workstations?.kode,
-    nama:          wws.workstations?.nama,
-    ws_target_kg:  wws.target_kg,
-    ws_target_ekor:wws.target_qty_ekor
-  })).filter(ws => ws.id);
-
-  if (!wsList.length) {
-    cardsEl.innerHTML = '<div style="text-align:center;padding:12px;color:#dc2626;font-size:12px">⚠️ Tidak ada WS yang di-assign ke WO ini.</div>';
-    return;
-  }
-
-  cardsEl.innerHTML = wsList.map(ws => {
-    const alloc      = allocMap[ws.id] || { kg: 0, qty: 0 };
-    const targetKg   = Number(ws.ws_target_kg)   || 0;
-    const targetEkor = Number(ws.ws_target_ekor) || 0;
-    const sisaKg     = Math.max(0, targetKg   - alloc.kg);
-    const sisaEkor   = Math.max(0, targetEkor - alloc.qty);
-    const pctKg      = targetKg > 0 ? Math.min(100, Math.round(alloc.kg / targetKg * 100)) : 0;
-    const full       = targetKg > 0 && alloc.kg >= targetKg;
-    const sisaColor  = sisaKg > 0 ? '#16a34a' : '#dc2626';
-    return `
-      <div class="ws-alloc-card" data-wsid="${ws.id}"
-           onclick="selectWsCard('${ws.id}', this)"
-           style="border:1.5px solid #d1d5db;border-radius:8px;padding:10px 12px;
-                  cursor:${full?'not-allowed':'pointer'};background:${full?'#f9fafb':'white'};
-                  opacity:${full?0.55:1};transition:border-color .15s,background .15s">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
-          <span style="font-weight:800;color:#374151;font-size:13px">${ws.kode} — ${ws.nama}</span>
-          ${full ? '<span style="font-size:10px;background:#e5e7eb;color:#6b7280;padding:2px 6px;border-radius:10px">PENUH</span>' : ''}
-        </div>
-        <div style="font-size:11px;color:#6b7280;display:flex;gap:14px;flex-wrap:wrap">
-          <span>Target: <strong style="color:#374151">${fmt(targetEkor)} ek / ${fmtKg(targetKg)}</strong></span>
-          <span>BB Terkirim: <strong style="color:#2563eb">${fmt(alloc.qty)} ek / ${fmtKg(alloc.kg)}</strong></span>
-          <span>Sisa: <strong style="color:${sisaColor}">${fmt(sisaEkor)} ek / ${fmtKg(sisaKg)}</strong></span>
-        </div>
-        <div style="margin-top:6px;background:#f3f4f6;border-radius:4px;height:4px;overflow:hidden">
-          <div style="height:100%;width:${pctKg}%;background:${pctKg>=100?'#dc2626':'#2563eb'};transition:width .3s"></div>
-        </div>
-      </div>`;
-  }).join('');
+  // Sembunyikan section WS cards — tidak diperlukan di Boneless
+  cardsEl.style.display = 'none';
 }
 
 function selectWsCard(wsId, el) {
@@ -1909,12 +1862,10 @@ async function doPindahKeluar() {
   }
 
   try {
-    // ── CASE: Alokasi langsung ke Work Station ──
+    // ── CASE: Alokasi ke Work Order Boneless (input di level WO, tidak per WS) ──
     if (selectedDest === 'WORKSTATION') {
       const woId = document.getElementById('mp-wo-select').value;
-      const wsId = selectedWsId;
       if (!woId) { showErr('mp-err','Pilih Work Order terlebih dahulu.'); return; }
-      if (!wsId) { showErr('mp-err','Pilih Workstation terlebih dahulu.'); return; }
 
       const { error: inpErr } = await db.from('processing_inputs').insert({
         order_id:       woId,
@@ -1924,7 +1875,6 @@ async function doPindahKeluar() {
         qty_input:      qtyPindah,
         kg_input:       kgPindah,
         kg_diambil:     kgPindah,
-        workstation_id: wsId,
         created_by:     currentUser.id
       });
       if (inpErr) throw inpErr;
@@ -1991,11 +1941,24 @@ async function doPindahKeluar() {
 // ============================================================
 // TAB 2 — HELPER: compute actual output from WO data
 // ============================================================
+// Klasifikasi output berdasarkan product_id dan kategori produk
+const BYPRODUCT_KATEGORI = ['BYPRODUCT_KARKAS', 'BYPRODUCT_PARTING', 'BYPRODUCT_BONELESS'];
+function classifyOutput(o, woProdukId) {
+  if (o.product_id === woProdukId) return 'MAIN';
+  if (BYPRODUCT_KATEGORI.includes(o.product_master?.kategori)) return 'BYPRODUCT';
+  return 'OTHER';
+}
+
 function getActualKg(wo) {
-  return (wo.processing_outputs||[]).filter(o=>o.output_type==='PRIMARY').reduce((s,o)=>s+(Number(o.kg_output)||0),0);
+  // Hanya hitung output yang produknya sesuai dengan target WO
+  return (wo.processing_outputs||[])
+    .filter(o => o.product_id === wo.produk_id)
+    .reduce((s,o) => s + (Number(o.kg_output)||0), 0);
 }
 function getActualQty(wo) {
-  return (wo.processing_outputs||[]).filter(o=>o.output_type==='PRIMARY').reduce((s,o)=>s+(Number(o.qty_output)||0),0);
+  return (wo.processing_outputs||[])
+    .filter(o => o.product_id === wo.produk_id)
+    .reduce((s,o) => s + (Number(o.qty_output)||0), 0);
 }
 function getSelisihPct(wo) {
   const actual = getActualKg(wo);
@@ -2011,11 +1974,17 @@ function progressBar(wo) {
   const sel  = getSelisihPct(wo);
   const col  = wo.status==='COMPLETED' ? '#16a34a'
               : pct>=100 ? '#d97706' : '#2563eb';
+  const outputs = wo.processing_outputs || [];
+  const woProdukId = wo.produk_id || null;
+  const othKg = outputs.filter(o => classifyOutput(o, woProdukId) === 'OTHER').reduce((s,o) => s+(Number(o.kg_output)||0), 0);
+  const byKg  = outputs.filter(o => classifyOutput(o, woProdukId) === 'BYPRODUCT').reduce((s,o) => s+(Number(o.kg_output)||0), 0);
   return `<div style="min-width:110px">
     <div style="height:7px;background:#e5e7eb;border-radius:4px;overflow:hidden;margin-bottom:3px">
       <div style="height:100%;width:${pct}%;border-radius:4px;background:${col}"></div>
     </div>
     <div style="font-size:11px;color:#6b7280">${fmtKg(actual)} / ${fmtKg(target)}${sel!=null?' ('+sel.toFixed(1)+'%)':''}</div>
+    ${othKg > 0 ? `<div style="font-size:10px;color:#6b7280">+${fmtKg(othKg)} others</div>` : ''}
+    ${byKg  > 0 ? `<div style="font-size:10px;color:#9d174d">+${fmtKg(byKg)} byproduct</div>` : ''}
   </div>`;
 }
 function statusBadge(s) {
@@ -2131,42 +2100,49 @@ async function renderWODetailContent(woId) {
     .select('id, workstation_id, kg_diambil, qty_input')
     .eq('order_id', woId);
   const { data: outputs } = await db.from('processing_outputs')
-    .select('id, workstation_id, kg_output, qty_output, output_type')
+    .select('id, workstation_id, kg_output, qty_output, output_type, product_id, product_master ( kategori )')
     .eq('order_id', woId);
 
   const iList = inputs  || [];
   const oList = outputs || [];
 
-  // Per-WS summary
+  // Total input WO (shared — tidak per WS di Boneless)
+  const totalInKg  = iList.reduce((s, i) => s + (Number(i.kg_diambil) || 0), 0);
+  const totalInQty = iList.reduce((s, i) => s + (Number(i.qty_input)  || 0), 0);
+
+  // Per-WS summary (dari wo_workstations yang auto-created saat output pertama dicatat)
+  const woProdukId = wo.produk_id || null;
   const wsRows = wwsList.map(wws => {
     const ws      = wws.workstations || {};
     const wsId    = wws.workstation_id;
-    const wsIn    = iList.filter(i => i.workstation_id === wsId);
     const wsOut   = oList.filter(o => o.workstation_id === wsId);
-    const inKg    = wsIn.reduce((s, i) => s + (Number(i.kg_diambil) || 0), 0);
-    const outKg   = wsOut.filter(o => o.output_type === 'PRIMARY').reduce((s, o) => s + (Number(o.kg_output) || 0), 0);
-    const byKg    = wsOut.filter(o => o.output_type === 'BYPRODUCT').reduce((s, o) => s + (Number(o.kg_output) || 0), 0);
-    const outQty  = wsOut.filter(o => o.output_type === 'PRIMARY').reduce((s, o) => s + (Number(o.qty_output) || 0), 0);
+    const outKg   = wsOut.filter(o => o.product_id === woProdukId).reduce((s, o) => s + (Number(o.kg_output) || 0), 0);
+    const othKg   = wsOut.filter(o => classifyOutput(o, woProdukId) === 'OTHER').reduce((s, o) => s + (Number(o.kg_output) || 0), 0);
+    const byKg    = wsOut.filter(o => classifyOutput(o, woProdukId) === 'BYPRODUCT').reduce((s, o) => s + (Number(o.kg_output) || 0), 0);
+    const outQty  = wsOut.filter(o => o.product_id === woProdukId).reduce((s, o) => s + (Number(o.qty_output) || 0), 0);
     const isOpen  = woDetailWSId === wsId;
-    return { ws, wsId, wws, wsIn, wsOut, inKg, outKg, byKg, outQty, isOpen };
+    return { ws, wsId, wws, wsOut, outKg, othKg, byKg, outQty, isOpen };
   });
 
-  // All inputs not tied to a WS
-  const noWSIn  = iList.filter(i => !i.workstation_id);
-  const noWSOut = oList.filter(o => !o.workstation_id);
+  let html = '<div style="padding:12px 16px 0">';
 
-  let html = '<div style="padding:12px 16px 0">' +
-    '<div class="tbl-wrap"><table class="tbl"><thead><tr>' +
+  // Input summary di level WO
+  html += '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px">' +
+    '📥 <strong>Input Bahan Baku WO (shared):</strong> ' +
+    iList.length + ' keranjang &nbsp;|&nbsp; ' + fmt(totalInQty) + ' ekor &nbsp;|&nbsp; <strong>' + fmtKg(totalInKg) + '</strong>' +
+  '</div>';
+
+  html += '<div class="tbl-wrap"><table class="tbl"><thead><tr>' +
       '<th>Workstation</th>' +
-      '<th>Input Bahan Baku</th>' +
-      '<th>Output Primary</th>' +
-      '<th>Output Byproduct</th>' +
+      '<th>Main Output</th>' +
+      '<th>Others</th>' +
+      '<th>Byproduct</th>' +
       '<th>Status WS</th>' +
       '<th>Rincian</th>' +
     '</tr></thead><tbody>';
 
   if (!wsRows.length) {
-    html += '<tr><td colspan="6" style="text-align:center;padding:16px;color:#9ca3af;font-size:12px">Belum ada workstation yang di-assign ke WO ini.</td></tr>';
+    html += '<tr><td colspan="6" style="text-align:center;padding:16px;color:#9ca3af;font-size:12px">Belum ada workstation yang mencatat output untuk WO ini.</td></tr>';
   } else {
     for (const r of wsRows) {
       const selesaiBadge = r.wws.selesai_at
@@ -2176,8 +2152,8 @@ async function renderWODetailContent(woId) {
         '<tr style="' + (r.isOpen ? 'background:#eff6ff' : '') + '">' +
           '<td style="font-weight:700">' + (r.ws.kode || '—') +
             '<div class="tbl-sub">' + (r.ws.nama || '') + '</div></td>' +
-          '<td>' + r.wsIn.length + ' keranjang<div class="tbl-sub">' + fmtKg(r.inKg) + '</div></td>' +
           '<td><strong>' + fmt(r.outQty) + ' ekor</strong><div class="tbl-sub">' + fmtKg(r.outKg) + '</div></td>' +
+          '<td>' + (r.othKg > 0 ? fmtKg(r.othKg) : '<span style="color:#9ca3af">—</span>') + '</td>' +
           '<td>' + (r.byKg > 0 ? fmtKg(r.byKg) : '<span style="color:#9ca3af">—</span>') + '</td>' +
           '<td>' + selesaiBadge + '</td>' +
           '<td><button class="btn btn-outline btn-sm" onclick="toggleWSRincian(\'' + woId + '\',\'' + r.wsId + '\')"' +
@@ -2192,17 +2168,6 @@ async function renderWODetailContent(woId) {
           '</div></td></tr>';
       }
     }
-  }
-
-  // Baris unassigned jika ada
-  if (noWSIn.length || noWSOut.length) {
-    const uInKg  = noWSIn.reduce((s, i) => s + (Number(i.kg_diambil) || 0), 0);
-    const uOutKg = noWSOut.filter(o => o.output_type === 'PRIMARY').reduce((s, o) => s + (Number(o.kg_output) || 0), 0);
-    html += '<tr style="background:#fefce8">' +
-      '<td style="color:#92400e;font-weight:700">⚠ Tidak ada WS<div class="tbl-sub">Belum di-assign ke WS</div></td>' +
-      '<td>' + noWSIn.length + ' keranjang<div class="tbl-sub">' + fmtKg(uInKg) + '</div></td>' +
-      '<td>' + fmtKg(uOutKg) + '</td><td>—</td><td>—</td><td>—</td>' +
-    '</tr>';
   }
 
   html += '</tbody></table></div></div>';
@@ -2231,15 +2196,18 @@ async function renderWSRincianContent(woId, wsId) {
   if (!container) return;
 
   try {
-    // Fetch inputs untuk WS ini dalam WO ini
+    // Ambil produk_id WO untuk klasifikasi output
+    const woRef      = activeWOs.find(w => w.id === woId) || closedWOs.find(w => w.id === woId);
+    const woProdukId = woRef?.produk_id || null;
+
+    // Fetch semua input WO (Boneless: input adalah shared di level WO, tidak per WS)
     const { data: inputs } = await db.from('processing_inputs')
       .select('id, kg_diambil, qty_input, baskets(basket_code, qty_sisa, kg_sisa, lokasi, status), product_master(nama_produk, product_code)')
-      .eq('order_id', woId)
-      .eq('workstation_id', wsId);
+      .eq('order_id', woId);
 
     // Fetch outputs untuk WS ini
     const { data: outputs } = await db.from('processing_outputs')
-      .select('id, qty_output, kg_output, output_type, baskets(basket_code, qty_sisa, kg_sisa, lokasi, status), product_master(nama_produk, product_code), users!worker_id(nama)')
+      .select('id, qty_output, kg_output, output_type, product_id, baskets(basket_code, qty_sisa, kg_sisa, lokasi, status), product_master(nama_produk, product_code, kategori), users!worker_id(nama)')
       .eq('order_id', woId)
       .eq('workstation_id', wsId)
       .order('created_at', { ascending: false });
@@ -2268,13 +2236,21 @@ async function renderWSRincianContent(woId, wsId) {
         }).join('') +
         '</tbody></table></div>';
     } else {
-      html += '<div style="color:#9ca3af;font-size:12px;padding:8px 0">Belum ada input untuk WS ini.</div>';
+      html += '<div style="color:#9ca3af;font-size:12px;padding:8px 0">Belum ada input bahan baku untuk WO ini.</div>';
     }
     html += '</div>';
 
     // OUTPUT TABLE
+    const rMainKg = oList.filter(o => classifyOutput(o, woProdukId) === 'MAIN').reduce((s, o) => s + (Number(o.kg_output) || 0), 0);
+    const rOthKg  = oList.filter(o => classifyOutput(o, woProdukId) === 'OTHER').reduce((s, o) => s + (Number(o.kg_output) || 0), 0);
+    const rByKg   = oList.filter(o => classifyOutput(o, woProdukId) === 'BYPRODUCT').reduce((s, o) => s + (Number(o.kg_output) || 0), 0);
     html += '<div>' +
-      '<div style="font-size:11px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">📦 Output Produksi (' + oList.length + ' keranjang)</div>';
+      '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">' +
+        '<div style="font-size:11px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:.5px">📦 Output Produksi (' + oList.length + ' keranjang)</div>' +
+        '<span class="panel-pill ok">' + fmtKg(rMainKg) + ' main</span>' +
+        (rOthKg  > 0 ? '<span class="panel-pill" style="background:#f3f4f6;color:#374151">' + fmtKg(rOthKg)  + ' others</span>'    : '') +
+        (rByKg   > 0 ? '<span class="panel-pill" style="background:#fce7f3;color:#9d174d">' + fmtKg(rByKg)   + ' byproduct</span>' : '') +
+      '</div>';
     if (oList.length) {
       html += '<div class="tbl-wrap"><table class="tbl"><thead><tr>' +
         '<th>Kode Keranjang</th><th>Produk</th><th>Qty / Kg</th><th>Tipe</th><th>Pekerja</th>' +
@@ -2282,9 +2258,12 @@ async function renderWSRincianContent(woId, wsId) {
         oList.map(out => {
           const bsk = out.baskets || {};
           const pm2 = out.product_master || {};
-          const typeBadge = out.output_type === 'PRIMARY'
-            ? '<span class="badge b-aktif">Primary</span>'
-            : '<span class="badge" style="background:#fce7f3;color:#9d174d">Byproduct</span>';
+          const cls = classifyOutput(out, woProdukId);
+          const typeBadge = cls === 'MAIN'
+            ? '<span class="badge b-aktif">Main</span>'
+            : cls === 'BYPRODUCT'
+              ? '<span class="badge" style="background:#fce7f3;color:#9d174d">Byproduct</span>'
+              : '<span class="badge" style="background:#f3f4f6;color:#374151">Others</span>';
           return '<tr>' +
             '<td style="font-family:monospace;font-size:12px;font-weight:700">' + (bsk.basket_code || '—') +
               (bsk.lokasi && bsk.lokasi !== 'BONELESS' ? '<div class="tbl-sub" style="color:#dc2626">Lokasi: ' + bsk.lokasi + '</div>' : '') + '</td>' +
@@ -2321,11 +2300,9 @@ function openAssignInput(woId) {
   setEl('ai-wo-code', wo.order_code);
   setEl('ai-produk',  pm.nama_produk||'—');
   setEl('ai-target',  `${fmtKg(wo.target_kg)} / ${fmt(wo.target_qty_ekor)} ekor`);
-  // WS dropdown (only WSs assigned to this WO)
-  const wsList = (wo.wo_workstations||[]).map(w=>w.workstations).filter(Boolean);
+  // Boneless: input di level WO (tidak perlu pilih WS)
   const wsSelect = document.getElementById('ai-ws');
-  wsSelect.innerHTML = '<option value="">— Pilih Workstation —</option>'
-    + wsList.map(ws=>`<option value="${ws.id}">${ws.kode} — ${ws.nama}</option>`).join('');
+  if (wsSelect) wsSelect.closest('.form-group') && (wsSelect.closest('.form-group').style.display = 'none');
   // Render assigned inputs & basket list
   renderAssignedInputs(wo);
   document.getElementById('ai-basket-search').value = '';
@@ -2342,16 +2319,14 @@ function renderAssignedInputs(wo) {
   const tbody  = document.getElementById('ai-assigned-tbody');
   if (!tbody) return;
   if (!inputs.length) {
-    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:8px;color:#9ca3af;font-size:12px">Belum ada input yang di-assign.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;padding:8px;color:#9ca3af;font-size:12px">Belum ada input yang dicatat.</td></tr>`;
     return;
   }
   tbody.innerHTML = inputs.map(inp => {
     const b  = bonelessStock.find(x=>x.id===inp.basket_id);
     const bCode = b?.basket_code || '(dipakai)';
-    const ws    = allWorkstations.find(w=>w.id===inp.workstation_id);
     return `<tr>
       <td style="font-family:monospace;font-size:11px">${bCode}</td>
-      <td>${ws?.kode||'—'}</td>
       <td>${fmtKg(inp.kg_diambil)}</td>
       <td><button class="btn btn-red btn-sm" style="font-size:10px;padding:3px 7px" onclick="removeInput('${inp.id}')">✗</button></td>
     </tr>`;
@@ -2412,11 +2387,9 @@ function selectInputBasket(basketId) {
 }
 
 async function doAssignInput() {
-  const wsId   = document.getElementById('ai-ws').value;
   const kg     = parseFloat(document.getElementById('ai-kg-diambil').value);
   const qty    = parseInt(document.getElementById('ai-qty-input').value);
   showErr('ai-err','');
-  if (!wsId)                { showErr('ai-err','Pilih workstation.'); return; }
   if (!selectedInputBasketId){ showErr('ai-err','Pilih keranjang sumber.'); return; }
   if (!qty||qty<=0)         { showErr('ai-err','Qty ekor harus lebih dari 0.'); return; }
   if (!kg||kg<=0)           { showErr('ai-err','Kg harus lebih dari 0.'); return; }
@@ -2437,11 +2410,11 @@ async function doAssignInput() {
   const btn = document.getElementById('ai-btn-ok');
   btn.disabled=true; btn.textContent='Menyimpan…';
   try {
+    // Boneless: input di level WO, tidak ada workstation_id
     const { error: inpErr } = await db.from('processing_inputs').insert({
       order_id:       currentInputWOId,
       basket_id:      selectedInputBasketId,
       product_id:     b.product_master?.id||null,
-      workstation_id: wsId,
       qty_input:      qty,
       kg_input:       kg,
       kg_diambil:     kg,
@@ -2704,9 +2677,9 @@ async function loadWSOutputsToday() {
   const { data } = await db
     .from('processing_outputs')
     .select(`
-      id, order_id, qty_output, kg_output, output_type, tanggal_produksi, basket_id, created_at,
-      processing_orders ( order_code ),
-      product_master ( id, nama_produk, product_code, kg_min, kg_max ),
+      id, order_id, qty_output, kg_output, output_type, tanggal_produksi, basket_id, created_at, product_id,
+      processing_orders ( order_code, produk_id ),
+      product_master ( id, nama_produk, product_code, kg_min, kg_max, kategori ),
       users!worker_id ( nama ),
       baskets ( id, basket_code, qty_sisa, kg_sisa, lokasi, status )
     `)
@@ -2782,14 +2755,13 @@ function renderWSWOList() {
     return;
   }
 
-  const wsWOs = activeWOs.filter(wo =>
-    (wo.wo_workstations || []).some(w => w.workstation_id === selectedWSId)
-  );
+  // Boneless: semua WO aktif tersedia untuk semua WS (tidak perlu pre-assign)
+  const wsWOs = activeWOs;
 
   if (pill) pill.textContent = `${wsWOs.length} WO`;
 
   if (!wsWOs.length) {
-    body.innerHTML = `<div class="empty" style="padding:28px"><div class="e-icon">📋</div>Tidak ada WO aktif untuk workstation ini.<br><span style="font-size:11px">Assign WO ke workstation ini terlebih dahulu di Tab Work Order.</span></div>`;
+    body.innerHTML = `<div class="empty" style="padding:28px"><div class="e-icon">📋</div>Tidak ada WO Boneless yang aktif.<br><span style="font-size:11px">Buat WO baru di modul Work Order.</span></div>`;
     return;
   }
 
@@ -2807,16 +2779,15 @@ function renderWSWOList() {
     ${wsWOs.map(wo => {
       const pm        = wo.product_master || {};
       const canRecord = ['OPEN', 'IN_PROGRESS'].includes(wo.status);
-      // Input progress: semua input WO ini (filter ke WS ini)
-      const wsInputs  = (wo.processing_inputs || []).filter(i => !i.workstation_id || i.workstation_id === selectedWSId);
+      // Input progress: semua input WO (di Boneless, input adalah shared di level WO)
+      const wsInputs  = wo.processing_inputs || [];
       const inputKg   = wsInputs.reduce((s, i) => s + (Number(i.kg_diambil) || 0), 0);
       const inputCount= wsInputs.length;
-      // Target per WS (dari wo_workstations) atau fallback WO target
-      const wws       = (wo.wo_workstations || []).find(w => w.workstation_id === selectedWSId);
-      const wsTargetKg= Number(wws?.target_kg || wo.target_kg || 0);
+      const wsTargetKg= Number(wo.target_kg || 0);
       const inputPct  = wsTargetKg > 0 ? Math.min(100, Math.round(inputKg / wsTargetKg * 100)) : null;
       const isExpanded= wsDetailWOId === wo.id;
-      // Selesai di WS state
+      // Selesai di WS state (auto-created saat output pertama dicatat)
+      const wws       = (wo.wo_workstations || []).find(w => w.workstation_id === selectedWSId);
       const sudahSelesai = !!(wws?.selesai_at);
       const selesaiLabel = sudahSelesai
         ? ('<span class="badge b-aktif" title="Selesai ' + fmtDT(wws.selesai_at) + ' oleh ' + (wws['users!selesai_by']?.nama || '—') + '">✅ Selesai</span>')
@@ -2863,9 +2834,9 @@ function renderWSOutputsToday() {
   }
 
   const totalKg = wsOutputsToday
-    .filter(o => o.output_type === 'PRIMARY')
+    .filter(o => o.product_id === (o.processing_orders?.produk_id))
     .reduce((s, o) => s + (Number(o.kg_output) || 0), 0);
-  if (pill) pill.textContent = `${wsOutputsToday.length} output · ${fmtKg(totalKg)}`;
+  if (pill) pill.textContent = `${wsOutputsToday.length} output · ${fmtKg(totalKg)} main`;
 
   if (!wsOutputsToday.length) {
     tbody.innerHTML = `<tr><td colspan="7"><div class="empty"><div class="e-icon">📦</div>Belum ada output hari ini untuk workstation ini.</div></td></tr>`;
@@ -2878,9 +2849,13 @@ function renderWSOutputsToday() {
     const pm       = o.product_master || {};
     const wo       = o.processing_orders || {};
     const isOut    = bsk.lokasi && bsk.lokasi !== 'BONELESS';
-    const typeBadge = o.output_type === 'PRIMARY'
-      ? '<span class="badge b-aktif">Primary</span>'
-      : '<span class="badge" style="background:#fce7f3;color:#9d174d">Byproduct</span>';
+    const woProdukId = wo.produk_id || null;
+    const cls = classifyOutput(o, woProdukId);
+    const typeBadge = cls === 'MAIN'
+      ? '<span class="badge b-aktif">Main</span>'
+      : cls === 'BYPRODUCT'
+        ? '<span class="badge" style="background:#fce7f3;color:#9d174d">Byproduct</span>'
+        : '<span class="badge" style="background:#f3f4f6;color:#374151">Others</span>';
     return `<tr>
       <td style="font-family:monospace;font-weight:700;font-size:12px">${bCode}
         ${isOut ? `<div class="tbl-sub" style="color:#dc2626">Sudah keluar: ${bsk.lokasi}</div>` : ''}</td>
@@ -2930,6 +2905,7 @@ function openRecordOutput(woId) {
   setEl('ro-wo-code', wo.order_code);
   const ws = allWorkstations.find(w => w.id === selectedWSId);
   setEl('ro-ws-name', ws ? `${ws.kode} — ${ws.nama}` : '—');
+  setEl('ro-wo-produk', pm.nama_produk ? `${pm.nama_produk} (${pm.product_code || ''})` : '—');
 
   const actualKg = getActualKg(wo);
   const pct      = wo.target_kg
@@ -2954,7 +2930,6 @@ function openRecordOutput(woId) {
   document.getElementById('ro-qty').value     = '';
   document.getElementById('ro-kg').value      = '';
   showErr('ro-err', '');
-  selectOutputType('PRIMARY');
   openModal('modal-record-output');
 }
 
@@ -3009,24 +2984,26 @@ async function doRecordOutput() {
     // 1. Generate basket code
     const basketCode = await generatePRTBasketCode();
 
-    // 2. Get product info for label
+    // 2. Get product info for label; auto-derive output_type from kategori
     const produk = allProducts.find(p => p.id === produkId) || {};
+    const autoOutputType = BYPRODUCT_KATEGORI.includes(produk.kategori) ? 'BYPRODUCT' : 'PRIMARY';
 
     // 3. Insert basket baru (lokasi BONELESS, status AKTIF)
     const { data: newBasket, error: bErr } = await db
       .from('baskets')
       .insert({
-        basket_code: basketCode,
-        basket_type: 'BONELESS',
-        product_id:  produkId,
-        batch_id:    null,
-        lokasi:      'BONELESS',
-        status:      'AKTIF',
-        qty_awal:    qty,
-        qty_sisa:    qty,
-        kg_awal:     Number(kg.toFixed(1)),
-        kg_sisa:     Number(kg.toFixed(1)),
-        created_by:  currentUser.id
+        basket_code:      basketCode,
+        basket_type:      'BONELESS',
+        product_id:       produkId,
+        batch_id:         null,
+        tanggal_produksi: tanggal,   // wajib untuk hitung umur di Chiller
+        lokasi:           'BONELESS',
+        status:           'AKTIF',
+        qty_awal:         qty,
+        qty_sisa:         qty,
+        kg_awal:          Number(kg.toFixed(1)),
+        kg_sisa:          Number(kg.toFixed(1)),
+        created_by:       currentUser.id
       })
       .select('id')
       .single();
@@ -3043,14 +3020,21 @@ async function doRecordOutput() {
         workstation_id:   selectedWSId,
         qty_output:       qty,
         kg_output:        Number(kg.toFixed(1)),
-        output_type:      selectedOutputType,
+        output_type:      autoOutputType,
         tanggal_produksi: tanggal,
         tujuan_lokasi:    'BONELESS',
         created_by:       currentUser.id
       });
     if (outErr) throw outErr;
 
-    // 5. Auto-set WO to IN_PROGRESS if still OPEN
+    // 5. Auto-register WS ke WO (upsert agar tidak duplikat)
+    await db.from('wo_workstations').upsert({
+      order_id:       currentOutputWOId,
+      workstation_id: selectedWSId,
+      assigned_by:    currentUser.id
+    }, { onConflict: 'order_id,workstation_id', ignoreDuplicates: true });
+
+    // 6. Auto-set WO to IN_PROGRESS if still OPEN
     const wo = activeWOs.find(w => w.id === currentOutputWOId);
     if (wo?.status === 'OPEN') {
       await db.from('processing_orders')
@@ -3058,7 +3042,7 @@ async function doRecordOutput() {
         .eq('id', currentOutputWOId);
     }
 
-    // 6. Prepare print data
+    // 7. Prepare print data
     const ws = allWorkstations.find(w => w.id === selectedWSId);
     lastPrintBasket = {
       basket_code:  basketCode,
@@ -3070,14 +3054,14 @@ async function doRecordOutput() {
       wo_catatan:   wo?.catatan || '',
       ws_kode:      ws?.kode || '—',
       tanggal,
-      output_type:  selectedOutputType,
+      output_type:  autoOutputType,
       worker_name:  currentUser.nama
     };
 
     showToast(`Keranjang ${basketCode} berhasil dicatat!`, 'success');
     closeModal('modal-record-output');
 
-    // 7. Reload data, then open print modal
+    // 8. Reload data, then open print modal
     await loadAll();
     showPrintModal(lastPrintBasket);
 
@@ -3210,7 +3194,8 @@ async function openWSDetail(woId) {
 async function renderWSDetailContent(woId) {
   const body = document.getElementById('ws-wo-detail-body');
   if (!body) return;
-  const wo = activeWOs.find(w => w.id === woId);
+  const wo = activeWOs.find(w => w.id === woId) || closedWOs.find(w => w.id === woId);
+  const woProdukId = wo?.produk_id || null;
 
   try {
     // Fetch inputs segar
@@ -3227,9 +3212,9 @@ async function renderWSDetailContent(woId) {
     // Gunakan hint FK "users!worker_id" karena processing_outputs punya 2 FK ke users
     const { data: outputs } = await db.from('processing_outputs')
       .select(`
-        id, qty_output, kg_output, output_type, tanggal_produksi, created_at,
+        id, qty_output, kg_output, output_type, tanggal_produksi, created_at, product_id,
         baskets ( id, basket_code, qty_sisa, kg_sisa, lokasi, status ),
-        product_master ( id, nama_produk, product_code, kg_min, kg_max ),
+        product_master ( id, nama_produk, product_code, kg_min, kg_max, kategori ),
         users!worker_id ( nama )
       `)
       .eq('order_id', woId)
@@ -3280,8 +3265,9 @@ async function renderWSDetailContent(woId) {
     };
 
     const totalInputKg  = iList.reduce((s,i) => s+(Number(i.kg_diambil)||0), 0);
-    const totalOutputKg = oList.filter(o=>o.output_type==='PRIMARY').reduce((s,o) => s+(Number(o.kg_output)||0), 0);
-    const totalByProdKg = oList.filter(o=>o.output_type==='BYPRODUCT').reduce((s,o) => s+(Number(o.kg_output)||0), 0);
+    const totalOutputKg = oList.filter(o=>classifyOutput(o,woProdukId)==='MAIN').reduce((s,o) => s+(Number(o.kg_output)||0), 0);
+    const totalOthKg    = oList.filter(o=>classifyOutput(o,woProdukId)==='OTHER').reduce((s,o) => s+(Number(o.kg_output)||0), 0);
+    const totalByProdKg = oList.filter(o=>classifyOutput(o,woProdukId)==='BYPRODUCT').reduce((s,o) => s+(Number(o.kg_output)||0), 0);
 
     body.innerHTML =
     // ── INPUT LIST ──
@@ -3325,7 +3311,8 @@ async function renderWSDetailContent(woId) {
     '<div style="border-top:1px solid #e5e7eb;padding:12px 16px 12px">' +
       '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">' +
         '<div style="font-size:12px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:.5px">📦 Output Produksi</div>' +
-        '<span class="panel-pill ok">' + oList.length + ' keranjang · ' + fmtKg(totalOutputKg) + ' primary</span>' +
+        '<span class="panel-pill ok">' + oList.length + ' keranjang · ' + fmtKg(totalOutputKg) + ' main</span>' +
+        (totalOthKg > 0 ? '<span class="panel-pill" style="background:#f3f4f6;color:#374151">' + fmtKg(totalOthKg) + ' others</span>' : '') +
         (totalByProdKg > 0 ? '<span class="panel-pill" style="background:#fce7f3;color:#9d174d">' + fmtKg(totalByProdKg) + ' byproduct</span>' : '') +
       '</div>' +
       (oList.length ?
@@ -3339,9 +3326,12 @@ async function renderWSDetailContent(woId) {
           const pm2 = out.product_master || {};
           const bid = bsk.id;
           const isOut = bsk.lokasi && bsk.lokasi !== 'BONELESS';
-          const typeBadge = out.output_type === 'PRIMARY'
-            ? '<span class="badge b-aktif">Primary</span>'
-            : '<span class="badge" style="background:#fce7f3;color:#9d174d">Byproduct</span>';
+          const cls2 = classifyOutput(out, woProdukId);
+          const typeBadge = cls2 === 'MAIN'
+            ? '<span class="badge b-aktif">Main</span>'
+            : cls2 === 'BYPRODUCT'
+              ? '<span class="badge" style="background:#fce7f3;color:#9d174d">Byproduct</span>'
+              : '<span class="badge" style="background:#f3f4f6;color:#374151">Others</span>';
           const ed = JSON.stringify({
             id: out.id, basket_id: bid, basket_code: bsk.basket_code,
             produk_name: pm2.nama_produk, produk_id: pm2.id,
