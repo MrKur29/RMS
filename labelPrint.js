@@ -75,19 +75,19 @@
       : '<div style="width:18mm;height:18mm;border:1px dashed #9ca3af;display:flex;align-items:center;justify-content:center;font-size:5pt;color:#9ca3af;text-align:center;line-height:1.2">QR gagal dibuat</div>';
 
     return (
-      '<div style="width:57mm;height:38mm;border:1px solid #374151;border-radius:2px;' +
+      '<div style="width:57mm;height:38mm;border:1px solid #000;border-radius:2px;' +
       'padding:1.5mm 2mm;font-family:Arial,sans-serif;background:#fff;display:flex;' +
       'gap:2mm;box-sizing:border-box">' +
       '<div style="flex-shrink:0;width:19mm;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0.8mm">' +
       qrBlock +
-      '<div style="font-size:5.5pt;font-weight:700;color:#111827;text-align:center;line-height:1.15;word-break:break-all;max-width:19mm">' + esc(data.code) + '</div>' +
+      '<div style="font-size:6pt;font-weight:700;color:#000;text-align:center;line-height:1.15;word-break:break-all;max-width:19mm">' + esc(data.code) + '</div>' +
       '</div>' +
       '<div style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;overflow:hidden;gap:1.1mm">' +
-      '<div style="font-size:10pt;font-weight:900;color:#111827;line-height:1.15;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">' + esc(data.namaProduk) + '</div>' +
-      '<div style="font-size:7pt;color:#374151;font-weight:700">' + esc(data.qtyText) + '</div>' +
-      '<div style="font-size:7pt;color:#374151;font-weight:700">' + esc(data.kgText) + '</div>' +
-      '<div style="font-size:6pt;color:#6b7280">Tgl Produksi: ' + esc(data.tglText) + '</div>' +
-      '<div style="font-size:6pt;color:#6b7280">' + esc(data.refLabel) + ': ' + esc(data.refValue) + '</div>' +
+      '<div style="font-size:10.5pt;font-weight:900;color:#000;line-height:1.15;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">' + esc(data.namaProduk) + '</div>' +
+      '<div style="font-size:7.5pt;color:#000;font-weight:700">' + esc(data.qtyText) + '</div>' +
+      '<div style="font-size:7.5pt;color:#000;font-weight:700">' + esc(data.kgText) + '</div>' +
+      '<div style="font-size:6.5pt;color:#000;font-weight:600">Tgl Produksi: ' + esc(data.tglText) + '</div>' +
+      '<div style="font-size:6.5pt;color:#000;font-weight:600">' + esc(data.refLabel) + ': ' + esc(data.refValue) + '</div>' +
       '</div>' +
       '</div>'
     );
@@ -97,7 +97,7 @@
   function printStandardLabel(data) {
     data = data || {};
     var html = buildStandardLabelHTML(data);
-    var win = window.open('', '_blank', 'width=340,height=280');
+    var win = window.open('', '_blank', 'width=900,height=700');
     if (!win) {
       alert('Popup diblokir browser — izinkan popup untuk halaman ini agar bisa mencetak label.');
       return;
