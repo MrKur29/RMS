@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preconnect" href="https://dxixqyokuqrdprupsvic.supabase.co" crossorigin>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="permissions.js"></script>
 <script src="viewstate.js"></script>
 <style>
 /* ===== RESET & BASE ===== */
@@ -752,8 +753,40 @@ const REFRESH_INTERVAL_MS = 30000; // 30 detik
 // ============================================================
 let currentUser       = null;
 let pendingTolakId    = null;
+let pendingTolakLokasi = null;
 let refreshTimer      = null;
 let clockTimer        = null;
+
+// ============================================================
+// PERMISSION: konfirmasi/tolak per lokasi tujuan
+// ============================================================
+// Setiap ke_lokasi di basket_movements dipetakan ke module key
+// permissions.js yang sesuai. User hanya boleh konfirmasi/tolak
+// perpindahan kalau punya akses operator/supervisor/admin ke
+// modul tujuan tersebut (viewer atau tanpa akses = tidak bisa).
+const LOKASI_MODULE_MAP = {
+    CHILLER:          'chiller',
+    PARTING:          'parting',
+    BONELESS:         'boneless',
+    MARINASI:         'marinasi',
+    BLASTING:         'blasting',
+    SOLD:             'penjualan',
+    LOADING:          'penjualan',
+    BYPRODUCT_DIRECT: 'byproduct',
+    LANTAI:           'karkas',
+    // MUSNAH sengaja tidak dipetakan — historinya tidak pernah dikirim lewat
+    // basket_movements (langsung set di baskets.lokasi), fail-closed by default.
+};
+
+function moduleRoleForLokasi(lokasi) {
+    const key = LOKASI_MODULE_MAP[lokasi];
+    if (!key) return currentUser?.is_system_admin ? 'admin' : null; // fail-closed
+    return RPA_PERM.getModuleRole(currentUser, key);
+}
+
+function canConfirmTo(lokasi) {
+    return RPA_PERM.canInput(moduleRoleForLokasi(lokasi));
+}
 
 // ============================================================
 // UTILITY
@@ -1161,6 +1194,16 @@ function renderPending(rows) {
 
     tbody.innerHTML = rows.map(r => {
         const m = menitLabel(r.menit_menunggu);
+        const boleh = canConfirmTo(r.ke_lokasi);
+        const aksi = boleh
+            ? `<button class="btn btn-ok" onclick="doKonfirmasi('${r.movement_id}','${r.basket_id}','${r.ke_lokasi}')">
+                    ✓ Konfirmasi
+                </button>
+                <button class="btn btn-no" style="margin-left:4px"
+                    onclick="openModalTolak('${r.movement_id}','${r.basket_code || r.movement_id}','${r.ke_lokasi}')">
+                    ✗ Tolak
+                </button>`
+            : `<span style="color:#9ca3af;font-size:11px">🔒 Tidak ada akses</span>`;
         return `<tr>
             <td><strong>${r.basket_code || '—'}</strong></td>
             <td>${r.nama_produk || '—'}</td>
@@ -1170,15 +1213,7 @@ function renderPending(rows) {
             <td>${fmt(r.kg_pindah, 2)} kg</td>
             <td>${r.submitted_oleh || '—'}</td>
             <td><span class="${m.cls}">${m.text}</span></td>
-            <td>
-                <button class="btn btn-ok" onclick="doKonfirmasi('${r.movement_id}','${r.basket_id}','${r.ke_lokasi}')">
-                    ✓ Konfirmasi
-                </button>
-                <button class="btn btn-no" style="margin-left:4px"
-                    onclick="openModalTolak('${r.movement_id}','${r.basket_code || r.movement_id}')">
-                    ✗ Tolak
-                </button>
-            </td>
+            <td>${aksi}</td>
         </tr>`;
     }).join('');
 }
@@ -1244,6 +1279,10 @@ function renderKoreksi(rows) {
 // AKSI: KONFIRMASI MOVEMENT
 // ============================================================
 async function doKonfirmasi(movementId, basketId, keLokasi) {
+    if (!canConfirmTo(keLokasi)) {
+        showToast('Anda tidak punya akses untuk konfirmasi ke ' + keLokasi, 'error');
+        return;
+    }
     try {
         const { data, error } = await db.rpc('konfirmasi_movement', {
             p_movement_id: movementId,
@@ -1265,8 +1304,13 @@ async function doKonfirmasi(movementId, basketId, keLokasi) {
 // ============================================================
 // AKSI: TOLAK MOVEMENT
 // ============================================================
-function openModalTolak(movementId, basketCode) {
+function openModalTolak(movementId, basketCode, keLokasi) {
+    if (!canConfirmTo(keLokasi)) {
+        showToast('Anda tidak punya akses untuk menolak perpindahan ke ' + keLokasi, 'error');
+        return;
+    }
     pendingTolakId = movementId;
+    pendingTolakLokasi = keLokasi;
     document.getElementById('modal-basket-info').textContent = basketCode;
     document.getElementById('inp-alasan').value = '';
     document.getElementById('modal-tolak').classList.add('open');
@@ -1276,6 +1320,11 @@ function openModalTolak(movementId, basketCode) {
 async function submitTolak() {
     const alasan = document.getElementById('inp-alasan').value.trim();
     if (!alasan) { showToast('Alasan penolakan wajib diisi', 'error'); return; }
+    if (!canConfirmTo(pendingTolakLokasi)) {
+        showToast('Anda tidak punya akses untuk menolak perpindahan ini', 'error');
+        closeModal();
+        return;
+    }
 
     try {
         const { error } = await db.rpc('tolak_movement', {
@@ -1308,6 +1357,7 @@ async function submitTolak() {
 function closeModal() {
     document.getElementById('modal-tolak').classList.remove('open');
     pendingTolakId = null;
+    pendingTolakLokasi = null;
 }
 
 document.getElementById('modal-tolak').addEventListener('click', function(e) {
