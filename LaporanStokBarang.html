@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Laporan Stok Barang — Kurnia's Food</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="permissions.js"></script>
+<script src="viewstate.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f2f5;color:#111827;font-size:14px}
+button{cursor:pointer;font-family:inherit}
+a{text-decoration:none}
+
+/* LOGIN */
+#login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(135deg,#0f172a 0%,#134e4a 60%,#0d9488 100%)}
+.login-card{background:white;border-radius:16px;padding:44px 40px;width:400px;box-shadow:0 25px 60px rgba(0,0,0,.4)}
+.login-logo{text-align:center;margin-bottom:36px}
+.login-logo .icon{font-size:48px;display:block;margin-bottom:12px}
+.login-logo h1{font-size:22px;font-weight:800;color:#111827}
+.login-logo p{font-size:13px;color:#6b7280;margin-top:4px}
+.form-group{margin-bottom:20px}
+.form-group label{display:block;font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
+.form-group input,.form-group select{width:100%;padding:11px 14px;border:1.5px solid #d1d5db;border-radius:8px;font-size:15px;transition:border-color .2s,box-shadow .2s;color:#111827;background:white;font-family:inherit}
+.form-group input:focus,.form-group select:focus{outline:none;border-color:#0d9488;box-shadow:0 0 0 3px rgba(13,148,136,.12)}
+.btn-login{width:100%;padding:13px;background:#0d9488;color:white;border:none;border-radius:8px;font-size:15px;font-weight:700;transition:background .2s}
+.btn-login:hover{background:#0f766e}
+.btn-login:disabled{background:#5eead4;cursor:not-allowed}
+.login-error{background:#fee2e2;color:#dc2626;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:18px;border:1px solid #fecaca;display:none}
+.login-version{text-align:center;margin-top:20px;font-size:11px;color:#9ca3af}
+
+/* APP LAYOUT */
+#app-screen{display:none;height:100vh;overflow:hidden}
+.app-layout{display:flex;height:100%}
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:90}
+.sidebar-overlay.visible{display:block}
+
+/* SIDEBAR */
+.sidebar{width:230px;flex-shrink:0;background:#0f172a;color:white;display:flex;flex-direction:column;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.1) transparent;transition:transform .28s cubic-bezier(.4,0,.2,1);z-index:100}
+.sidebar-brand{padding:20px 18px 16px;border-bottom:1px solid rgba(255,255,255,.08)}
+.sidebar-nav{flex:1;padding:10px 0}
+.nav-section-label{font-size:10px;font-weight:700;color:rgba(255,255,255,.3);text-transform:uppercase;letter-spacing:1px;padding:12px 18px 4px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 18px;font-size:13px;color:rgba(255,255,255,.65);cursor:pointer;transition:all .15s;border-left:3px solid transparent}
+.nav-item:hover:not(.disabled){background:rgba(255,255,255,.07);color:white}
+.nav-item.active{background:rgba(13,148,136,.2);color:#5eead4;border-left-color:#0d9488}
+.nav-item.disabled{opacity:.3;cursor:not-allowed}
+.nav-icon{font-size:15px;width:22px;text-align:center;flex-shrink:0}
+.nav-label-text{flex:1}
+.sidebar-footer{padding:14px 18px;border-top:1px solid rgba(255,255,255,.08)}
+.user-card{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.user-avatar{width:34px;height:34px;border-radius:50%;background:#0d9488;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:white;flex-shrink:0}
+.user-info-text .user-name{font-size:13px;font-weight:700;color:#f8fafc}
+.user-info-text .user-role{font-size:11px;color:rgba(255,255,255,.45);margin-top:1px}
+.btn-logout{width:100%;padding:8px 12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.6);border-radius:6px;font-size:12px;font-weight:600;transition:all .15s}
+.btn-logout:hover{background:rgba(220,38,38,.25);border-color:rgba(220,38,38,.5);color:#fca5a5}
+
+/* MAIN */
+.main-area{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.topbar{background:white;height:58px;padding:0 20px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e5e7eb;box-shadow:0 1px 4px rgba(0,0,0,.05);gap:12px}
+.topbar-left{display:flex;align-items:center;gap:12px;min-width:0}
+.topbar-left h1{font-size:17px;font-weight:800;color:#111827;white-space:nowrap}
+.topbar-left p{font-size:12px;color:#9ca3af;margin-top:1px}
+.topbar-left-text{min-width:0}
+.topbar-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.btn-hamburger{display:none;align-items:center;justify-content:center;width:40px;height:40px;border-radius:8px;background:#f3f4f6;border:1.5px solid #e5e7eb;font-size:18px;color:#374151;flex-shrink:0}
+.btn-hamburger:hover{background:#e5e7eb}
+.clock-display{font-size:14px;font-weight:700;color:#374151;background:#f9fafb;padding:6px 10px;border-radius:6px;border:1px solid #e5e7eb;white-space:nowrap}
+
+/* CONTENT */
+.content-area{flex:1;overflow-y:auto;padding:20px 24px 32px}
+
+/* PANEL */
+.panel{background:white;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden;margin-bottom:14px}
+.panel:last-child{margin-bottom:0}
+.panel-head{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:1px solid #f3f4f6;gap:8px;flex-wrap:wrap}
+.panel-title{font-size:14px;font-weight:800;color:#111827}
+.panel-body{padding:16px}
+
+.form-row{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
+.form-row .form-group{flex:1;margin-bottom:0;min-width:160px}
+.hint{font-size:11px;color:#9ca3af;margin-top:4px}
+.empty{text-align:center;padding:28px 16px;color:#9ca3af;font-size:13px}
+.chk-row{display:flex;align-items:center;gap:6px;font-size:12.5px;color:#374151;padding-bottom:9px}
+.chk-row input{width:auto}
+
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:9px 16px;border-radius:6px;border:none;font-size:13px;font-weight:700;transition:all .15s;min-height:38px;touch-action:manipulation;white-space:nowrap}
+.btn-primary{background:#0d9488;color:white}
+.btn-primary:hover{background:#0f766e}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-csv{background:#f0fdf4;color:#15803d;border:1.5px solid #86efac;padding:7px 12px;border-radius:6px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px;cursor:pointer;white-space:nowrap}
+.btn-csv:hover{background:#dcfce7}
+.btn-xlsx{background:#eff6ff;color:#1d4ed8;border:1.5px solid #93c5fd;padding:7px 12px;border-radius:6px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px;cursor:pointer;white-space:nowrap}
+.btn-xlsx:hover{background:#dbeafe}
+
+/* TABLE */
+.tbl-wrap{overflow-x:auto}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl thead th{text-align:left;padding:9px 12px;background:#f9fafb;font-size:10.5px;font-weight:800;color:#6b7280;text-transform:uppercase;letter-spacing:.3px;border-bottom:1.5px solid #e5e7eb;white-space:nowrap}
+.tbl tbody td{padding:9px 12px;border-bottom:1px solid #f3f4f6;vertical-align:top}
+.tbl tbody tr.row-clickable{cursor:pointer}
+.tbl tbody tr.row-clickable:hover{background:#f0fdfa}
+.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.produk-name{font-weight:700;color:#111827}
+.produk-code{font-size:11px;color:#9ca3af;margin-top:1px}
+.badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:10px;font-size:10.5px;font-weight:700;white-space:nowrap;background:#f3f4f6;color:#374151}
+.rpt-note{font-size:11.5px;color:#9ca3af;padding:12px 16px;border-top:1px solid #f3f4f6;line-height:1.6}
+.tot-row td{font-weight:800;background:#f9fafb}
+.arrow-cell{color:#0d9488;font-weight:800;text-align:center}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <span class="icon">🗃️</span>
+      <h1>RPA Management System</h1>
+      <p>Laporan Stok Barang — Login</p>
+    </div>
+    <div class="login-error" id="login-error"></div>
+    <div class="form-group">
+      <label>Username</label>
+      <input type="text" id="inp-username" placeholder="Masukkan username" autocomplete="username"
+             onkeydown="if(event.key==='Enter')document.getElementById('inp-password').focus()">
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input type="password" id="inp-password" placeholder="Masukkan password" autocomplete="current-password"
+             onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button class="btn-login" id="btn-login" onclick="doLogin()">Masuk →</button>
+    <p class="login-version">v1.0 — RPA System</p>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app-screen">
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+<div class="app-layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <img src="logo.png" style="height:36px;width:auto;object-fit:contain;">
+        <span style="font-size:15px;font-weight:800;color:#f8fafc;">Kurnia's Food</span>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section-label">Utama</div>
+      <div class="nav-item" onclick="navTo('Dashboard.html')">
+        <span class="nav-icon">🏠</span><span class="nav-label-text">Dashboard</span>
+      </div>
+      <div class="nav-section-label">Produksi</div>
+      <div class="nav-item" onclick="navTo('BatchAyamHidup.html')">
+        <span class="nav-icon">🐔</span><span class="nav-label-text">Batch Ayam Hidup</span>
+      </div>
+      <div class="nav-item" onclick="navTo('ProduksiKarkas.html')">
+        <span class="nav-icon">⚙️</span><span class="nav-label-text">Produksi Karkas</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Thawing.html')">
+        <span class="nav-icon">🌡️</span><span class="nav-label-text">Thawing</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Chiller.html')">
+        <span class="nav-icon">❄️</span><span class="nav-label-text">Chiller</span>
+      </div>
+      <div class="nav-item" onclick="navTo('WorkOrder.html')">
+        <span class="nav-icon">📋</span><span class="nav-label-text">Work Order</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Parting.html')">
+        <span class="nav-icon">✂️</span><span class="nav-label-text">Parting</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Boneless.html')">
+        <span class="nav-icon">🥩</span><span class="nav-label-text">Boneless</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Marinasi.html')">
+        <span class="nav-icon">🌶️</span><span class="nav-label-text">Marinasi</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Blasting.html')">
+        <span class="nav-icon">🧊</span><span class="nav-label-text">Blasting</span>
+      </div>
+      <div class="nav-item" onclick="navTo('ByProductKarkas.html')">
+        <span class="nav-icon">📦</span><span class="nav-label-text">By-product Karkas</span>
+      </div>
+      <div class="nav-section-label">Penjualan</div>
+      <div class="nav-item" onclick="navTo('Penjualan.html')"><span class="nav-icon">🛒</span><span class="nav-label-text">Penjualan</span></div>
+      <div class="nav-section-label">Manajemen</div>
+      <div class="nav-item" onclick="navTo('Koreksi.html')">
+        <span class="nav-icon">✅</span><span class="nav-label-text">Koreksi & Approval</span>
+      </div>
+      <div class="nav-item active" onclick="navTo('Laporan.html')">
+        <span class="nav-icon">📊</span><span class="nav-label-text">Laporan</span>
+      </div>
+      <div class="nav-item" onclick="navTo('MasterData.html')">
+        <span class="nav-icon">🗂️</span><span class="nav-label-text">Master Data</span>
+      </div>
+      <div class="nav-item" id="nav-user-mgmt" style="display:none" onclick="navTo('UserManagement.html')">
+        <span class="nav-icon">👥</span><span class="nav-label-text">Manajemen User</span>
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-card">
+        <div class="user-avatar" id="user-avatar">?</div>
+        <div class="user-info-text">
+          <div class="user-name" id="sidebar-name">—</div>
+          <div class="user-role" id="sidebar-role">—</div>
+        </div>
+      </div>
+      <button class="btn-logout" onclick="doLogout()">⬅ Keluar</button>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="main-area">
+    <div class="topbar">
+      <div class="topbar-left">
+        <button class="btn-hamburger" onclick="toggleSidebar()">☰</button>
+        <div class="topbar-left-text">
+          <h1>Laporan Stok Barang</h1>
+          <p id="topbar-date">—</p>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <div class="clock-display" id="clock">—</div>
+      </div>
+    </div>
+
+    <div class="content-area">
+
+      <!-- FILTER PANEL -->
+      <div class="panel">
+        <div class="panel-head">
+          <span class="panel-title">🔎 Filter Stok Barang</span>
+        </div>
+        <div class="panel-body">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Lokasi</label>
+              <select id="filter-lokasi">
+                <option value="LANTAI">Lantai (Produksi)</option>
+                <option value="CHILLER" selected>Chiller</option>
+                <option value="PARTING">Parting</option>
+                <option value="BONELESS">Boneless</option>
+                <option value="MARINASI">Marinasi</option>
+                <option value="BLASTING">Blasting</option>
+                <option value="LOADING">Loading</option>
+                <option value="SOLD">Terjual (Sold)</option>
+                <option value="BYPRODUCT_DIRECT">By-product Langsung</option>
+                <option value="MUSNAH">Musnah</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Tanggal Saldo Akhir</label>
+              <input type="date" id="filter-tgl-saldo">
+            </div>
+            <div class="chk-row">
+              <input type="checkbox" id="chk-tampilkan-nol">
+              <label for="chk-tampilkan-nol" style="text-transform:none;font-size:12.5px;font-weight:400">Sertakan saldo 0</label>
+            </div>
+            <div class="form-group" style="flex:0">
+              <button class="btn btn-primary" onclick="tampilkanStokBarang()">🗃️ Tampilkan</button>
+            </div>
+          </div>
+          <div class="hint">Menampilkan saldo tiap produk di lokasi terpilih, dihitung sampai dengan akhir hari pada tanggal saldo akhir. Klik salah satu baris untuk membuka kartu stok (riwayat transaksi) produk tersebut.</div>
+        </div>
+      </div>
+
+      <!-- RESULT -->
+      <div class="panel" id="panel-result" style="display:none">
+        <div class="panel-head">
+          <div>
+            <span class="panel-title" id="result-title">—</span>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn-csv" onclick="exportStokCSV()">⬇ CSV</button>
+            <button class="btn-xlsx" onclick="exportStokXLSX()">⬇ Excel</button>
+          </div>
+        </div>
+
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>Produk</th>
+                <th>Kategori</th>
+                <th class="num">Saldo Qty</th>
+                <th class="num">Saldo Kg</th>
+                <th style="width:30px"></th>
+              </tr>
+            </thead>
+            <tbody id="tbody-stok">
+              <tr><td colspan="5"><div class="empty">Pilih lokasi &amp; tanggal, lalu klik Tampilkan.</div></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="rpt-note">
+          Catatan: Saldo dihitung dari akumulasi pergerakan basket/keranjang — produksi awal, transfer antar lokasi, konsumsi ke proses lanjutan, hasil produksi baru, dan koreksi yang sudah disetujui — sampai dengan tanggal saldo akhir yang dipilih.
+          By-product Karkas dan Thawing memakai model stok terpisah sehingga belum tercakup di laporan ini.
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<script>
+const SUPABASE_URL = 'https://dxixqyokuqrdprupsvic.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR4aXhxeW9rdXFyZHBydXBzdmljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5NjM3ODcsImV4cCI6MjA5MjUzOTc4N30.D_yaPwNbe4FFg_hmDeJ9cuxzbNvXZT8l1_TyZuq1t1M';
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ── STATE ──
+let currentUser = null;
+let stokRows    = []; // hasil render terkini (utk export)
+
+// ── UTILS ──
+async function sha256(str) {
+  const buf = new TextEncoder().encode(str);
+  const hash = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+function fmtDateID(s){if(!s)return'—';return new Date(s+'T00:00:00').toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'})}
+function showToast(msg,type='success'){const t=document.getElementById('toast');t.textContent=msg;t.className=`show ${type}`;setTimeout(()=>{t.className=''},3800)}
+function navTo(url){closeSidebar();if(currentUser){localStorage.setItem('rpa_user',JSON.stringify(currentUser));sessionStorage.setItem('rpa_user',JSON.stringify(currentUser))}window.location.href=url}
+function esc(s){return (s==null?'':String(s)).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function num(n,dec=2){if(n==null||isNaN(n))return'—';return Number(n).toLocaleString('id-ID',{minimumFractionDigits:dec,maximumFractionDigits:dec})}
+function todayISO(){return new Date().toISOString().split('T')[0]}
+
+const LOKASI_LABEL = {
+  LANTAI:'Lantai', CHILLER:'Chiller', PARTING:'Parting', BONELESS:'Boneless',
+  MARINASI:'Marinasi', BLASTING:'Blasting', LOADING:'Loading', SOLD:'Terjual (Sold)',
+  BYPRODUCT_DIRECT:'By-product Langsung', MUSNAH:'Musnah'
+};
+function lokasiLabel(k){return LOKASI_LABEL[k]||k||'—'}
+
+function exportCSV(headers, rows, filename) {
+  const escCsv = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const lines = [headers.map(escCsv).join(','), ...rows.map(r => r.map(escCsv).join(','))];
+  const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+}
+function exportXLSX(headers, rows, sheetName, filename) {
+  if (typeof XLSX === 'undefined') { showToast('Library Excel belum dimuat. Coba refresh.', 'error'); return; }
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  XLSX.writeFile(wb, filename);
+}
+function todayFilename(prefix) {
+  return `${prefix}_${new Date().toISOString().slice(0,10)}.`;
+}
+
+// ── SIDEBAR ──
+function toggleSidebar(){const s=document.getElementById('sidebar'),o=document.getElementById('sidebar-overlay');s.classList.toggle('open');o.classList.toggle('visible')}
+function closeSidebar(){document.getElementById('sidebar')?.classList.remove('open');document.getElementById('sidebar-overlay')?.classList.remove('visible')}
+
+// ── AUTH ──
+async function doLogin(){
+  const username=document.getElementById('inp-username').value.trim();
+  const password=document.getElementById('inp-password').value;
+  const errEl=document.getElementById('login-error');
+  errEl.style.display='none';
+  if(!username||!password){errEl.textContent='Username dan password wajib diisi.';errEl.style.display='block';return}
+  const btn=document.getElementById('btn-login');
+  btn.disabled=true;btn.textContent='Memproses…';
+  try{
+    const hash=await sha256(password);
+    const{data,error}=await db.from('users').select('id,nama,username,role,aktif,pin,is_system_admin').eq('username',username).eq('password_hash',hash).eq('aktif',true).maybeSingle();
+    if(error)throw error;
+    if(!data){errEl.textContent='Username atau password salah.';errEl.style.display='block';return}
+    data.permissions=await RPA_PERM.fetchPermissions(db,data.id);
+    currentUser=data;localStorage.setItem('rpa_user',JSON.stringify(data));startApp();
+  }catch(e){errEl.textContent='Gagal terhubung ke server.';errEl.style.display='block';}
+  finally{btn.disabled=false;btn.textContent='Masuk →'}
+}
+function doLogout(){localStorage.removeItem('rpa_user');sessionStorage.removeItem('rpa_user');currentUser=null;document.getElementById('app-screen').style.display='none';document.getElementById('login-screen').style.display='flex'}
+
+function startApp(){
+  const moduleRole=RPA_PERM.enforceModuleAccess(currentUser,'laporan');
+  if(!moduleRole)return;
+  currentUser.moduleRole=moduleRole;
+
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('app-screen').style.display='block';
+  const av=document.getElementById('user-avatar');
+  if(av)av.textContent=(currentUser.nama||'?')[0].toUpperCase();
+  document.getElementById('sidebar-name').textContent=currentUser.nama;
+  document.getElementById('sidebar-role').textContent=currentUser.role+(currentUser.is_system_admin?' (Admin)':'');
+  if(currentUser.is_system_admin){const el=document.getElementById('nav-user-mgmt');if(el)el.style.display='flex'}
+  document.getElementById('filter-tgl-saldo').value = todayISO();
+  RPA_STATE.bindScroll('LaporanStokBarang');
+  startClock();
+}
+
+function startClock(){
+  function tick(){
+    const now=new Date();
+    document.getElementById('clock').textContent=now.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    document.getElementById('topbar-date').textContent=now.toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  }
+  tick();setInterval(tick,1000);
+}
+
+// ── AUTO LOGIN ──
+window.addEventListener('DOMContentLoaded',()=>{
+  const saved=localStorage.getItem('rpa_user')||sessionStorage.getItem('rpa_user');
+  if(saved){try{currentUser=JSON.parse(saved);startApp();}catch{}}
+});
+
+// ══════════════════════════════════════════════════════════════
+// STOK BARANG — QUERY & BUILD SALDO PER PRODUK
+// ══════════════════════════════════════════════════════════════
+async function tampilkanStokBarang(){
+  const lokasi = document.getElementById('filter-lokasi').value;
+  const asOfDate = document.getElementById('filter-tgl-saldo').value;
+  if(!asOfDate){showToast('Pilih tanggal saldo akhir.','warning');return}
+  const includeZero = document.getElementById('chk-tampilkan-nol').checked;
+
+  const panel=document.getElementById('panel-result');
+  panel.style.display='block';
+  document.getElementById('result-title').textContent = `Stok ${lokasiLabel(lokasi)} — per ${fmtDateID(asOfDate)}`;
+  document.getElementById('tbody-stok').innerHTML = '<tr><td colspan="5"><div class="empty">Memuat…</div></td></tr>';
+
+  try{
+    const agg = await buildStokAggregate(lokasi, asOfDate);
+    const productIds = Object.keys(agg);
+
+    let products = [];
+    if(productIds.length){
+      const { data, error } = await db.from('product_master')
+        .select('id,product_code,nama_produk,kategori,grade')
+        .in('id', productIds);
+      if(error) throw error;
+      products = data||[];
+    }
+    const productById = {};
+    products.forEach(p=>{productById[p.id]=p});
+
+    let rows = productIds.map(pid=>{
+      const a = agg[pid];
+      const saldoQty = (a.masuk_qty||0) - (a.keluar_qty||0);
+      const saldoKg  = (a.masuk_kg||0)  - (a.keluar_kg||0);
+      const p = productById[pid] || {product_code:'—', nama_produk:'(produk tidak dikenali)', kategori:'', grade:null};
+      return { product_id: pid, product_code:p.product_code, nama_produk:p.nama_produk, kategori:p.kategori, grade:p.grade, saldo_qty:saldoQty, saldo_kg:saldoKg };
+    });
+
+    if(!includeZero){
+      rows = rows.filter(r => Math.abs(r.saldo_qty) > 0.0001 || Math.abs(r.saldo_kg) > 0.0001);
+    }
+    rows.sort((a,b)=> a.nama_produk.localeCompare(b.nama_produk,'id'));
+
+    stokRows = rows;
+    renderStokTable(rows, lokasi, asOfDate);
+
+  }catch(e){
+    console.error(e);
+    document.getElementById('tbody-stok').innerHTML = '<tr><td colspan="5"><div class="empty">Gagal memuat data stok barang.</div></td></tr>';
+    showToast('Gagal memuat stok barang: '+(e.message||''),'error');
+  }
+}
+
+// Hitung agregat masuk/keluar per product_id di suatu lokasi, sampai dengan asOfDate (inklusif),
+// menggunakan model transaksi yang sama dengan Laporan Kartu Stok — namun tanpa filter produk,
+// lalu dikelompokkan per product_id.
+async function buildStokAggregate(lokasi, asOfDate){
+  const toBound = asOfDate+'T23:59:59';
+  const agg = {}; // product_id -> {masuk_qty,masuk_kg,keluar_qty,keluar_kg}
+  function add(pid, field, val){
+    if(!pid || !val) return;
+    if(!agg[pid]) agg[pid] = {masuk_qty:0,masuk_kg:0,keluar_qty:0,keluar_kg:0};
+    agg[pid][field] += val;
+  }
+
+  const tasks = [];
+
+  // A) Produksi karkas awal (basket lahir di LANTAI) — hanya relevan utk lokasi LANTAI
+  if(lokasi==='LANTAI'){
+    tasks.push(
+      db.from('baskets')
+        .select('product_id,qty_awal,kg_awal,created_at,carcass_baskets!inner(id)')
+        .lte('created_at',toBound)
+        .then(({data,error})=>{
+          if(error){console.error('buildStokAggregate A',error);return}
+          (data||[]).forEach(b=>{
+            add(b.product_id,'masuk_qty',Number(b.qty_awal)||0);
+            add(b.product_id,'masuk_kg', Number(b.kg_awal)||0);
+          });
+        })
+    );
+  }
+
+  // B) Transfer masuk ke lokasi (basket_movements CONFIRMED, ke_lokasi = lokasi)
+  tasks.push(
+    db.from('basket_movements')
+      .select('qty_pindah,kg_pindah,confirmed_at,status,baskets!inner(product_id)')
+      .eq('ke_lokasi',lokasi)
+      .eq('status','CONFIRMED')
+      .lte('confirmed_at',toBound)
+      .then(({data,error})=>{
+        if(error){console.error('buildStokAggregate B',error);return}
+        (data||[]).forEach(m=>{
+          const pid = m.baskets?.product_id;
+          add(pid,'masuk_qty',Number(m.qty_pindah)||0);
+          add(pid,'masuk_kg', Number(m.kg_pindah)||0);
+        });
+      })
+  );
+
+  // C) Transfer keluar dari lokasi (basket_movements — semua status, dikurangi sejak dikirim)
+  tasks.push(
+    db.from('basket_movements')
+      .select('qty_pindah,kg_pindah,created_at,baskets!inner(product_id)')
+      .eq('dari_lokasi',lokasi)
+      .lte('created_at',toBound)
+      .then(({data,error})=>{
+        if(error){console.error('buildStokAggregate C',error);return}
+        (data||[]).forEach(m=>{
+          const pid = m.baskets?.product_id;
+          add(pid,'keluar_qty',Number(m.qty_pindah)||0);
+          add(pid,'keluar_kg', Number(m.kg_pindah)||0);
+        });
+      })
+  );
+
+  // D) Konsumsi ke Work Order (processing_inputs) — keluar, lokasi = processing_orders.tipe
+  tasks.push(
+    db.from('processing_inputs')
+      .select('product_id,qty_input,kg_input,created_at,processing_orders!inner(tipe)')
+      .eq('processing_orders.tipe',lokasi)
+      .lte('created_at',toBound)
+      .then(({data,error})=>{
+        if(error){console.error('buildStokAggregate D',error);return}
+        (data||[]).forEach(pi=>{
+          add(pi.product_id,'keluar_qty',Number(pi.qty_input)||0);
+          add(pi.product_id,'keluar_kg', Number(pi.kg_input)||0);
+        });
+      })
+  );
+
+  // E) Hasil produksi (processing_outputs) — masuk, tujuan_lokasi = lokasi
+  tasks.push(
+    db.from('processing_outputs')
+      .select('product_id,qty_output,kg_output,created_at')
+      .eq('tujuan_lokasi',lokasi)
+      .lte('created_at',toBound)
+      .then(({data,error})=>{
+        if(error){console.error('buildStokAggregate E',error);return}
+        (data||[]).forEach(po=>{
+          add(po.product_id,'masuk_qty',Number(po.qty_output)||0);
+          add(po.product_id,'masuk_kg', Number(po.kg_output)||0);
+        });
+      })
+  );
+
+  // F) Koreksi disetujui pada basket yang SAAT INI berada di lokasi ini
+  //    (record_id di corrections bersifat polimorfik / tanpa FK, jadi diselesaikan 2 langkah)
+  tasks.push(
+    (async()=>{
+      const { data: baskets, error: bErr } = await db.from('baskets')
+        .select('id,product_id')
+        .eq('lokasi',lokasi);
+      if(bErr){console.error('buildStokAggregate F (baskets)',bErr);return}
+      const basketIds = (baskets||[]).map(b=>b.id);
+      if(!basketIds.length) return;
+      const productByBasket = {};
+      (baskets||[]).forEach(b=>{productByBasket[b.id]=b.product_id});
+
+      const { data, error } = await db.from('corrections')
+        .select('record_id,field_salah,nilai_lama,nilai_baru,reviewed_at')
+        .eq('tabel_terkait','baskets')
+        .eq('status','APPROVED')
+        .in('record_id',basketIds)
+        .in('field_salah',['qty_sisa','kg_sisa','qty_awal','kg_awal'])
+        .lte('reviewed_at',toBound);
+      if(error){console.error('buildStokAggregate F (corrections)',error);return}
+      (data||[]).forEach(c=>{
+        const pid = productByBasket[c.record_id];
+        const lama=parseFloat(c.nilai_lama); const baru=parseFloat(c.nilai_baru);
+        const delta = (isNaN(baru)?0:baru) - (isNaN(lama)?0:lama);
+        if(!delta) return;
+        const isKg = c.field_salah.startsWith('kg');
+        if(isKg){
+          if(delta>0) add(pid,'masuk_kg',delta); else add(pid,'keluar_kg',-delta);
+        } else {
+          if(delta>0) add(pid,'masuk_qty',delta); else add(pid,'keluar_qty',-delta);
+        }
+      });
+    })()
+  );
+
+  await Promise.all(tasks);
+  return agg;
+}
+
+function renderStokTable(rows, lokasi, asOfDate){
+  const tbody=document.getElementById('tbody-stok');
+  if(!rows.length){
+    tbody.innerHTML = '<tr><td colspan="5"><div class="empty">Tidak ada stok pada lokasi &amp; tanggal ini.</div></td></tr>';
+    return;
+  }
+  const totQty = rows.reduce((s,r)=>s+r.saldo_qty,0);
+  const totKg  = rows.reduce((s,r)=>s+r.saldo_kg,0);
+  let html = rows.map(r=>`
+    <tr class="row-clickable" onclick="bukaKartuStok('${r.product_id}','${lokasi}','${asOfDate}')">
+      <td>
+        <div class="produk-name">${esc(r.nama_produk)}</div>
+        <div class="produk-code">${esc(r.product_code)}</div>
+      </td>
+      <td>${esc(r.kategori)||'—'}${r.grade?' <span class="badge">Grade '+esc(r.grade)+'</span>':''}</td>
+      <td class="num">${num(r.saldo_qty)}</td>
+      <td class="num">${num(r.saldo_kg)}</td>
+      <td class="arrow-cell">→</td>
+    </tr>`).join('');
+  html += `<tr class="tot-row"><td>TOTAL</td><td></td><td class="num">${num(totQty)}</td><td class="num">${num(totKg)}</td><td></td></tr>`;
+  tbody.innerHTML = html;
+}
+
+function bukaKartuStok(productId, lokasi, asOfDate){
+  const params = new URLSearchParams({ produk_id: productId, lokasi: lokasi, sampai: asOfDate });
+  navTo('LaporanKartuStok.html?'+params.toString());
+}
+
+// ══════════════════════════════════════════════════════════════
+// EXPORT
+// ══════════════════════════════════════════════════════════════
+function exportStokCSV(){
+  if(!stokRows.length){showToast('Belum ada data untuk diekspor.','warning');return}
+  const lokasi = document.getElementById('filter-lokasi').value;
+  const asOfDate = document.getElementById('filter-tgl-saldo').value;
+  const headers = ['Kode Produk','Nama Produk','Kategori','Grade','Saldo Qty','Saldo Kg'];
+  const rows = stokRows.map(r=>[r.product_code, r.nama_produk, r.kategori||'', r.grade||'', r.saldo_qty, r.saldo_kg]);
+  exportCSV(headers, rows, todayFilename(`stokbarang_${lokasi}_${asOfDate}`) + 'csv');
+}
+function exportStokXLSX(){
+  if(!stokRows.length){showToast('Belum ada data untuk diekspor.','warning');return}
+  const lokasi = document.getElementById('filter-lokasi').value;
+  const asOfDate = document.getElementById('filter-tgl-saldo').value;
+  const headers = ['Kode Produk','Nama Produk','Kategori','Grade','Saldo Qty','Saldo Kg'];
+  const rows = stokRows.map(r=>[r.product_code, r.nama_produk, r.kategori||'', r.grade||'', r.saldo_qty, r.saldo_kg]);
+  exportXLSX(headers, rows, 'Stok Barang', todayFilename(`stokbarang_${lokasi}_${asOfDate}`) + 'xlsx');
+}
+</script>
+</body>
+</html>
