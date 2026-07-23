@@ -5,7 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Produksi Karkas — Kurnia's Food</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="permissions.js"></script>
+<script src="viewstate.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="labelPrint.js"></script>
 <style>
 /* ===== RESET & BASE ===== */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -284,90 +287,6 @@ a{text-decoration:none}
 .rusak-catatan{font-size:11px;color:#6b7280;margin-top:2px}
 .rusak-status{flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:6px}
 
-/* ===== PRINT STYLES — LABEL 57×38mm ===== */
-@media print {
-  @page { size: 57mm 38mm; margin: 0; }
-  body > *:not(#label-print-area) { display: none !important; }
-  #label-print-area { display: block !important; }
-  #label-print-area * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-}
-#label-print-area {
-  display: none;
-  width: 57mm;
-  height: 38mm;
-  padding: 1.5mm 2mm;
-  font-family: Arial, sans-serif;
-  overflow: hidden;
-  box-sizing: border-box;
-  background: white;
-}
-.label-inner {
-  display: flex;
-  gap: 2mm;
-  height: 100%;
-  align-items: center;
-}
-.label-qr {
-  flex-shrink: 0;
-  width: 20mm;
-  height: 20mm;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.label-qr img, .label-qr canvas {
-  width: 20mm !important;
-  height: 20mm !important;
-}
-.label-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  height: 100%;
-  overflow: hidden;
-}
-.label-code {
-  font-size: 6.5pt;
-  font-weight: 700;
-  color: #111;
-  letter-spacing: .3px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.label-batch {
-  font-size: 6pt;
-  color: #444;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.label-grade-uk {
-  font-size: 9pt;
-  font-weight: 900;
-  color: #000;
-  line-height: 1.2;
-}
-.label-qty-kg {
-  font-size: 7.5pt;
-  font-weight: 700;
-  color: #111;
-}
-.label-avg {
-  font-size: 6pt;
-  color: #555;
-}
-.label-date {
-  font-size: 5.5pt;
-  color: #777;
-}
-.label-divider {
-  border: none;
-  border-top: 0.3mm solid #ccc;
-  margin: 0.5mm 0;
-}
-
 /* ===== RESPONSIVE ===== */
 @media (max-width: 1200px) { .prod-grid { grid-template-columns: 1fr 320px; } }
 @media (max-width: 1023px) {
@@ -449,10 +368,10 @@ a{text-decoration:none}
       <div class="nav-item" onclick="navTo('Blasting.html')"><span class="nav-icon">🧊</span><span class="nav-label-text">Blasting</span></div>
       <div class="nav-item" onclick="navTo('ByProductKarkas.html')"><span class="nav-icon">📦</span><span class="nav-label-text">By-product Karkas</span></div>
       <div class="nav-section-label">Penjualan</div>
-      <div class="nav-item disabled"><span class="nav-icon">🛒</span><span class="nav-label-text">Penjualan</span></div>
+      <div class="nav-item" onclick="navTo('Penjualan.html')"><span class="nav-icon">🛒</span><span class="nav-label-text">Penjualan</span></div>
       <div class="nav-section-label">Manajemen</div>
       <div class="nav-item disabled"><span class="nav-icon">✅</span><span class="nav-label-text">Koreksi &amp; Approval</span></div>
-      <div class="nav-item disabled"><span class="nav-icon">📊</span><span class="nav-label-text">Traceability</span></div>
+      <div class="nav-item" onclick="navTo('Laporan.html')"><span class="nav-icon">📊</span><span class="nav-label-text">Laporan</span></div>
       <div class="nav-item" onclick="navTo('MasterData.html')"><span class="nav-icon">🗂️</span><span class="nav-label-text">Master Data</span></div>
       <div class="nav-item" id="nav-user-mgmt" style="display:none" onclick="navTo('UserManagement.html')"><span class="nav-icon">👥</span><span class="nav-label-text">Manajemen User</span></div>
     </nav>
@@ -560,8 +479,8 @@ a{text-decoration:none}
               <div class="panel-head">
                 <span class="panel-title">🗂️ Keranjang Tercatat</span>
                 <div class="panel-actions">
-                  <button class="btn btn-amber btn-sm" onclick="openModalRusak()">⚠️ Catat Rusak</button>
-                  <button class="btn-baru btn-sm" onclick="openModalKeranjang()">＋ Tambah Keranjang</button>
+                  <button class="btn btn-amber btn-sm" id="btn-catat-rusak" onclick="openModalRusak()">⚠️ Catat Rusak</button>
+                  <button class="btn-baru btn-sm" id="btn-tambah-keranjang" onclick="openModalKeranjang()">＋ Tambah Keranjang</button>
                 </div>
               </div>
               <div class="tbl-wrap">
@@ -670,7 +589,7 @@ a{text-decoration:none}
             Batch: <strong id="bottom-batch-code">—</strong> &nbsp;|&nbsp;
             Ekor batch: <strong id="bottom-ekor-batch">—</strong>
           </div>
-          <button class="btn-tutup-sesi" onclick="openModalClose()">
+          <button class="btn-tutup-sesi" id="btn-tutup-sesi" onclick="openModalClose()">
             🔒 Tutup Sesi Produksi
           </button>
         </div>
@@ -924,21 +843,6 @@ a{text-decoration:none}
 <!-- ==================== TOAST ==================== -->
 <div id="toast"></div>
 
-<!-- ==================== LABEL PRINT AREA ==================== -->
-<div id="label-print-area">
-  <div class="label-inner">
-    <div class="label-qr" id="label-qr-container"></div>
-    <div class="label-info">
-      <div class="label-code" id="lbl-code">—</div>
-      <div class="label-batch" id="lbl-batch">—</div>
-      <hr class="label-divider">
-      <div class="label-grade-uk" id="lbl-grade-uk">—</div>
-      <div class="label-qty-kg" id="lbl-qty-kg">—</div>
-      <div class="label-avg" id="lbl-avg">—</div>
-      <div class="label-date" id="lbl-date">—</div>
-    </div>
-  </div>
-</div>
 
 <!-- ==================== SCRIPT ==================== -->
 <script>
@@ -958,6 +862,7 @@ let lantaiBaskets  = [];     // baskets at LANTAI for current batch
 let rusakList      = [];     // karkas_rusak for current session
 let scanResultBasket = null; // currently scanned basket (baskets row)
 let lastSavedBasket  = null; // after simpan, for pindah sekarang
+let currentLabelData = null; // data label standar siap cetak (lihat labelPrint.js)
 let clockTimer = null;
 
 // ============================================================
@@ -1033,8 +938,9 @@ async function doLogin() {
     if (error) throw error;
     if (!data) { showLoginErr('Username atau password salah.'); return; }
     currentUser = data;
-    localStorage.setItem('rpa_user', JSON.stringify(data));
-    startApp();
+    currentUser.permissions = await RPA_PERM.fetchPermissions(db, currentUser.id);
+    localStorage.setItem('rpa_user', JSON.stringify(currentUser));
+    await startApp();
   } catch(e) {
     console.error(e);
     showLoginErr('Gagal terhubung ke server. Periksa koneksi internet.');
@@ -1053,7 +959,12 @@ function doLogout() {
   document.getElementById('app-screen').style.display = 'none';
   document.getElementById('login-screen').style.display = 'flex';
 }
-function startApp() {
+async function startApp() {
+  // Enforce per-module access (user_module_permissions) before rendering the app shell.
+  const moduleRole = RPA_PERM.enforceModuleAccess(currentUser, 'karkas');
+  if (!moduleRole) return; // access denied — enforceModuleAccess already shows toast/alert + redirects
+  currentUser.moduleRole = moduleRole;
+
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app-screen').style.display = 'block';
   // Sidebar user info
@@ -1070,9 +981,18 @@ function startApp() {
   clockTimer = setInterval(updateClock, 1000);
   // Date
   setEl('topbar-date', new Date().toLocaleDateString('id-ID', {weekday:'long', day:'2-digit', month:'long', year:'numeric'}));
-  // Default filter tanggal = hari ini
+  // Default filter tanggal = hari ini — kecuali ada filter tersimpan sebelumnya
+  const restoredFilters = RPA_STATE.bindFilters('ProduksiKarkas', ['.batch-bar']);
   const dateInput = document.getElementById('inp-filter-date');
-  if (dateInput) dateInput.value = todayISO();
+  if (dateInput && !restoredFilters) dateInput.value = todayISO();
+  RPA_STATE.bindScroll('ProduksiKarkas');
+  // View-only module role (e.g. 'viewer') — disable primary add/save actions for this module
+  if (RPA_PERM.isViewOnly(currentUser.moduleRole)) {
+    ['btn-tambah-keranjang', 'btn-catat-rusak', 'btn-buka-sesi', 'btn-tutup-sesi'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.disabled = true;
+    });
+  }
   // Load
   loadMasterProducts();
   loadBatches();
@@ -1129,7 +1049,9 @@ async function loadBatches() {
     .order('created_at', {ascending: false});   // semua status: DRAFT, ACTIVE, COMPLETE
 
   const sel = document.getElementById('sel-batch');
-  const prev = sel.value;
+  // Kalau select masih kosong (baru load halaman), pakai batch yg tersimpan dari
+  // kunjungan sebelumnya sebagai fallback, supaya pilihan batch tidak reset.
+  const prev = sel.value || RPA_STATE.getFields('ProduksiKarkas')['sel-batch'] || '';
   sel.innerHTML = '<option value="">— Pilih Batch —</option>';
 
   const statusLbl = { DRAFT:'Draft', ACTIVE:'Aktif', COMPLETE:'Selesai' };
@@ -1140,6 +1062,7 @@ async function loadBatches() {
     opt.textContent = `${b.batch_code} [${statusLbl[b.status] || b.status}] — ${ekor} ekor`;
     opt.dataset.batchCode   = b.batch_code;
     opt.dataset.batchStatus = b.status;
+    opt.dataset.tanggal     = b.tanggal || '';
     opt.dataset.ekorTimbang = b.ekor_timbang_ulang || 0;
     opt.dataset.ekorMati    = b.ekor_mati || 0;
     opt.dataset.ekorKandang = b.ekor_kandang || 0;
@@ -1165,6 +1088,7 @@ async function onBatchChange() {
     id: batchId,
     batch_code: opt.dataset.batchCode,
     status: opt.dataset.batchStatus,
+    tanggal: opt.dataset.tanggal || null,
     ekor_timbang_ulang: parseInt(opt.dataset.ekorTimbang) || 0,
     ekor_mati: parseInt(opt.dataset.ekorMati) || 0,
     ekor_kandang: parseInt(opt.dataset.ekorKandang) || 0
@@ -1905,55 +1829,48 @@ async function pindahDariModal(dest) {
 }
 
 // ============================================================
-// PRINT LABEL
+// PRINT LABEL (format standar 57x38mm, lihat labelPrint.js)
 // ============================================================
+function toLabelData(basket) {
+  const batch = basket.batch_code || currentBatch?.batch_code || '—';
+  const namaProduk = basket.product_code || basket.nama_produk || '—';
+  const tglSrc = basket.tanggal_produksi || currentBatch?.tanggal;
+  const tglFmt = tglSrc
+    ? new Date(tglSrc + 'T00:00:00').toLocaleDateString('id-ID', { day:'2-digit', month:'short', year:'numeric' })
+    : '—';
+  return {
+    code:       basket.basket_code || '—',
+    namaProduk,
+    qtyText:    `${fmt(basket.qty)} ekor`,
+    kgText:     fmtKg(basket.kg),
+    tglText:    tglFmt,
+    refLabel:   'No Batch',
+    refValue:   batch
+  };
+}
+
 function prepareLabelContent(basket) {
-  const code = basket.basket_code;
-  const batch = basket.batch_code || currentBatch.batch_code;
-  // product info: try from product_code field or fallback
-  const prodText = basket.product_code || basket.nama_produk || '—';
-  setEl('lbl-code', code);
-  setEl('lbl-batch', `Batch: ${batch}`);
-  setEl('lbl-grade-uk', prodText);
-  setEl('lbl-qty-kg', `${fmt(basket.qty)} ekor  |  ${fmtKg(basket.kg)}`);
-  setEl('lbl-avg', `Avg: ${basket.avg ? basket.avg.toFixed(4) : '—'} kg/ekor`);
-  setEl('lbl-date', fmtDT(new Date().toISOString()));
-  // Generate QR
-  const qrContainer = document.getElementById('label-qr-container');
-  qrContainer.innerHTML = '';
-  try {
-    new QRCode(qrContainer, {
-      text: code,
-      width: 76,  // ~20mm at 96dpi
-      height: 76,
-      colorDark: '#000000',
-      colorLight: '#ffffff',
-      correctLevel: QRCode.CorrectLevel.M
-    });
-  } catch(e) { console.error('QR gen error:', e); }
+  currentLabelData = toLabelData(basket);
 }
 function printCurrentLabel() {
-  window.print();
+  if (!currentLabelData) return;
+  RPALabel.printStandardLabel(currentLabelData);
 }
 async function printLabelById(basketId, basketCode) {
   // Fetch basket + product
   const { data } = await db.from('baskets')
-    .select('id, basket_code, qty_sisa, kg_sisa, created_at, product:product_id(nama_produk, product_code)')
+    .select('id, basket_code, qty_sisa, kg_sisa, tanggal_produksi, product:product_id(nama_produk, product_code)')
     .eq('id', basketId).single();
   if (!data) { showToast('Data keranjang tidak ditemukan', 'error'); return; }
-  // Find avg from carcass_baskets
-  const { data: cb } = await db.from('carcass_baskets')
-    .select('avg_kg').eq('basket_id', basketId).maybeSingle();
   const fakeBasket = {
-    basket_code: data.basket_code,
-    batch_code: currentBatch.batch_code,
-    product_code: data.product?.nama_produk || '',
-    qty: data.qty_sisa,
-    kg: data.kg_sisa,
-    avg: cb?.avg_kg
+    basket_code:      data.basket_code,
+    batch_code:       currentBatch?.batch_code,
+    product_code:     data.product?.nama_produk || '',
+    qty:              data.qty_sisa,
+    kg:               data.kg_sisa,
+    tanggal_produksi: data.tanggal_produksi
   };
-  prepareLabelContent(fakeBasket);
-  setTimeout(() => window.print(), 200);
+  RPALabel.printStandardLabel(toLabelData(fakeBasket));
 }
 
 // ============================================================
@@ -2267,7 +2184,15 @@ async function verifySupervisorPin(pin) {
     .eq('role', 'SUPERVISOR')
     .eq('aktif', true);
   const sup = (data || []).find(u => u.pin === pin);
-  return sup || null;
+  if (sup) return sup;
+  // Extend legacy SUPERVISOR-role check: a user whose per-module role for
+  // 'karkas' (user_module_permissions) grants approval rights — admin or
+  // supervisor — can also approve/override using their own PIN, even if
+  // their legacy users.role column isn't SUPERVISOR.
+  if (currentUser && pin === currentUser.pin && RPA_PERM.canApprove(currentUser.moduleRole)) {
+    return currentUser;
+  }
+  return null;
 }
 function clearPinError(elId) {
   const el = document.getElementById(elId);
@@ -2329,12 +2254,12 @@ function closeModal(id) {
 // ============================================================
 // INIT
 // ============================================================
-window.addEventListener('DOMContentLoaded', () => {
+window.addEventListener('DOMContentLoaded', async () => {
   const stored = localStorage.getItem('rpa_user');
   if (stored) {
     try {
       currentUser = JSON.parse(stored);
-      startApp();
+      await startApp();
     } catch(e) { /* stay on login */ }
   }
   // Close modal on backdrop click

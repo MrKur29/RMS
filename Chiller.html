@@ -5,7 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Chiller — Kurnia's Food</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="permissions.js"></script>
+<script src="viewstate.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="labelPrint.js"></script>
 <style>
 /* ===== RESET & BASE ===== */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -222,6 +226,8 @@ a{text-decoration:none}
 .btn-dest-blasting:hover,.btn-dest-blasting.selected{background:#0d9488;color:white;border-color:#0d9488}
 .btn-dest-marinasi{background:#fef9c3;color:#854d0e;border-color:#fde68a}
 .btn-dest-marinasi:hover,.btn-dest-marinasi.selected{background:#d97706;color:white;border-color:#d97706}
+.btn-dest-loading{background:#f0fdf4;color:#166534;border-color:#bbf7d0}
+.btn-dest-loading:hover,.btn-dest-loading.selected{background:#16a34a;color:white;border-color:#16a34a}
 /* Partial transfer toggle */
 .partial-toggle{display:flex;gap:0;border:1.5px solid #d1d5db;border-radius:8px;overflow:hidden;margin:14px 0 0}
 .partial-toggle button{flex:1;padding:8px;font-size:13px;font-weight:600;cursor:pointer;border:none;background:#f9fafb;color:#6b7280;transition:all .15s}
@@ -381,10 +387,10 @@ a{text-decoration:none}
       <div class="nav-item" onclick="navTo('Blasting.html')"><span class="nav-icon">🧊</span><span class="nav-label-text">Blasting</span></div>
       <div class="nav-item" onclick="navTo('ByProductKarkas.html')"><span class="nav-icon">📦</span><span class="nav-label-text">By-product Karkas</span></div>
       <div class="nav-section-label">Penjualan</div>
-      <div class="nav-item disabled"><span class="nav-icon">🛒</span><span class="nav-label-text">Penjualan</span></div>
+      <div class="nav-item" onclick="navTo('Penjualan.html')"><span class="nav-icon">🛒</span><span class="nav-label-text">Penjualan</span></div>
       <div class="nav-section-label">Manajemen</div>
       <div class="nav-item disabled"><span class="nav-icon">✅</span><span class="nav-label-text">Koreksi &amp; Approval</span></div>
-      <div class="nav-item disabled"><span class="nav-icon">📊</span><span class="nav-label-text">Traceability</span></div>
+      <div class="nav-item" onclick="navTo('Laporan.html')"><span class="nav-icon">📊</span><span class="nav-label-text">Laporan</span></div>
       <div class="nav-item" onclick="navTo('MasterData.html')"><span class="nav-icon">🗂️</span><span class="nav-label-text">Master Data</span></div>
       <div class="nav-item" id="nav-user-mgmt" style="display:none" onclick="navTo('UserManagement.html')"><span class="nav-icon">👥</span><span class="nav-label-text">Manajemen User</span></div>
     </nav>
@@ -807,6 +813,7 @@ a{text-decoration:none}
       <button class="btn-dest btn-dest-boneless" id="dest-boneless" onclick="selectDest('BONELESS')">🥩<br>Boneless</button>
       <button class="btn-dest btn-dest-blasting" id="dest-blasting" onclick="selectDest('BLASTING')">🧊<br>Blasting</button>
       <button class="btn-dest btn-dest-marinasi" id="dest-marinasi" onclick="selectDest('MARINASI')">🌶️<br>Marinasi</button>
+      <button class="btn-dest btn-dest-loading"  id="dest-loading"  onclick="selectDest('LOADING')">🚛<br>Loading Dock</button>
     </div>
     <!-- Toggle Kirim Semua / Sebagian -->
     <div style="font-size:13px;font-weight:700;color:#374151;margin-top:14px;margin-bottom:4px">Jumlah yang Dikirim</div>
@@ -1273,7 +1280,7 @@ function openModal(id) { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 
 function lokasiLabel(l) {
-  const map = {LANTAI:'Lantai Produksi',CHILLER:'Chiller',PARTING:'Parting',BONELESS:'Boneless',MARINASI:'Marinasi',BLASTING:'Blasting',SOLD:'Sold',BYPRODUCT_DIRECT:'By-product'};
+  const map = {LANTAI:'Lantai Produksi',CHILLER:'Chiller',LOADING:'Loading Dock',PARTING:'Parting',BONELESS:'Boneless',MARINASI:'Marinasi',BLASTING:'Blasting',SOLD:'Sold',BYPRODUCT_DIRECT:'By-product'};
   return map[l] || l || '—';
 }
 
@@ -1321,7 +1328,8 @@ async function doLogin() {
     if (error) throw error;
     if (!data) { showLoginErr('Username atau password salah.'); return; }
     currentUser = data;
-    localStorage.setItem('rpa_user', JSON.stringify(data));
+    currentUser.permissions = await RPA_PERM.fetchPermissions(db, currentUser.id);
+    localStorage.setItem('rpa_user', JSON.stringify(currentUser));
     startApp();
   } catch(e) {
     console.error(e);
@@ -1342,6 +1350,10 @@ function doLogout() {
   document.getElementById('login-screen').style.display = 'flex';
 }
 function startApp() {
+  const moduleRole = RPA_PERM.enforceModuleAccess(currentUser, 'chiller');
+  if (!moduleRole) return;
+  currentUser.moduleRole = moduleRole;
+
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app-screen').style.display = 'block';
   document.getElementById('user-avatar').textContent = currentUser.nama.charAt(0).toUpperCase();
@@ -1351,10 +1363,20 @@ function startApp() {
     const umEl = document.getElementById('nav-user-mgmt');
     if (umEl) umEl.style.display = 'flex';
   }
+  if (RPA_PERM.isViewOnly(currentUser.moduleRole)) {
+    const smi = document.getElementById('scan-masuk-input');
+    const ski = document.getElementById('scan-keluar-input');
+    if (smi) { smi.disabled = true; smi.placeholder = 'Akses hanya lihat — tidak bisa scan'; }
+    if (ski) { ski.disabled = true; ski.placeholder = 'Akses hanya lihat — tidak bisa scan'; }
+  }
   updateClock();
   clockTimer = setInterval(updateClock, 1000);
   setEl('topbar-date', new Date().toLocaleDateString('id-ID',{weekday:'long',day:'2-digit',month:'long',year:'numeric'}));
-  document.getElementById('inp-filter-date').value = todayISO();
+  const restoredFilters = RPA_STATE.bindFilters('Chiller', ['.section-toolbar']);
+  if (!restoredFilters) {
+    document.getElementById('inp-filter-date').value = todayISO();
+  }
+  RPA_STATE.bindScroll('Chiller');
   loadAll();
 }
 function updateClock() {
@@ -1420,7 +1442,7 @@ function renderBpkAntrian(pending, confirmed) {
   const btnAll = document.getElementById('btn-bpk-konfirm-semua');
 
   pill.textContent = `${pending.length} item`;
-  btnAll.style.display = pending.length > 1 ? '' : 'none';
+  btnAll.style.display = (pending.length > 1 && !RPA_PERM.isViewOnly(currentUser?.moduleRole)) ? '' : 'none';
 
   if(!pending.length) {
     tbody.innerHTML = '<tr><td colspan="7"><div class="empty"><div class="e-icon">✅</div>Tidak ada antrian by-product karkas</div></td></tr>';
@@ -1587,7 +1609,7 @@ function renderPendingTable() {
 
   pill.textContent = `${pendingMovements.length} pending`;
   pill.className   = `panel-pill ${pendingMovements.length > 0 ? 'alert' : 'ok'}`;
-  btn.style.display = pendingMovements.length > 1 ? 'inline-flex' : 'none';
+  btn.style.display = (pendingMovements.length > 1 && !RPA_PERM.isViewOnly(currentUser?.moduleRole)) ? 'inline-flex' : 'none';
 
   if (!arr.length) {
     tbody.innerHTML = `<tr><td colspan="6"><div class="empty"><div class="e-icon">${pendingMovements.length ? '🔍' : '✅'}</div>${pendingMovements.length ? 'Tidak ada hasil pencarian' : 'Tidak ada antrian masuk'}</div></td></tr>`;
@@ -1673,6 +1695,7 @@ function renderStokTable() {
           <td>${ageBadgeHtml(age)}</td>
           <td>
             <div style="display:flex;gap:4px">
+              <button class="btn btn-ghost btn-sm" title="Cetak ulang label" onclick="event.stopPropagation();reprintStokLabel('${b.id}')">🖨️</button>
               <button class="btn btn-primary btn-sm" title="Pindah Keluar" onclick="event.stopPropagation();openPindahModal('${b.id}')">📤</button>
               <button class="btn btn-ghost btn-sm" title="Detail" onclick="event.stopPropagation();openDetailModal('${b.id}')">🔍</button>
             </div>
@@ -1689,6 +1712,24 @@ function toggleGroup(key) {
   if (expandedGroups.has(key)) expandedGroups.delete(key);
   else expandedGroups.add(key);
   renderStokTable();
+}
+
+// Cetak ulang label keranjang langsung dari stok Chiller (format standar 57x38mm)
+function reprintStokLabel(basketId) {
+  const b = chillerBaskets.find(x => x.id === basketId);
+  if (!b) return;
+  const tglFmt = b.tanggal_produksi
+    ? new Date(b.tanggal_produksi + 'T00:00:00').toLocaleDateString('id-ID', { day:'2-digit', month:'short', year:'numeric' })
+    : '—';
+  RPALabel.printStandardLabel({
+    code:       b.basket_code,
+    namaProduk: b.product_master?.nama_produk || '—',
+    qtyText:    `${fmt(b.qty_sisa)} ekor`,
+    kgText:     fmtKg(b.kg_sisa),
+    tglText:    tglFmt,
+    refLabel:   'No Batch',
+    refValue:   b.live_chicken_batches?.batch_code || '—'
+  });
 }
 
 // ---- RIWAYAT KELUAR dengan tombol Batalkan / Minta Kembali ----
@@ -2264,7 +2305,7 @@ async function _populatePindahModal(b) {
   const btn = document.getElementById('mp-btn-ok');
   btn.disabled = true; btn.textContent = 'Memeriksa…';
   setPartialMode(false);
-  ['dest-parting','dest-boneless','dest-blasting','dest-marinasi'].forEach(id => document.getElementById(id).classList.remove('selected'));
+  ['dest-parting','dest-boneless','dest-blasting','dest-marinasi','dest-loading'].forEach(id => document.getElementById(id).classList.remove('selected'));
   openModal('modal-pindah');
 
   // Cek pending outgoing movements — hitung sisa efektif
@@ -2311,8 +2352,8 @@ async function _populatePindahModal(b) {
 
 function selectDest(dest) {
   selectedDest = dest;
-  const map = {PARTING:'dest-parting',BONELESS:'dest-boneless',BLASTING:'dest-blasting',MARINASI:'dest-marinasi'};
-  ['dest-parting','dest-boneless','dest-blasting','dest-marinasi'].forEach(id=>document.getElementById(id).classList.remove('selected'));
+  const map = {PARTING:'dest-parting',BONELESS:'dest-boneless',BLASTING:'dest-blasting',MARINASI:'dest-marinasi',LOADING:'dest-loading'};
+  ['dest-parting','dest-boneless','dest-blasting','dest-marinasi','dest-loading'].forEach(id=>document.getElementById(id).classList.remove('selected'));
   if (map[dest]) document.getElementById(map[dest]).classList.add('selected');
   document.getElementById('mp-err').style.display = 'none';
 }

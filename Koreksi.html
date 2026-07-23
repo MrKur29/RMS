@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Koreksi & Approval — Kurnia's Food</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="permissions.js"></script>
+<script src="viewstate.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f2f5;color:#111827;font-size:14px}
+button{cursor:pointer;font-family:inherit}
+a{text-decoration:none}
+
+/* LOGIN */
+#login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(135deg,#0f172a 0%,#134e4a 60%,#0d9488 100%)}
+.login-card{background:white;border-radius:16px;padding:44px 40px;width:400px;box-shadow:0 25px 60px rgba(0,0,0,.4)}
+.login-logo{text-align:center;margin-bottom:36px}
+.login-logo .icon{font-size:48px;display:block;margin-bottom:12px}
+.login-logo h1{font-size:22px;font-weight:800;color:#111827}
+.login-logo p{font-size:13px;color:#6b7280;margin-top:4px}
+.form-group{margin-bottom:20px}
+.form-group label{display:block;font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
+.form-group input,.form-group select,.form-group textarea{width:100%;padding:11px 14px;border:1.5px solid #d1d5db;border-radius:8px;font-size:15px;transition:border-color .2s,box-shadow .2s;color:#111827;background:white;font-family:inherit}
+.form-group input:read-only{background:#f3f4f6;color:#6b7280;cursor:not-allowed}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{outline:none;border-color:#0d9488;box-shadow:0 0 0 3px rgba(13,148,136,.12)}
+.form-group textarea{resize:vertical;min-height:72px;font-size:14px}
+.btn-login{width:100%;padding:13px;background:#0d9488;color:white;border:none;border-radius:8px;font-size:15px;font-weight:700;transition:background .2s}
+.btn-login:hover{background:#0f766e}
+.btn-login:disabled{background:#5eead4;cursor:not-allowed}
+.login-error{background:#fee2e2;color:#dc2626;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:18px;border:1px solid #fecaca;display:none}
+.login-version{text-align:center;margin-top:20px;font-size:11px;color:#9ca3af}
+
+/* APP LAYOUT */
+#app-screen{display:none;height:100vh;overflow:hidden}
+.app-layout{display:flex;height:100%}
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:90}
+.sidebar-overlay.visible{display:block}
+
+/* SIDEBAR */
+.sidebar{width:230px;flex-shrink:0;background:#0f172a;color:white;display:flex;flex-direction:column;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.1) transparent;transition:transform .28s cubic-bezier(.4,0,.2,1);z-index:100}
+.sidebar-brand{padding:20px 18px 16px;border-bottom:1px solid rgba(255,255,255,.08)}
+.sidebar-nav{flex:1;padding:10px 0}
+.nav-section-label{font-size:10px;font-weight:700;color:rgba(255,255,255,.3);text-transform:uppercase;letter-spacing:1px;padding:12px 18px 4px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 18px;font-size:13px;color:rgba(255,255,255,.65);cursor:pointer;transition:all .15s;border-left:3px solid transparent}
+.nav-item:hover:not(.disabled){background:rgba(255,255,255,.07);color:white}
+.nav-item.active{background:rgba(13,148,136,.2);color:#5eead4;border-left-color:#0d9488}
+.nav-item.disabled{opacity:.3;cursor:not-allowed}
+.nav-icon{font-size:15px;width:22px;text-align:center;flex-shrink:0}
+.nav-label-text{flex:1}
+.nav-tag{font-size:9px;font-weight:700;padding:2px 5px;border-radius:4px;background:rgba(13,148,136,.3);color:#5eead4}
+.sidebar-footer{padding:14px 18px;border-top:1px solid rgba(255,255,255,.08)}
+.user-card{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.user-avatar{width:34px;height:34px;border-radius:50%;background:#0d9488;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:white;flex-shrink:0}
+.user-info-text .user-name{font-size:13px;font-weight:700;color:#f8fafc}
+.user-info-text .user-role{font-size:11px;color:rgba(255,255,255,.45);margin-top:1px}
+.btn-logout{width:100%;padding:8px 12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.6);border-radius:6px;font-size:12px;font-weight:600;transition:all .15s}
+.btn-logout:hover{background:rgba(220,38,38,.25);border-color:rgba(220,38,38,.5);color:#fca5a5}
+
+/* MAIN */
+.main-area{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.topbar{background:white;height:58px;padding:0 20px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e5e7eb;box-shadow:0 1px 4px rgba(0,0,0,.05);gap:12px}
+.topbar-left{display:flex;align-items:center;gap:12px;min-width:0}
+.topbar-left h1{font-size:17px;font-weight:800;color:#111827;white-space:nowrap}
+.topbar-left p{font-size:12px;color:#9ca3af;margin-top:1px}
+.topbar-left-text{min-width:0}
+.topbar-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.btn-hamburger{display:none;align-items:center;justify-content:center;width:40px;height:40px;border-radius:8px;background:#f3f4f6;border:1.5px solid #e5e7eb;font-size:18px;color:#374151;flex-shrink:0}
+.btn-hamburger:hover{background:#e5e7eb}
+.clock-display{font-size:14px;font-weight:700;color:#374151;background:#f9fafb;padding:6px 10px;border-radius:6px;border:1px solid #e5e7eb;white-space:nowrap}
+
+/* TAB BAR */
+.tab-bar{background:white;border-bottom:2px solid #e5e7eb;padding:0 20px;display:flex;gap:0;flex-shrink:0}
+.tab-btn{padding:12px 20px;font-size:13px;font-weight:700;color:#6b7280;border:none;background:none;border-bottom:3px solid transparent;margin-bottom:-2px;transition:all .15s;white-space:nowrap}
+.tab-btn:hover{color:#0d9488;background:#f0fdfa}
+.tab-btn.active{color:#0d9488;border-bottom-color:#0d9488}
+
+/* CONTENT */
+.content-area{flex:1;overflow-y:auto;padding:20px 24px 32px}
+.tab-pane{display:none}
+.tab-pane.active{display:block}
+
+/* SUMMARY CARDS */
+.cards-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:16px}
+.summary-card{background:white;border-radius:10px;padding:14px;border-left:4px solid #e5e7eb;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.summary-card.c-red{border-left-color:#dc2626}
+.summary-card.c-green{border-left-color:#16a34a}
+.summary-card.c-gray{border-left-color:#6b7280}
+.sc-label{font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.6px}
+.sc-value{font-size:26px;font-weight:900;color:#111827;line-height:1.1;margin:4px 0 2px}
+.sc-sub{font-size:11px;color:#9ca3af}
+
+/* PANEL */
+.panel{background:white;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden;margin-bottom:14px}
+.panel:last-child{margin-bottom:0}
+.panel-head{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:1px solid #f3f4f6;gap:8px;flex-wrap:wrap}
+.panel-title{font-size:14px;font-weight:800;color:#111827}
+.panel-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.panel-pill{font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;background:#f3f4f6;color:#374151}
+.panel-pill.alert{background:#fee2e2;color:#dc2626}
+.panel-pill.ok{background:#d1fae5;color:#065f46}
+.panel-body{padding:16px}
+
+/* TABLE */
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl thead th{text-align:left;padding:9px 14px;font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;background:#f9fafb;border-bottom:1px solid #f0f2f5;white-space:nowrap}
+.tbl tbody td{padding:10px 14px;border-bottom:1px solid #f9fafb;vertical-align:middle}
+.tbl tbody tr:last-child td{border-bottom:none}
+.tbl tbody tr:hover td{background:#fafafa}
+
+/* SECTION TOOLBAR */
+.section-toolbar{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid #f3f4f6;flex-wrap:wrap;background:#fafafa}
+
+/* BADGES */
+.badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:12px;font-size:11px;font-weight:700;white-space:nowrap}
+.b-pending{background:#fef3c7;color:#92400e}
+.b-approved{background:#d1fae5;color:#065f46}
+.b-rejected{background:#fee2e2;color:#dc2626}
+.b-manual{background:#fef3c7;color:#92400e}
+.b-auto{background:#dbeafe;color:#1e40af}
+
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 12px;border-radius:6px;border:none;font-size:12px;font-weight:700;transition:all .15s;min-height:34px;touch-action:manipulation;white-space:nowrap}
+.btn-primary{background:#0d9488;color:white}
+.btn-primary:hover{background:#0f766e}
+.btn-green{background:#16a34a;color:white}
+.btn-green:hover{background:#15803d}
+.btn-red{background:#dc2626;color:white}
+.btn-red:hover{background:#b91c1c}
+.btn-ghost{background:#f3f4f6;color:#374151}
+.btn-ghost:hover{background:#e5e7eb}
+.btn-sm{padding:5px 9px;font-size:11px;min-height:28px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+
+/* MODAL */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;align-items:flex-start;justify-content:center;padding:32px 16px;overflow-y:auto}
+.modal-overlay.open{display:flex}
+.modal-box{background:white;border-radius:14px;padding:28px;width:480px;max-width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);animation:modal-in .2s ease;margin:auto}
+@keyframes modal-in{from{transform:scale(.92);opacity:0}to{transform:scale(1);opacity:1}}
+.modal-title{font-size:16px;font-weight:800;margin-bottom:4px;color:#111827}
+.modal-desc{font-size:13px;color:#6b7280;margin-bottom:20px}
+.modal-info-box{background:#f9fafb;border-radius:8px;padding:14px;border:1px solid #e5e7eb;margin-bottom:16px}
+.modal-info-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #f0f2f5;font-size:13px;gap:8px}
+.modal-info-row:last-child{border-bottom:none}
+.modal-info-label{color:#6b7280}
+.modal-info-val{font-weight:700;color:#111827;text-align:right}
+.modal-footer{display:flex;justify-content:flex-end;gap:10px;margin-top:22px;padding-top:18px;border-top:1px solid #f0f2f5;flex-wrap:wrap}
+
+.empty{text-align:center;padding:28px 16px;color:#9ca3af;font-size:13px}
+.hint{font-size:11px;color:#9ca3af;margin-top:4px}
+.form-row{display:flex;gap:12px}
+.form-row .form-group{flex:1}
+.lookup-box{display:flex;gap:8px;align-items:flex-end}
+.lookup-box .form-group{flex:1;margin-bottom:0}
+.scan-field-wrap{position:relative}
+.scan-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:18px;pointer-events:none}
+.scan-input{padding-left:40px !important;border:2px solid #2563eb !important;background:#f0f7ff !important;font-weight:700;letter-spacing:.5px}
+.scan-input:focus{box-shadow:0 0 0 3px rgba(37,99,235,.2) !important}
+.scan-input::placeholder{font-weight:400;letter-spacing:0}
+
+/* TOAST */
+#toast{position:fixed;bottom:28px;right:28px;padding:13px 20px;border-radius:10px;font-size:13px;font-weight:700;box-shadow:0 8px 24px rgba(0,0,0,.2);display:none;z-index:999;animation:toast-in .25s ease}
+#toast.show{display:block}
+#toast.success{background:#065f46;color:white}
+#toast.error{background:#991b1b;color:white}
+#toast.warning{background:#92400e;color:white}
+@keyframes toast-in{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+
+@media (max-width:900px){
+  .btn-hamburger{display:flex}
+  .sidebar{position:fixed;top:0;bottom:0;left:0;transform:translateX(-100%)}
+  .sidebar.open{transform:translateX(0)}
+  .modal-box{padding:20px}
+  .form-row{flex-direction:column;gap:0}
+}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <span class="icon">✅</span>
+      <h1>RPA Management System</h1>
+      <p>Koreksi & Approval — Login</p>
+    </div>
+    <div class="login-error" id="login-error"></div>
+    <div class="form-group">
+      <label>Username</label>
+      <input type="text" id="inp-username" placeholder="Masukkan username" autocomplete="username"
+             onkeydown="if(event.key==='Enter')document.getElementById('inp-password').focus()">
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input type="password" id="inp-password" placeholder="Masukkan password" autocomplete="current-password"
+             onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button class="btn-login" id="btn-login" onclick="doLogin()">Masuk →</button>
+    <p class="login-version">v1.0 — RPA System</p>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app-screen">
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+<div class="app-layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <img src="logo.png" style="height:36px;width:auto;object-fit:contain;">
+        <span style="font-size:15px;font-weight:800;color:#f8fafc;">Kurnia's Food</span>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section-label">Utama</div>
+      <div class="nav-item" onclick="navTo('Dashboard.html')">
+        <span class="nav-icon">🏠</span><span class="nav-label-text">Dashboard</span>
+      </div>
+      <div class="nav-section-label">Produksi</div>
+      <div class="nav-item" onclick="navTo('BatchAyamHidup.html')">
+        <span class="nav-icon">🐔</span><span class="nav-label-text">Batch Ayam Hidup</span>
+      </div>
+      <div class="nav-item" onclick="navTo('ProduksiKarkas.html')">
+        <span class="nav-icon">⚙️</span><span class="nav-label-text">Produksi Karkas</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Thawing.html')">
+        <span class="nav-icon">🌡️</span><span class="nav-label-text">Thawing</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Chiller.html')">
+        <span class="nav-icon">❄️</span><span class="nav-label-text">Chiller</span>
+      </div>
+      <div class="nav-item" onclick="navTo('WorkOrder.html')">
+        <span class="nav-icon">📋</span><span class="nav-label-text">Work Order</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Parting.html')">
+        <span class="nav-icon">✂️</span><span class="nav-label-text">Parting</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Boneless.html')">
+        <span class="nav-icon">🥩</span><span class="nav-label-text">Boneless</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Marinasi.html')">
+        <span class="nav-icon">🌶️</span><span class="nav-label-text">Marinasi</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Blasting.html')">
+        <span class="nav-icon">🧊</span><span class="nav-label-text">Blasting</span>
+      </div>
+      <div class="nav-item" onclick="navTo('ByProductKarkas.html')">
+        <span class="nav-icon">📦</span><span class="nav-label-text">By-product Karkas</span>
+      </div>
+      <div class="nav-section-label">Penjualan</div>
+      <div class="nav-item" onclick="navTo('Penjualan.html')"><span class="nav-icon">🛒</span><span class="nav-label-text">Penjualan</span></div>
+      <div class="nav-section-label">Manajemen</div>
+      <div class="nav-item active">
+        <span class="nav-icon">✅</span><span class="nav-label-text">Koreksi & Approval</span>
+        <span class="nav-tag">Aktif</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Laporan.html')"><span class="nav-icon">📊</span><span class="nav-label-text">Laporan</span></div>
+      <div class="nav-item" onclick="navTo('MasterData.html')">
+        <span class="nav-icon">🗂️</span><span class="nav-label-text">Master Data</span>
+      </div>
+      <div class="nav-item" id="nav-user-mgmt" style="display:none" onclick="navTo('UserManagement.html')">
+        <span class="nav-icon">👥</span><span class="nav-label-text">Manajemen User</span>
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-card">
+        <div class="user-avatar" id="user-avatar">?</div>
+        <div class="user-info-text">
+          <div class="user-name" id="sidebar-name">—</div>
+          <div class="user-role" id="sidebar-role">—</div>
+        </div>
+      </div>
+      <button class="btn-logout" onclick="doLogout()">⬅ Keluar</button>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="main-area">
+    <div class="topbar">
+      <div class="topbar-left">
+        <button class="btn-hamburger" onclick="toggleSidebar()">☰</button>
+        <div class="topbar-left-text">
+          <h1>Koreksi & Approval</h1>
+          <p id="topbar-date">—</p>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <div class="clock-display" id="clock">—</div>
+      </div>
+    </div>
+
+    <div class="tab-bar">
+      <button class="tab-btn active" id="tab-btn-pending" onclick="switchTab('pending')">🕒 Menunggu Approval</button>
+      <button class="tab-btn" id="tab-btn-riwayat" onclick="switchTab('riwayat')">📜 Riwayat</button>
+      <button class="tab-btn" id="tab-btn-ajukan" onclick="switchTab('ajukan')">✏️ Ajukan Koreksi</button>
+    </div>
+
+    <div class="content-area">
+
+      <!-- TAB: PENDING -->
+      <div class="tab-pane active" id="tab-pending">
+        <div class="cards-row">
+          <div class="summary-card c-red">
+            <div class="sc-label">Menunggu Approval</div>
+            <div class="sc-value" id="sc-pending">0</div>
+            <div class="sc-sub">koreksi belum direview</div>
+          </div>
+          <div class="summary-card c-green">
+            <div class="sc-label">Disetujui Bulan Ini</div>
+            <div class="sc-value" id="sc-approved">0</div>
+            <div class="sc-sub">sejak tgl 1</div>
+          </div>
+          <div class="summary-card c-gray">
+            <div class="sc-label">Ditolak Bulan Ini</div>
+            <div class="sc-value" id="sc-rejected">0</div>
+            <div class="sc-sub">sejak tgl 1</div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <span class="panel-title">Koreksi Menunggu Approval</span>
+            <span class="panel-pill alert" id="pill-pending">—</span>
+          </div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>Tabel</th>
+                  <th>Field</th>
+                  <th>Nilai Lama → Baru</th>
+                  <th>Alasan</th>
+                  <th>Diajukan Oleh</th>
+                  <th>Tanggal</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-pending">
+                <tr><td colspan="7"><div class="empty">Memuat…</div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB: RIWAYAT -->
+      <div class="tab-pane" id="tab-riwayat">
+        <div class="panel">
+          <div class="panel-head">
+            <span class="panel-title">Riwayat Koreksi</span>
+            <div class="panel-actions">
+              <select id="riwayat-filter" onchange="loadRiwayat()" style="padding:6px 10px;border:1.5px solid #e5e7eb;border-radius:7px;font-size:12px">
+                <option value="ALL">Semua Status</option>
+                <option value="APPROVED">Disetujui</option>
+                <option value="REJECTED">Ditolak</option>
+              </select>
+            </div>
+          </div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>Tabel</th>
+                  <th>Field</th>
+                  <th>Nilai Lama → Baru</th>
+                  <th>Status</th>
+                  <th>Turunan</th>
+                  <th>Sumber (Cek Manual)</th>
+                  <th>Direview Oleh</th>
+                  <th>Tanggal Review</th>
+                  <th>Catatan</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-riwayat">
+                <tr><td colspan="9"><div class="empty">Memuat…</div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB: AJUKAN -->
+      <div class="tab-pane" id="tab-ajukan">
+        <div class="panel">
+          <div class="panel-head">
+            <span class="panel-title">Ajukan Koreksi Baru</span>
+          </div>
+          <div class="panel-body">
+            <div class="form-group">
+              <label>Tabel Terkait</label>
+              <select id="kf-tabel" onchange="onTabelChange()">
+                <option value="">— Pilih —</option>
+                <option value="baskets">Basket (Keranjang)</option>
+                <option value="live_chicken_batches">Batch Ayam Hidup</option>
+                <option value="__manual">Lainnya (isi manual)</option>
+              </select>
+              <div class="hint">Pilih jenis data yang mau dikoreksi. Untuk Basket / Batch, cari pakai kode fisiknya supaya nilai lama otomatis terisi.</div>
+            </div>
+
+            <div id="kf-lookup-basket" style="display:none">
+              <div class="lookup-box">
+                <div class="form-group">
+                  <label>Kode Basket</label>
+                  <div class="scan-field-wrap">
+                    <span class="scan-icon">📷</span>
+                    <input type="text" class="scan-input" id="kf-basket-code" placeholder="Scan QR / ketik kode keranjang…"
+                           onkeydown="if(event.key==='Enter'){event.preventDefault();cariBasket()}">
+                  </div>
+                </div>
+                <button class="btn btn-ghost" style="margin-bottom:20px" onclick="cariBasket()">🔍 Cari</button>
+              </div>
+              <div class="hint">Arahkan barcode/QR reader ke label basket lalu tekan Enter, atau ketik manual.</div>
+            </div>
+
+            <div id="kf-lookup-batch" style="display:none">
+              <div class="lookup-box">
+                <div class="form-group">
+                  <label>Kode Batch</label>
+                  <div class="scan-field-wrap">
+                    <span class="scan-icon">📷</span>
+                    <input type="text" class="scan-input" id="kf-batch-code" placeholder="Scan / ketik kode batch…"
+                           onkeydown="if(event.key==='Enter'){event.preventDefault();cariBatch()}">
+                  </div>
+                </div>
+                <button class="btn btn-ghost" style="margin-bottom:20px" onclick="cariBatch()">🔍 Cari</button>
+              </div>
+            </div>
+
+            <div id="kf-lookup-manual" style="display:none">
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Nama Tabel</label>
+                  <input type="text" id="kf-tabel-manual" placeholder="mis. product_master">
+                </div>
+                <div class="form-group">
+                  <label>Record ID (UUID)</label>
+                  <input type="text" id="kf-record-id-manual" placeholder="UUID record">
+                </div>
+              </div>
+              <div class="hint">Dipakai untuk data yang belum punya pencarian otomatis (master data, dll). Perlu tahu UUID record-nya — bisa dilihat lewat Master Data atau Supabase.</div>
+            </div>
+
+            <div id="kf-found-box" class="modal-info-box" style="display:none;margin-top:12px"></div>
+
+            <div class="form-row" style="margin-top:16px">
+              <div class="form-group">
+                <label>Field yang Salah</label>
+                <input type="text" id="kf-field" list="kf-field-suggest" placeholder="mis. kg_sisa" oninput="onFieldChange()">
+                <datalist id="kf-field-suggest"></datalist>
+              </div>
+              <div class="form-group">
+                <label>Nilai Lama</label>
+                <input type="text" id="kf-nilai-lama" placeholder="terisi otomatis kalau ditemukan" readonly>
+                <div class="hint" id="kf-nilai-lama-hint">Terisi otomatis dari data asli, tidak bisa diketik manual.</div>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>Nilai Baru</label>
+              <input type="text" id="kf-nilai-baru" placeholder="nilai yang seharusnya">
+            </div>
+
+            <div class="form-group">
+              <label>Alasan Koreksi</label>
+              <textarea id="kf-alasan" placeholder="Jelaskan kenapa data ini salah…"></textarea>
+            </div>
+
+            <button class="btn btn-primary" id="kf-btn-submit" onclick="submitKoreksi()">📤 Ajukan Koreksi</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- MODAL: APPROVE -->
+<div class="modal-overlay" id="modal-approve">
+  <div class="modal-box modal-sm">
+    <div class="modal-title">✅ Setujui Koreksi</div>
+    <div class="modal-desc">Koreksi yang disetujui akan langsung diterapkan ke data asli jika field-nya ada di daftar aman. Kalau tidak, status tetap disetujui tapi perlu penyesuaian manual.</div>
+    <div class="modal-info-box" id="approve-info-box"></div>
+    <div class="form-group">
+      <label>Catatan (opsional)</label>
+      <textarea id="approve-catatan" placeholder="Catatan tambahan untuk approval ini…"></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-approve')">Batal</button>
+      <button class="btn btn-green" onclick="doApprove()">✅ Ya, Setujui</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: REJECT -->
+<div class="modal-overlay" id="modal-reject">
+  <div class="modal-box modal-sm">
+    <div class="modal-title">✗ Tolak Koreksi</div>
+    <div class="modal-desc">Data asli tidak akan berubah. Alasan penolakan wajib diisi.</div>
+    <div class="modal-info-box" id="reject-info-box"></div>
+    <div class="form-group">
+      <label>Alasan Penolakan</label>
+      <textarea id="reject-catatan" placeholder="Kenapa koreksi ini ditolak?"></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-reject')">Batal</button>
+      <button class="btn btn-red" onclick="doReject()">✗ Ya, Tolak</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<script>
+const SUPABASE_URL = 'https://dxixqyokuqrdprupsvic.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR4aXhxeW9rdXFyZHBydXBzdmljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5NjM3ODcsImV4cCI6MjA5MjUzOTc4N30.D_yaPwNbe4FFg_hmDeJ9cuxzbNvXZT8l1_TyZuq1t1M';
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ── STATE ──
+let currentUser        = null;
+let pendingList         = [];
+let riwayatList         = [];
+let activeCorrectionId  = null;
+let foundRecord         = null;   // hasil pencarian basket/batch di tab Ajukan
+
+const FIELD_SUGGEST = {
+  baskets: ['qty_sisa', 'kg_sisa', 'qty_awal', 'kg_awal', 'lokasi', 'status'],
+  live_chicken_batches: ['ekor_kandang', 'kg_kandang', 'ekor_timbang_ulang', 'kg_timbang_ulang', 'ekor_mati', 'kg_mati', 'no_polisi', 'nama_supir', 'tanggal', 'catatan']
+};
+
+// ── UTILS ──
+async function sha256(str) {
+  const buf = new TextEncoder().encode(str);
+  const hash = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+function fmtDT(s){if(!s)return'—';return new Date(s).toLocaleString('id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}
+function showToast(msg,type='success'){const t=document.getElementById('toast');t.textContent=msg;t.className=`show ${type}`;setTimeout(()=>{t.className=''},3800)}
+function navTo(url){closeSidebar();if(currentUser){localStorage.setItem('rpa_user',JSON.stringify(currentUser));sessionStorage.setItem('rpa_user',JSON.stringify(currentUser))}window.location.href=url}
+function openModal(id){document.getElementById(id).classList.add('open')}
+function closeModal(id){document.getElementById(id).classList.remove('open')}
+function esc(s){return (s==null?'':String(s)).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function firstOfMonthISO(){const d=new Date();return new Date(d.getFullYear(),d.getMonth(),1).toISOString()}
+
+// ── SIDEBAR ──
+function toggleSidebar(){const s=document.getElementById('sidebar'),o=document.getElementById('sidebar-overlay');s.classList.toggle('open');o.classList.toggle('visible')}
+function closeSidebar(){document.getElementById('sidebar')?.classList.remove('open');document.getElementById('sidebar-overlay')?.classList.remove('visible')}
+
+// ── TAB ──
+function switchTab(tab){
+  RPA_STATE.saveTab('Koreksi', tab);
+  ['pending','riwayat','ajukan'].forEach(t=>{
+    document.getElementById(`tab-${t}`)?.classList.remove('active');
+    document.getElementById(`tab-btn-${t}`)?.classList.remove('active');
+  });
+  document.getElementById(`tab-${tab}`)?.classList.add('active');
+  document.getElementById(`tab-btn-${tab}`)?.classList.add('active');
+  if(tab==='riwayat') loadRiwayat();
+}
+
+// ── AUTH ──
+async function doLogin(){
+  const username=document.getElementById('inp-username').value.trim();
+  const password=document.getElementById('inp-password').value;
+  const errEl=document.getElementById('login-error');
+  errEl.style.display='none';
+  if(!username||!password){errEl.textContent='Username dan password wajib diisi.';errEl.style.display='block';return}
+  const btn=document.getElementById('btn-login');
+  btn.disabled=true;btn.textContent='Memproses…';
+  try{
+    const hash=await sha256(password);
+    const{data,error}=await db.from('users').select('id,nama,username,role,aktif,pin,is_system_admin').eq('username',username).eq('password_hash',hash).eq('aktif',true).maybeSingle();
+    if(error)throw error;
+    if(!data){errEl.textContent='Username atau password salah.';errEl.style.display='block';return}
+    data.permissions=await RPA_PERM.fetchPermissions(db,data.id);
+    currentUser=data;localStorage.setItem('rpa_user',JSON.stringify(data));startApp();
+  }catch(e){errEl.textContent='Gagal terhubung ke server.';errEl.style.display='block';}
+  finally{btn.disabled=false;btn.textContent='Masuk →'}
+}
+function doLogout(){localStorage.removeItem('rpa_user');sessionStorage.removeItem('rpa_user');currentUser=null;document.getElementById('app-screen').style.display='none';document.getElementById('login-screen').style.display='flex'}
+
+function startApp(){
+  const moduleRole=RPA_PERM.enforceModuleAccess(currentUser,'koreksi');
+  if(!moduleRole)return;
+  currentUser.moduleRole=moduleRole;
+
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('app-screen').style.display='block';
+  const av=document.getElementById('user-avatar');
+  if(av)av.textContent=(currentUser.nama||'?')[0].toUpperCase();
+  document.getElementById('sidebar-name').textContent=currentUser.nama;
+  document.getElementById('sidebar-role').textContent=currentUser.role+(currentUser.is_system_admin?' (Admin)':'');
+  if(currentUser.is_system_admin){const el=document.getElementById('nav-user-mgmt');if(el)el.style.display='flex'}
+  applyViewOnlyGuard();
+  RPA_STATE.bindFilters('Koreksi', ['#tab-riwayat']);
+  RPA_STATE.bindScroll('Koreksi');
+  switchTab(RPA_STATE.getTab('Koreksi', 'pending'));
+  startClock();loadAll();
+}
+
+// ── VIEW-ONLY GUARD ──
+function applyViewOnlyGuard(){
+  if(!currentUser||!RPA_PERM.isViewOnly(currentUser.moduleRole))return;
+  const el=document.getElementById('kf-btn-submit');
+  if(el)el.disabled=true;
+}
+
+function startClock(){
+  function tick(){
+    const now=new Date();
+    document.getElementById('clock').textContent=now.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    document.getElementById('topbar-date').textContent=now.toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  }
+  tick();setInterval(tick,1000);
+}
+
+// ── AUTO LOGIN ──
+window.addEventListener('DOMContentLoaded',()=>{
+  const saved=localStorage.getItem('rpa_user')||sessionStorage.getItem('rpa_user');
+  if(saved){try{currentUser=JSON.parse(saved);startApp();}catch{}}
+});
+
+// ── LOAD ──
+async function loadAll(){
+  await Promise.all([loadPending(),loadCards()]);
+}
+
+async function loadCards(){
+  const [{count:pending},{count:approved},{count:rejected}]=await Promise.all([
+    db.from('corrections').select('id',{count:'exact',head:true}).eq('status','PENDING'),
+    db.from('corrections').select('id',{count:'exact',head:true}).eq('status','APPROVED').gte('reviewed_at',firstOfMonthISO()),
+    db.from('corrections').select('id',{count:'exact',head:true}).eq('status','REJECTED').gte('reviewed_at',firstOfMonthISO())
+  ]);
+  document.getElementById('sc-pending').textContent=pending||0;
+  document.getElementById('sc-approved').textContent=approved||0;
+  document.getElementById('sc-rejected').textContent=rejected||0;
+}
+
+async function loadPending(){
+  const{data,error}=await db.from('corrections')
+    .select('id,tabel_terkait,record_id,field_salah,nilai_lama,nilai_baru,alasan,created_at,requested_by(nama)')
+    .eq('status','PENDING')
+    .order('created_at',{ascending:false});
+  if(error){console.error(error);showToast('Gagal memuat koreksi pending','error');return}
+  pendingList=data||[];
+  renderPending();
+}
+
+function renderPending(){
+  const tbody=document.getElementById('tbody-pending');
+  const pill=document.getElementById('pill-pending');
+  pill.textContent=pendingList.length;
+  pill.className=`panel-pill ${pendingList.length>0?'alert':'ok'}`;
+  if(!pendingList.length){
+    tbody.innerHTML=`<tr><td colspan="7"><div class="empty">Tidak ada koreksi pending</div></td></tr>`;
+    return;
+  }
+  const canApprove=RPA_PERM.canApprove(currentUser.moduleRole);
+  tbody.innerHTML=pendingList.map(r=>`
+    <tr>
+      <td><code style="font-size:11px;background:#f3f4f6;padding:2px 6px;border-radius:4px">${esc(r.tabel_terkait)}</code></td>
+      <td>${esc(r.field_salah)}</td>
+      <td><span style="color:#dc2626">${esc(r.nilai_lama)||'—'}</span> → <span style="color:#16a34a">${esc(r.nilai_baru)||'—'}</span></td>
+      <td style="max-width:220px">${esc(r.alasan)}</td>
+      <td>${esc(r.requested_by?.nama)||'—'}</td>
+      <td>${fmtDT(r.created_at)}</td>
+      <td>
+        ${canApprove?`
+          <button class="btn btn-green btn-sm" onclick="openApprove('${r.id}')">✅ Setujui</button>
+          <button class="btn btn-red btn-sm" onclick="openReject('${r.id}')">✗ Tolak</button>
+        `:'<span class="hint">Butuh akses Supervisor</span>'}
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function loadRiwayat(){
+  const filter=document.getElementById('riwayat-filter').value;
+  let q=db.from('corrections')
+    .select('id,tabel_terkait,record_id,field_salah,nilai_lama,nilai_baru,alasan,status,auto_applied,downstream_ids,upstream_ids,reviewed_at,review_catatan,reviewed_by(nama),requested_by(nama)')
+    .in('status',['APPROVED','REJECTED'])
+    .order('reviewed_at',{ascending:false})
+    .limit(100);
+  if(filter!=='ALL') q=q.eq('status',filter);
+  const{data,error}=await q;
+  if(error){console.error(error);showToast('Gagal memuat riwayat','error');return}
+  riwayatList=data||[];
+  renderRiwayat();
+}
+
+function renderRiwayat(){
+  const tbody=document.getElementById('tbody-riwayat');
+  if(!riwayatList.length){
+    tbody.innerHTML=`<tr><td colspan="9"><div class="empty">Belum ada riwayat</div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML=riwayatList.map(r=>{
+    const downCount=Array.isArray(r.downstream_ids)?r.downstream_ids.length:0;
+    const upCount=Array.isArray(r.upstream_ids)?r.upstream_ids.length:0;
+    const statusBadge=r.status==='APPROVED'?'<span class="badge b-approved">Disetujui</span>':'<span class="badge b-rejected">Ditolak</span>';
+    const appliedBadge=r.status==='APPROVED'?(r.auto_applied?'<span class="badge b-auto">Auto</span>':'<span class="badge b-manual">Manual</span>'):'';
+    return `
+    <tr>
+      <td><code style="font-size:11px;background:#f3f4f6;padding:2px 6px;border-radius:4px">${esc(r.tabel_terkait)}</code></td>
+      <td>${esc(r.field_salah)}</td>
+      <td><span style="color:#dc2626">${esc(r.nilai_lama)||'—'}</span> → <span style="color:#16a34a">${esc(r.nilai_baru)||'—'}</span></td>
+      <td>${statusBadge} ${appliedBadge}</td>
+      <td>${downCount>0?`${downCount} basket`:'—'}</td>
+      <td>${upCount>0?`<span class="badge b-manual">${upCount} basket</span>`:'—'}</td>
+      <td>${esc(r.reviewed_by?.nama)||'—'}</td>
+      <td>${fmtDT(r.reviewed_at)}</td>
+      <td style="max-width:200px">${esc(r.review_catatan)||'—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── APPROVE / REJECT ──
+function openApprove(id){
+  activeCorrectionId=id;
+  const r=pendingList.find(x=>x.id===id);
+  if(!r)return;
+  document.getElementById('approve-info-box').innerHTML=`
+    <div class="modal-info-row"><span class="modal-info-label">Tabel</span><span class="modal-info-val">${esc(r.tabel_terkait)}</span></div>
+    <div class="modal-info-row"><span class="modal-info-label">Field</span><span class="modal-info-val">${esc(r.field_salah)}</span></div>
+    <div class="modal-info-row"><span class="modal-info-label">Nilai Lama</span><span class="modal-info-val">${esc(r.nilai_lama)||'—'}</span></div>
+    <div class="modal-info-row"><span class="modal-info-label">Nilai Baru</span><span class="modal-info-val">${esc(r.nilai_baru)||'—'}</span></div>
+    <div class="modal-info-row"><span class="modal-info-label">Alasan</span><span class="modal-info-val">${esc(r.alasan)}</span></div>
+  `;
+  document.getElementById('approve-catatan').value='';
+  openModal('modal-approve');
+}
+
+async function doApprove(){
+  if(!activeCorrectionId)return;
+  const catatan=document.getElementById('approve-catatan').value.trim()||null;
+  try{
+    const{data,error}=await db.rpc('fn_approve_correction',{
+      p_correction_id: activeCorrectionId,
+      p_reviewer_id: currentUser.id,
+      p_catatan: catatan
+    });
+    if(error)throw error;
+    if(!data?.ok){showToast(data?.error||'Gagal approve koreksi','error');return}
+    closeModal('modal-approve');
+    const applied=data.auto_applied?'diterapkan otomatis ke data asli':'perlu penyesuaian manual (field belum ada di whitelist)';
+    const down=data.downstream_count>0?` ${data.downstream_count} basket turunan ditandai untuk direview.`:'';
+    const up=data.upstream_count>0?` ${data.upstream_count} basket sumber (termasuk kemungkinan karkas asal) juga ditandai — cek manual apakah perlu dikoreksi juga.`:'';
+    showToast(`Koreksi disetujui, ${applied}.${down}${up}`,'success');
+    loadAll();
+  }catch(e){console.error(e);showToast('Gagal terhubung ke server','error')}
+}
+
+function openReject(id){
+  activeCorrectionId=id;
+  const r=pendingList.find(x=>x.id===id);
+  if(!r)return;
+  document.getElementById('reject-info-box').innerHTML=`
+    <div class="modal-info-row"><span class="modal-info-label">Tabel</span><span class="modal-info-val">${esc(r.tabel_terkait)}</span></div>
+    <div class="modal-info-row"><span class="modal-info-label">Field</span><span class="modal-info-val">${esc(r.field_salah)}</span></div>
+    <div class="modal-info-row"><span class="modal-info-label">Diajukan Oleh</span><span class="modal-info-val">${esc(r.requested_by?.nama)||'—'}</span></div>
+  `;
+  document.getElementById('reject-catatan').value='';
+  openModal('modal-reject');
+}
+
+async function doReject(){
+  if(!activeCorrectionId)return;
+  const catatan=document.getElementById('reject-catatan').value.trim();
+  if(!catatan){showToast('Alasan penolakan wajib diisi','error');return}
+  try{
+    const{data,error}=await db.rpc('fn_reject_correction',{
+      p_correction_id: activeCorrectionId,
+      p_reviewer_id: currentUser.id,
+      p_catatan: catatan
+    });
+    if(error)throw error;
+    if(!data?.ok){showToast(data?.error||'Gagal menolak koreksi','error');return}
+    closeModal('modal-reject');
+    showToast('Koreksi ditolak.','success');
+    loadAll();
+  }catch(e){console.error(e);showToast('Gagal terhubung ke server','error')}
+}
+
+// ── AJUKAN KOREKSI ──
+function onTabelChange(){
+  const val=document.getElementById('kf-tabel').value;
+  document.getElementById('kf-lookup-basket').style.display=val==='baskets'?'block':'none';
+  document.getElementById('kf-lookup-batch').style.display=val==='live_chicken_batches'?'block':'none';
+  document.getElementById('kf-lookup-manual').style.display=val==='__manual'?'block':'none';
+  document.getElementById('kf-found-box').style.display='none';
+  foundRecord=null;
+  const nilaiLamaEl=document.getElementById('kf-nilai-lama');
+  nilaiLamaEl.value='';
+  const isManual=val==='__manual';
+  nilaiLamaEl.readOnly=!isManual;
+  document.getElementById('kf-nilai-lama-hint').textContent=isManual
+    ? 'Tidak ada pencarian otomatis untuk tabel manual — isi sesuai data asli kalau tahu.'
+    : 'Terisi otomatis dari data asli, tidak bisa diketik manual.';
+  const suggest=document.getElementById('kf-field-suggest');
+  const key=val==='__manual'?null:val;
+  suggest.innerHTML=(FIELD_SUGGEST[key]||[]).map(f=>`<option value="${f}">`).join('');
+}
+
+async function cariBasket(){
+  const code=document.getElementById('kf-basket-code').value.trim();
+  if(!code){showToast('Isi kode basket dulu','error');return}
+  const{data,error}=await db.from('baskets').select('id,basket_code,qty_sisa,kg_sisa,qty_awal,kg_awal,lokasi,status,product_master(nama_produk,product_code)').eq('basket_code',code).maybeSingle();
+  if(error||!data){showToast('Basket tidak ditemukan','error');return}
+  foundRecord=data;
+  document.getElementById('kf-found-box').style.display='block';
+  document.getElementById('kf-found-box').innerHTML=`
+    <div class="modal-info-row"><span class="modal-info-label">Kode Basket</span><span class="modal-info-val">${esc(data.basket_code)}</span></div>
+    <div class="modal-info-row"><span class="modal-info-label">Nama Barang</span><span class="modal-info-val">${esc(data.product_master?.nama_produk)||'—'}</span></div>
+    <div class="modal-info-row"><span class="modal-info-label">Qty Awal</span><span class="modal-info-val">${esc(data.qty_awal)}</span></div>
+    <div class="modal-info-row"><span class="modal-info-label">Qty Sisa</span><span class="modal-info-val">${esc(data.qty_sisa)}</span></div>
+    <div class="modal-info-row"><span class="modal-info-label">Kg Awal</span><span class="modal-info-val">${esc(data.kg_awal)}</span></div>
+    <div class="modal-info-row"><span class="modal-info-label">Kg Sisa</span><span class="modal-info-val">${esc(data.kg_sisa)}</span></div>
+    <div class="modal-info-row"><span class="modal-info-label">Lokasi</span><span class="modal-info-val">${esc(data.lokasi)}</span></div>
+    <div class="hint" style="margin-top:6px">Salah hitung waktu produksi? Koreksi <strong>Qty/Kg Awal</strong> (sisa ikut menyesuaikan otomatis). Cuma mau ubah stok saat ini? Koreksi <strong>Qty/Kg Sisa</strong>.</div>
+  `;
+  showToast('Basket ditemukan — pilih field yang mau dikoreksi','success');
+}
+
+async function cariBatch(){
+  const code=document.getElementById('kf-batch-code').value.trim();
+  if(!code){showToast('Isi kode batch dulu','error');return}
+  const{data,error}=await db.from('live_chicken_batches').select('id,batch_code,ekor_kandang,kg_kandang,ekor_timbang_ulang,kg_timbang_ulang,ekor_mati,kg_mati,no_polisi,nama_supir,tanggal').eq('batch_code',code).maybeSingle();
+  if(error||!data){showToast('Batch tidak ditemukan','error');return}
+  foundRecord=data;
+  document.getElementById('kf-found-box').style.display='block';
+  document.getElementById('kf-found-box').innerHTML=`
+    <div class="modal-info-row"><span class="modal-info-label">Kode Batch</span><span class="modal-info-val">${esc(data.batch_code)}</span></div>
+    <div class="modal-info-row"><span class="modal-info-label">Ekor Kandang</span><span class="modal-info-val">${esc(data.ekor_kandang)}</span></div>
+    <div class="modal-info-row"><span class="modal-info-label">Kg Kandang</span><span class="modal-info-val">${esc(data.kg_kandang)}</span></div>
+    <div class="modal-info-row"><span class="modal-info-label">Ekor Timbang Ulang</span><span class="modal-info-val">${esc(data.ekor_timbang_ulang)}</span></div>
+    <div class="modal-info-row"><span class="modal-info-label">Kg Timbang Ulang</span><span class="modal-info-val">${esc(data.kg_timbang_ulang)}</span></div>
+  `;
+  showToast('Batch ditemukan — pilih field yang mau dikoreksi','success');
+}
+
+function onFieldChange(){
+  const field=document.getElementById('kf-field').value.trim();
+  if(foundRecord && field && Object.prototype.hasOwnProperty.call(foundRecord,field)){
+    document.getElementById('kf-nilai-lama').value=foundRecord[field]==null?'':foundRecord[field];
+  }
+}
+
+async function submitKoreksi(){
+  const tabelSel=document.getElementById('kf-tabel').value;
+  if(!tabelSel){showToast('Pilih tabel terkait dulu','error');return}
+
+  let tabelTerkait, recordId;
+  if(tabelSel==='__manual'){
+    tabelTerkait=document.getElementById('kf-tabel-manual').value.trim();
+    recordId=document.getElementById('kf-record-id-manual').value.trim();
+    if(!tabelTerkait||!recordId){showToast('Isi nama tabel dan Record ID','error');return}
+  }else{
+    tabelTerkait=tabelSel;
+    recordId=foundRecord?.id;
+    if(!recordId){showToast('Cari dan pastikan data ditemukan dulu','error');return}
+  }
+
+  const fieldSalah=document.getElementById('kf-field').value.trim();
+  const nilaiLama=document.getElementById('kf-nilai-lama').value;
+  const nilaiBaru=document.getElementById('kf-nilai-baru').value.trim();
+  const alasan=document.getElementById('kf-alasan').value.trim();
+
+  if(!fieldSalah){showToast('Isi field yang salah','error');return}
+  if(!nilaiBaru){showToast('Isi nilai baru','error');return}
+  if(!alasan){showToast('Alasan koreksi wajib diisi','error');return}
+
+  const btn=document.getElementById('kf-btn-submit');
+  btn.disabled=true;btn.textContent='Mengirim…';
+  try{
+    const{error}=await db.from('corrections').insert({
+      tabel_terkait: tabelTerkait,
+      record_id: recordId,
+      field_salah: fieldSalah,
+      nilai_lama: nilaiLama||null,
+      nilai_baru: nilaiBaru,
+      alasan: alasan,
+      requested_by: currentUser.id
+    });
+    if(error)throw error;
+    showToast('Koreksi berhasil diajukan, menunggu approval Supervisor.','success');
+    resetAjukanForm();
+    switchTab('pending');
+    loadAll();
+  }catch(e){console.error(e);showToast('Gagal mengirim koreksi','error')}
+  finally{btn.disabled=RPA_PERM.isViewOnly(currentUser.moduleRole);btn.textContent='📤 Ajukan Koreksi'}
+}
+
+function resetAjukanForm(){
+  document.getElementById('kf-tabel').value='';
+  document.getElementById('kf-basket-code').value='';
+  document.getElementById('kf-batch-code').value='';
+  document.getElementById('kf-tabel-manual').value='';
+  document.getElementById('kf-record-id-manual').value='';
+  document.getElementById('kf-field').value='';
+  document.getElementById('kf-nilai-lama').value='';
+  document.getElementById('kf-nilai-baru').value='';
+  document.getElementById('kf-alasan').value='';
+  document.getElementById('kf-found-box').style.display='none';
+  foundRecord=null;
+  onTabelChange();
+}
+</script>
+</body>
+</html>

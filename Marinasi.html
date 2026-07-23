@@ -5,7 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Marinasi — Kurnia's Food</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="permissions.js"></script>
+<script src="viewstate.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="labelPrint.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f2f5;color:#111827;font-size:14px}
@@ -335,10 +339,10 @@ a{text-decoration:none}
       <div class="nav-item" onclick="navTo('Blasting.html')"><span class="nav-icon">🧊</span><span class="nav-label-text">Blasting</span></div>
       <div class="nav-item" onclick="navTo('ByProductKarkas.html')"><span class="nav-icon">📦</span><span class="nav-label-text">By-product Karkas</span></div>
       <div class="nav-section-label">Penjualan</div>
-      <div class="nav-item disabled"><span class="nav-icon">🛒</span><span class="nav-label-text">Penjualan</span></div>
+      <div class="nav-item" onclick="navTo('Penjualan.html')"><span class="nav-icon">🛒</span><span class="nav-label-text">Penjualan</span></div>
       <div class="nav-section-label">Manajemen</div>
       <div class="nav-item disabled"><span class="nav-icon">✅</span><span class="nav-label-text">Koreksi &amp; Approval</span></div>
-      <div class="nav-item disabled"><span class="nav-icon">📊</span><span class="nav-label-text">Traceability</span></div>
+      <div class="nav-item" onclick="navTo('Laporan.html')"><span class="nav-icon">📊</span><span class="nav-label-text">Laporan</span></div>
       <div class="nav-item" onclick="navTo('MasterData.html')"><span class="nav-icon">🗂️</span><span class="nav-label-text">Master Data</span></div>
       <div class="nav-item" id="nav-user-mgmt" style="display:none" onclick="navTo('UserManagement.html')"><span class="nav-icon">👥</span><span class="nav-label-text">Manajemen User</span></div>
     </nav>
@@ -1132,6 +1136,7 @@ function lokasiLabel(l){const m={CHILLER:'Chiller',BONELESS:'Boneless',MARINASI:
 // TAB NAVIGATION
 // ============================================================
 function switchTab(tab) {
+  RPA_STATE.saveTab('Marinasi', tab);
   ['masuk','wo','ws'].forEach(t => {
     document.getElementById(`tab-pane-${t}`)?.classList.remove('active');
     document.getElementById(`tab-btn-${t}`)?.classList.remove('active');
@@ -1159,6 +1164,7 @@ async function doLogin() {
       .eq('username', username).eq('password_hash', hash).eq('aktif', true).maybeSingle();
     if (error) throw error;
     if (!data) { showLoginErr('Username atau password salah.'); return; }
+    data.permissions = await RPA_PERM.fetchPermissions(db, data.id);
     currentUser = data;
     localStorage.setItem('rpa_user', JSON.stringify(data));
     startApp();
@@ -1176,6 +1182,10 @@ function doLogout(){localStorage.removeItem('rpa_user');currentUser=null;documen
 // APP START
 // ============================================================
 function startApp() {
+  const moduleRole = RPA_PERM.enforceModuleAccess(currentUser, 'marinasi');
+  if (!moduleRole) return;
+  currentUser.moduleRole = moduleRole;
+
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app-screen').style.display   = 'block';
   const av = document.getElementById('user-avatar');
@@ -1186,6 +1196,14 @@ function startApp() {
     const umEl = document.getElementById('nav-user-mgmt');
     if (umEl) umEl.style.display = 'flex';
   }
+  if (RPA_PERM.isViewOnly(currentUser.moduleRole)) {
+    ['mk-btn-ok','btn-konfirm-semua','mks-btn-ok','mp-btn-ok','ai-btn-ok','ro-btn-ok'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.disabled = true;
+    });
+  }
+  RPA_STATE.bindScroll('Marinasi');
+  switchTab(RPA_STATE.getTab('Marinasi', 'masuk'));
   startClock();
   loadAll();
 }
@@ -1240,8 +1258,9 @@ async function loadMarinasiStock() {
   const { data, error } = await db
     .from('baskets')
     .select(`
-      id, basket_code, basket_type, qty_sisa, kg_sisa, lokasi, status, batch_id, product_id, created_at, updated_at,
-      product_master ( id, nama_produk, product_code, kategori, kg_min, kg_max )
+      id, basket_code, basket_type, qty_sisa, kg_sisa, lokasi, status, batch_id, product_id, created_at, updated_at, tanggal_produksi,
+      product_master ( id, nama_produk, product_code, kategori, kg_min, kg_max ),
+      live_chicken_batches ( batch_code )
     `)
     .eq('lokasi', 'MARINASI')
     .eq('status', 'AKTIF')
@@ -1699,6 +1718,7 @@ function renderStok() {
           <td colspan="2" style="font-family:monospace;font-weight:700">${b.basket_code}</td>
           <td>${fmt(b.qty_sisa)} ekor &nbsp;·&nbsp; ${fmtKg(b.kg_sisa)}</td>
           <td>
+            <button class="btn btn-ghost btn-sm" title="Cetak ulang label" onclick="event.stopPropagation();reprintStokLabel('${b.id}')">🖨️</button>
             <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openPindahKeluar('${b.id}')">📤 Pindah</button>
           </td>
         </tr>`;
@@ -1712,6 +1732,24 @@ function toggleGroup(key) {
   if (expandedGroups.has(key)) expandedGroups.delete(key);
   else expandedGroups.add(key);
   renderStok();
+}
+
+// Cetak ulang label keranjang langsung dari stok lantai (format standar 57x38mm)
+function reprintStokLabel(basketId) {
+  const b = marinasiStock.find(x => x.id === basketId);
+  if (!b) return;
+  const tglFmt = b.tanggal_produksi
+    ? new Date(b.tanggal_produksi + 'T00:00:00').toLocaleDateString('id-ID', { day:'2-digit', month:'short', year:'numeric' })
+    : '—';
+  RPALabel.printStandardLabel({
+    code:       b.basket_code,
+    namaProduk: b.product_master?.nama_produk || '—',
+    qtyText:    `${fmt(b.qty_sisa)} ekor`,
+    kgText:     fmtKg(b.kg_sisa),
+    tglText:    tglFmt,
+    refLabel:   'No Batch',
+    refValue:   b.live_chicken_batches?.batch_code || '—'
+  });
 }
 
 // ============================================================
@@ -2710,7 +2748,7 @@ function renderWSTab() {
   if (!sel) return;
 
   // Determine which WSs to show
-  const isSup = currentUser?.role === 'SUPERVISOR' || currentUser?.is_system_admin;
+  const isSup = currentUser?.role === 'SUPERVISOR' || currentUser?.is_system_admin || RPA_PERM.canApprove(currentUser?.moduleRole);
   let wsList;
   if (isSup) {
     wsList = allWorkstations;
@@ -3082,35 +3120,25 @@ async function doRecordOutput() {
 }
 
 // ============================================================
-// TAB 3 — QR LABEL PRINT
+// TAB 3 — QR LABEL PRINT (format standar 57x38mm, lihat labelPrint.js)
 // ============================================================
-function buildLabelHTML(b) {
-  const qrData = encodeURIComponent(b.basket_code);
-  const qrURL  = `https://api.qrserver.com/v1/create-qr-code/?size=76x76&data=${qrData}&format=svg`;
+function toLabelData(b) {
   const tglFmt = b.tanggal
     ? new Date(b.tanggal + 'T00:00:00').toLocaleDateString('id-ID', { day:'2-digit', month:'short', year:'numeric' })
     : '—';
+  return {
+    code:       b.basket_code || '—',
+    namaProduk: b.produk_name || '—',
+    qtyText:    `${fmt(b.qty)} ekor`,
+    kgText:     fmtKg(b.kg),
+    tglText:    tglFmt,
+    refLabel:   'No WO',
+    refValue:   b.wo_code || '—'
+  };
+}
 
-  return `<div style="width:57mm;height:38mm;border:1px solid #374151;border-radius:2px;padding:1.5mm 2mm;
-      font-family:Arial,sans-serif;background:white;display:flex;gap:2mm;box-sizing:border-box">
-    <div style="flex:1;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden;min-width:0">
-      <div>
-        <div style="font-size:7pt;font-weight:900;letter-spacing:.3px;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${b.basket_code}</div>
-        <div style="font-size:6.5pt;font-weight:700;color:#374151;margin-top:0.5mm;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${b.produk_name}</div>
-        <div style="font-size:5.5pt;color:#6b7280;margin-top:0.5mm;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">WO: ${b.wo_code}</div>
-        ${b.wo_catatan ? `<div style="font-size:5.5pt;color:#374151;margin-top:0.5mm;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-style:italic">${b.wo_catatan}</div>` : ''}
-      </div>
-      <div>
-        <div style="font-size:6pt;color:#374151">Qty: <strong>${fmt(b.qty)} ekor</strong></div>
-        <div style="font-size:6pt;color:#374151">Kg: <strong>${fmtKg(b.kg)}</strong></div>
-        <div style="font-size:5.5pt;color:#6b7280;margin-top:0.5mm">WS: ${b.ws_kode}</div>
-        <div style="font-size:5.5pt;color:#6b7280">Tgl: ${tglFmt}</div>
-      </div>
-    </div>
-    <div style="display:flex;align-items:center;flex-shrink:0">
-      <img src="${qrURL}" style="width:20mm;height:20mm;display:block">
-    </div>
-  </div>`;
+function buildLabelHTML(b) {
+  return RPALabel.buildStandardLabelHTML(toLabelData(b));
 }
 
 function showPrintModal(b) {
@@ -3142,26 +3170,8 @@ async function reprintLabel(outputId) {
 }
 
 function doPrintLabel() {
-  const container = document.getElementById('qr-label-container');
-  if (!container || !container.innerHTML) return;
-  const labelHTML = container.innerHTML;
-  const title     = lastPrintBasket?.basket_code || 'Label Keranjang';
-
-  const win = window.open('', '_blank', 'width=320,height=280');
-  win.document.write(`<!DOCTYPE html><html><head>
-    <meta charset="UTF-8">
-    <title>${title}</title>
-    <style>
-      *{box-sizing:border-box;margin:0;padding:0}
-      body{background:white;display:flex;justify-content:center;align-items:center;min-height:100vh}
-      @page{size:57mm 38mm;margin:0}
-      @media print{body{min-height:auto;display:block}.label-wrap{page-break-after:always}}
-    </style>
-  </head><body>
-    <div class="label-wrap">${labelHTML}</div>
-    <script>window.onload=function(){window.print();window.close();}<\/script>
-  </body></html>`);
-  win.document.close();
+  if (!lastPrintBasket) return;
+  RPALabel.printStandardLabel(toLabelData(lastPrintBasket));
 }
 
 // ============================================================

@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>Master Data — Kurnia's Food</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="viewstate.js"></script>
 <style>
 /* =====================================================
    RESET & BASE
@@ -354,11 +355,11 @@ tbody tr:hover { background: #f9fafb; }
         <div class="nav-item" onclick="navTo('ByProductKarkas.html')"><span class="nav-icon">📦</span><span class="nav-label-text">By-product Karkas</span></div>
 
         <div class="nav-section-label">Penjualan</div>
-        <div class="nav-item disabled"><span class="nav-icon">🛒</span><span class="nav-label-text">Penjualan</span></div>
+        <div class="nav-item" onclick="navTo('Penjualan.html')"><span class="nav-icon">🛒</span><span class="nav-label-text">Penjualan</span></div>
 
         <div class="nav-section-label">Manajemen</div>
         <div class="nav-item disabled"><span class="nav-icon">✅</span><span class="nav-label-text">Koreksi & Approval</span></div>
-        <div class="nav-item disabled"><span class="nav-icon">📊</span><span class="nav-label-text">Traceability</span></div>
+        <div class="nav-item" onclick="navTo('Laporan.html')"><span class="nav-icon">📊</span><span class="nav-label-text">Laporan</span></div>
         <div class="nav-item active"><span class="nav-icon">🗂️</span><span class="nav-label-text">Master Data</span><span class="nav-tag">Aktif</span></div>
         <div class="nav-item" id="nav-user-mgmt" style="display:none" onclick="navTo('UserManagement.html')"><span class="nav-icon">👥</span><span class="nav-label-text">Manajemen User</span></div>
       </nav>
@@ -750,7 +751,10 @@ async function initApp() {
     if (currentUser.is_system_admin) {
         document.getElementById('nav-user-mgmt').style.display = 'flex';
     }
+    RPA_STATE.bindFilters('MasterData', ['.toolbar']);
+    RPA_STATE.bindScroll('MasterData');
     await Promise.all([loadProducts(), loadWorkstations()]);
+    switchTab(RPA_STATE.getTab('MasterData', 'product'));
 }
 
 function checkSession() {
@@ -773,6 +777,7 @@ function toggleSidebar() {
     document.getElementById('sidebar-overlay').classList.toggle('open');
 }
 function switchTab(tab) {
+    RPA_STATE.saveTab('MasterData', tab);
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     document.getElementById('tab-' + tab).classList.add('active');

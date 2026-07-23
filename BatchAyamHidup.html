@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Batch Ayam Hidup — Kurnia's Food</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="permissions.js"></script>
+<script src="viewstate.js"></script>
 <style>
 /* ===== RESET & BASE ===== */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -553,19 +555,19 @@ a { text-decoration: none; }
             </div>
 
             <div class="nav-section-label">Penjualan</div>
-            <div class="nav-item disabled">
+            <div class="nav-item" onclick="navTo('Penjualan.html')">
                 <span class="nav-icon">🛒</span>
                 <span class="nav-label-text">Penjualan</span>
             </div>
 
             <div class="nav-section-label">Manajemen</div>
-            <div class="nav-item disabled supervisor-section">
+            <div class="nav-item disabled">
                 <span class="nav-icon">✅</span>
                 <span class="nav-label-text">Koreksi &amp; Approval</span>
             </div>
-            <div class="nav-item disabled">
+            <div class="nav-item" onclick="navTo('Laporan.html')">
                 <span class="nav-icon">📊</span>
-                <span class="nav-label-text">Traceability</span>
+                <span class="nav-label-text">Laporan</span>
             </div>
             <div class="nav-item" onclick="navTo('MasterData.html')">
                 <span class="nav-icon">🗂️</span>
@@ -615,7 +617,7 @@ a { text-decoration: none; }
             <!-- SUMMARY CARDS -->
             <div class="cards-row" id="cards-row">
                 <div class="summary-card c-blue">
-                    <div class="sc-label">Batch Hari Ini</div>
+                    <div class="sc-label">Total Batch</div>
                     <div class="sc-value skeleton" style="width:50px;height:32px"></div>
                 </div>
                 <div class="summary-card c-green">
@@ -640,6 +642,8 @@ a { text-decoration: none; }
             <div class="filter-bar">
                 <label>Tanggal:</label>
                 <input type="date" id="inp-filter-date" onchange="loadPage()">
+                <label>s/d:</label>
+                <input type="date" id="inp-filter-date-to" onchange="loadPage()">
                 <label>Status:</label>
                 <select id="inp-filter-status" onchange="loadPage()">
                     <option value="">Semua Status</option>
@@ -1001,6 +1005,12 @@ function todayISO() {
     return d.toISOString().split('T')[0];
 }
 
+function yesterdayISO() {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return d.toISOString().split('T')[0];
+}
+
 function durMenit(mulai, selesai) {
     if (!mulai || !selesai) return null;
     return Math.round((new Date(selesai) - new Date(mulai)) / 60000);
@@ -1054,7 +1064,8 @@ async function doLogin() {
         if (!data) { showLoginErr('Username atau password salah.'); return; }
 
         currentUser = data;
-        localStorage.setItem('rpa_user', JSON.stringify(data));
+        currentUser.permissions = await RPA_PERM.fetchPermissions(db, currentUser.id);
+        localStorage.setItem('rpa_user', JSON.stringify(currentUser));
         startApp();
     } catch (e) {
         console.error(e);
@@ -1089,6 +1100,14 @@ document.addEventListener('keydown', e => {
 // START APP
 // ============================================================
 function startApp() {
+    // Gate this page behind the 'batch' module permission. Covers both the
+    // fresh-login path (doLogin -> startApp) and the session-restore path
+    // (init() -> startApp), since currentUser.permissions is populated
+    // before startApp() runs in both cases.
+    const moduleRole = RPA_PERM.enforceModuleAccess(currentUser, 'batch');
+    if (!moduleRole) return;
+    currentUser.moduleRole = moduleRole;
+
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app-screen').style.display   = 'block';
 
@@ -1105,12 +1124,27 @@ function startApp() {
         document.getElementById('app-screen').classList.add('is-supervisor');
     }
 
+    // Viewer role (per-module permission) cannot input data — hide the
+    // primary add/save entry points. Read-only views (table, Edit-as-view)
+    // remain accessible.
+    if (RPA_PERM.isViewOnly(currentUser.moduleRole)) {
+        document.querySelectorAll('.btn-baru').forEach(b => b.style.display = 'none');
+        const bd = document.getElementById('btn-save-draft'); if (bd) bd.style.display = 'none';
+        const ba = document.getElementById('btn-save-aktif'); if (ba) ba.style.display = 'none';
+    }
+
     document.getElementById('topbar-date').textContent = new Date().toLocaleDateString('id-ID', {
         weekday:'long', day:'numeric', month:'long', year:'numeric'
     });
 
-    // Set default filter tanggal = hari ini
-    document.getElementById('inp-filter-date').value = todayISO();
+    // Set default filter tanggal = kemarin s/d hari ini — kecuali ada filter
+    // tersimpan dari kunjungan sebelumnya (mis. balik dari menu lain).
+    const restoredFilters = RPA_STATE.bindFilters('BatchAyamHidup', ['.filter-bar']);
+    if (!restoredFilters) {
+        document.getElementById('inp-filter-date').value = yesterdayISO();
+        document.getElementById('inp-filter-date-to').value = todayISO();
+    }
+    RPA_STATE.bindScroll('BatchAyamHidup');
 
     const tick = () => {
         document.getElementById('clock').textContent = new Date().toLocaleTimeString('id-ID', {
@@ -1155,14 +1189,19 @@ async function loadPage() {
     const btn = document.getElementById('btn-refresh');
     btn.classList.add('loading');
 
-    const filterDate   = document.getElementById('inp-filter-date').value || todayISO();
+    let filterDate     = document.getElementById('inp-filter-date').value || todayISO();
+    let filterDateTo   = document.getElementById('inp-filter-date-to').value || filterDate;
     const filterStatus = document.getElementById('inp-filter-status').value;
+
+    if (filterDateTo < filterDate) [filterDate, filterDateTo] = [filterDateTo, filterDate];
 
     try {
         let q = db
             .from('live_chicken_batches')
             .select('*, created_by_user:created_by(nama), updated_by_user:updated_by(nama)')
-            .eq('tanggal', filterDate)
+            .gte('tanggal', filterDate)
+            .lte('tanggal', filterDateTo)
+            .order('tanggal', { ascending: true })
             .order('created_at', { ascending: true });
 
         if (filterStatus) q = q.eq('status', filterStatus);
@@ -1231,7 +1270,8 @@ function renderCards(rows) {
 function renderTable(rows) {
     const pill  = document.getElementById('pill-batch');
     const tbody = document.getElementById('tbody-batch');
-    const isSup = currentUser.role === 'SUPERVISOR';
+    const isSup = currentUser.role === 'SUPERVISOR' || RPA_PERM.canApprove(currentUser.moduleRole);
+    const viewOnly = RPA_PERM.isViewOnly(currentUser.moduleRole);
 
     pill.textContent = rows.length + ' batch';
 
@@ -1271,7 +1311,7 @@ function renderTable(rows) {
         // Aksi
         let aksiHtml = `<button class="btn btn-edit" onclick="openModalEdit('${r.id}')">✏️ Edit</button>`;
 
-        if (r.status === 'DRAFT') {
+        if (r.status === 'DRAFT' && !viewOnly) {
             aksiHtml += ` <button class="btn btn-aktif" onclick="konfirmasiAktifkan('${r.id}','${r.batch_code}')">▶ Aktifkan</button>`;
         } else if (r.status === 'ACTIVE' && isSup) {
             aksiHtml += ` <button class="btn btn-done" onclick="openModalSelesai('${r.id}','${r.batch_code}')">✅ Selesai</button>`;
@@ -1547,9 +1587,11 @@ async function saveBatch(targetStatus) {
     }
 
     // Hitung selisih_ekor jika data cukup
+    // Timbang Ulang sudah termasuk ayam yang belakangan ketahuan mati (ditimbang dulu,
+    // baru mati dibuang) -- jadi selisih = kandang - timbang + mati, BUKAN kandang - mati - timbang.
     let selisihEkor = null;
     if (ekorKandang != null && ekorTimbang != null) {
-        selisihEkor = ekorKandang - ekorMati - ekorTimbang;
+        selisihEkor = ekorKandang - ekorTimbang + ekorMati;
     }
 
     const noReferensi      = document.getElementById('mb-no-referensi').value.trim() || null;
@@ -1635,7 +1677,7 @@ async function loadMasterData() {
         const [{ data: eks, error: e1 }, { data: sup, error: e2 },
                { data: knd, error: e3 }, { data: tipe, error: e4 }] = await Promise.all([
             db.from('master_ekspedisi').select('id, nama').eq('aktif', true).order('nama'),
-            db.from('master_supir').select('id, nama, ekspedisi_id').eq('aktif', true).order('nama'),
+            db.from('master_supir').select('id, nama, ekspedisi_id').eq('aktif', true).eq('tipe', 'AYAM_MASUK').order('nama'),
             db.from('master_kandang').select('id, nama, tipe').eq('aktif', true).order('nama'),
             db.from('master_tipe_kandang').select('kode, label, urutan').eq('aktif', true).order('urutan'),
         ]);
@@ -1973,7 +2015,7 @@ async function submitTambahMaster() {
             const eksId = document.getElementById('mt-eks-filter').value || null;
             const { data, error } = await db
                 .from('master_supir')
-                .insert({ nama, ekspedisi_id: eksId, no_hp: noHp })
+                .insert({ nama, ekspedisi_id: eksId, no_hp: noHp, tipe: 'AYAM_MASUK' })
                 .select('id, nama, ekspedisi_id')
                 .single();
             if (error) throw error;
@@ -2033,7 +2075,7 @@ async function konfirmasiAktifkan(batchId, batchCode) {
     // Cek data dulu
     const { data } = await db
         .from('live_chicken_batches')
-        .select('ekor_kandang, kg_kandang, ekor_timbang_ulang, kg_timbang_ulang')
+        .select('ekor_kandang, kg_kandang, ekor_timbang_ulang, kg_timbang_ulang, ekor_mati')
         .eq('id', batchId)
         .single();
 
@@ -2048,8 +2090,9 @@ async function konfirmasiAktifkan(batchId, batchCode) {
         async () => {
             const ekorK   = data.ekor_kandang || 0;
             const ekorT   = data.ekor_timbang_ulang || 0;
-            const ekorM   = 0;
-            const selisih = ekorK - ekorM - ekorT;
+            const ekorM   = data.ekor_mati || 0;
+            // Timbang Ulang sudah termasuk ayam yang belakangan ketahuan mati -- selisih = kandang - timbang + mati.
+            const selisih = ekorK - ekorT + ekorM;
 
             const { error } = await db
                 .from('live_chicken_batches')
@@ -2092,14 +2135,26 @@ async function submitSelesai() {
         return;
     }
 
-    // Verifikasi PIN ke DB — hanya Supervisor atau System Admin
+    // Verifikasi PIN ke DB — Supervisor, System Admin, atau user dengan
+    // permission modul 'batch' setara supervisor/admin
     const pinErr = document.getElementById('ms-pin-error');
-    const { data: sup } = await db.from('users')
-        .select('id, nama')
+    const { data: pinUser } = await db.from('users')
+        .select('id, nama, role, is_system_admin')
         .eq('pin', pin)
         .eq('aktif', true)
-        .or('role.eq.SUPERVISOR,is_system_admin.eq.true')
         .maybeSingle();
+
+    let sup = null;
+    if (pinUser) {
+        if (pinUser.role === 'SUPERVISOR' || pinUser.is_system_admin) {
+            sup = pinUser;
+        } else {
+            const pinUserPerms = await RPA_PERM.fetchPermissions(db, pinUser.id);
+            if (RPA_PERM.canApprove(pinUserPerms['batch'] || null)) {
+                sup = pinUser;
+            }
+        }
+    }
     if (!sup) {
         pinErr.textContent   = 'PIN salah atau bukan Supervisor.';
         pinErr.style.display = 'block';

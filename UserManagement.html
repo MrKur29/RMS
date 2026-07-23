@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>Manajemen User — Kurnia's Food</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="viewstate.js"></script>
 <style>
 /* =====================================================
    RESET & BASE
@@ -456,7 +457,7 @@ input, select, textarea { font-family: inherit; }
                 </div>
 
                 <div class="nav-section-label">Penjualan</div>
-                <div class="nav-item disabled">
+                <div class="nav-item" onclick="navTo('Penjualan.html')">
                     <span class="nav-icon">🛒</span>
                     <span class="nav-label-text">Penjualan</span>
                 </div>
@@ -466,9 +467,9 @@ input, select, textarea { font-family: inherit; }
                     <span class="nav-icon">✅</span>
                     <span class="nav-label-text">Koreksi & Approval</span>
                 </div>
-                <div class="nav-item disabled">
+                <div class="nav-item" onclick="navTo('Laporan.html')">
                     <span class="nav-icon">📊</span>
-                    <span class="nav-label-text">Traceability</span>
+                    <span class="nav-label-text">Laporan</span>
                 </div>
                 <div class="nav-item" onclick="navTo('MasterData.html')">
                     <span class="nav-icon">🗂️</span>
@@ -615,10 +616,14 @@ input, select, textarea { font-family: inherit; }
                 <div class="perm-add-row">
                     <select id="perm-add-module">
                         <option value="">— Pilih Modul —</option>
+                        <option value="batch">Batch Ayam Hidup</option>
                         <option value="karkas">Produksi Karkas</option>
+                        <option value="thawing">Thawing</option>
+                        <option value="chiller">Chiller</option>
+                        <option value="workorder">Work Order</option>
                         <option value="parting">Parting</option>
                         <option value="boneless">Boneless</option>
-                        <option value="chiller">Chiller</option>
+                        <option value="marinasi">Marinasi</option>
                         <option value="blasting">Blasting</option>
                         <option value="byproduct">By-product Karkas</option>
                         <option value="penjualan">Penjualan</option>
@@ -697,10 +702,14 @@ let modalPerms   = [];      // [{module, role, id?}] — in-modal working copy
 
 // Map modul ke label tampilan
 const MODULE_LABELS = {
+    batch:     'Batch Ayam Hidup',
     karkas:    'Produksi Karkas',
+    thawing:   'Thawing',
+    chiller:   'Chiller',
+    workorder: 'Work Order',
     parting:   'Parting',
     boneless:  'Boneless',
-    chiller:   'Chiller',
+    marinasi:  'Marinasi',
     blasting:  'Blasting',
     byproduct: 'By-product',
     penjualan: 'Penjualan',
@@ -843,6 +852,11 @@ function startApp() {
     // Topbar date
     document.getElementById('topbar-date').textContent =
         new Date().toLocaleDateString('id-ID', { weekday:'short', day:'numeric', month:'short' });
+
+    RPA_STATE.bindFilters('UserManagement', ['.filter-bar']);
+    RPA_STATE.bindScroll('UserManagement');
+    const savedFilter = RPA_STATE.getTab('UserManagement', 'semua');
+    setFilter(savedFilter);
 
     loadUsers();
 }
@@ -995,6 +1009,7 @@ function escHtml(str) {
 // ============================================================
 function setFilter(f) {
     filterStatus = f;
+    RPA_STATE.saveTab('UserManagement', f);
     ['semua','aktif','nonaktif'].forEach(t => {
         document.getElementById(`tab-${t}`).classList.toggle('active', t === f);
     });

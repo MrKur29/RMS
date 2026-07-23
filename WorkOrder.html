@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Work Order — Kurnia's Food</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="permissions.js"></script>
+<script src="viewstate.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -348,10 +350,10 @@ a{text-decoration:none}
       <div class="nav-item" onclick="navTo('Blasting.html')"><span class="nav-icon">🧊</span><span class="nav-label-text">Blasting</span></div>
       <div class="nav-item" onclick="navTo('ByProductKarkas.html')"><span class="nav-icon">📦</span><span class="nav-label-text">By-product Karkas</span></div>
       <div class="nav-section-label">Penjualan</div>
-      <div class="nav-item disabled"><span class="nav-icon">🛒</span><span class="nav-label-text">Penjualan</span></div>
+      <div class="nav-item" onclick="navTo('Penjualan.html')"><span class="nav-icon">🛒</span><span class="nav-label-text">Penjualan</span></div>
       <div class="nav-section-label">Manajemen</div>
       <div class="nav-item disabled"><span class="nav-icon">✅</span><span class="nav-label-text">Koreksi &amp; Approval</span></div>
-      <div class="nav-item disabled"><span class="nav-icon">📊</span><span class="nav-label-text">Traceability</span></div>
+      <div class="nav-item" onclick="navTo('Laporan.html')"><span class="nav-icon">📊</span><span class="nav-label-text">Laporan</span></div>
       <div class="nav-item" onclick="navTo('MasterData.html')"><span class="nav-icon">🗂️</span><span class="nav-label-text">Master Data</span></div>
       <div class="nav-item" id="nav-user-mgmt" style="display:none" onclick="navTo('UserManagement.html')"><span class="nav-icon">👥</span><span class="nav-label-text">Manajemen User</span></div>
     </nav>
@@ -445,7 +447,7 @@ a{text-decoration:none}
         <div class="panel-head">
           <div class="panel-title">📋 Daftar Work Order</div>
           <div class="panel-actions">
-            <button class="btn btn-primary" onclick="openCreateWO()">＋ Buat WO Baru</button>
+            <button class="btn btn-primary" id="btn-create-wo" onclick="openCreateWO()">＋ Buat WO Baru</button>
           </div>
         </div>
         <div class="section-toolbar">
@@ -790,6 +792,7 @@ async function doLogin() {
     if (error) throw error;
     if (!data) { showLoginErr('Username atau password salah.'); return; }
     currentUser = data;
+    currentUser.permissions = await RPA_PERM.fetchPermissions(db, currentUser.id);
     localStorage.setItem('rpa_user', JSON.stringify(data));
     startApp();
   } catch(e) {
@@ -814,6 +817,10 @@ function doLogout() {
 // APP START
 // ============================================================
 function startApp() {
+  const moduleRole = RPA_PERM.enforceModuleAccess(currentUser, 'workorder');
+  if (!moduleRole) return;
+  currentUser.moduleRole = moduleRole;
+
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app-screen').style.display = 'block';
   const av = document.getElementById('user-avatar');
@@ -824,9 +831,17 @@ function startApp() {
     const umEl = document.getElementById('nav-user-mgmt');
     if (umEl) umEl.style.display = 'flex';
   }
+  if (RPA_PERM.isViewOnly(currentUser.moduleRole)) {
+    const btnCreate = document.getElementById('btn-create-wo');
+    if (btnCreate) btnCreate.style.display = 'none';
+  }
   startClock();
-  document.getElementById('flt-date-from').value = todayISO();
-  document.getElementById('flt-date-to').value   = todayISO();
+  const restoredFilters = RPA_STATE.bindFilters('WorkOrder', ['.filter-bar']);
+  if (!restoredFilters) {
+    document.getElementById('flt-date-from').value = todayISO();
+    document.getElementById('flt-date-to').value   = todayISO();
+  }
+  RPA_STATE.bindScroll('WorkOrder');
   loadAll();
 }
 
@@ -875,6 +890,20 @@ async function loadWOs() {
   allWOs = data || [];
 }
 
+// Detect "table doesn't exist yet" style errors regardless of exact wording.
+// Supabase/PostgREST reports this as e.g. "Could not find the table
+// 'public.work_order_stages' in the schema cache" (code PGRST205), not
+// "does not exist" — a plain .includes('does not exist') check misses it
+// and was causing WO creation to fail hard even though the WO itself had
+// already been inserted successfully.
+function isMissingTableError(e) {
+  const msg = (e?.message || '').toLowerCase();
+  return e?.code === 'PGRST205'
+    || e?.code === '42P01'
+    || msg.includes('does not exist')
+    || msg.includes('schema cache');
+}
+
 async function loadWOStages() {
   try {
     const { data, error } = await db
@@ -896,7 +925,7 @@ async function loadWOStages() {
     allWOs.forEach(wo => { wo.stages = stagesMap[wo.id] || null; });
   } catch(e) {
     // Table doesn't exist yet — graceful fallback
-    if (!e.message?.includes('does not exist')) console.warn('work_order_stages:', e.message);
+    if (!isMissingTableError(e)) console.warn('work_order_stages:', e.message);
     allWOs.forEach(wo => { wo.stages = null; });
   }
 }
@@ -1146,8 +1175,8 @@ async function doCreateWO() {
       const { error: stagesErr } = await db.from('work_order_stages').insert(stageRows);
       if (stagesErr) {
         // Table doesn't exist yet — warn but don't fail the WO creation
-        if (stagesErr.message?.includes('does not exist')) {
-          console.warn('work_order_stages table not yet created. Run migration to enable multi-stage tracking.');
+        if (isMissingTableError(stagesErr)) {
+          console.warn('work_order_stages table not yet created. Run migration 40 to enable multi-stage tracking.');
         } else {
           throw stagesErr;
         }
@@ -1306,12 +1335,23 @@ async function doApproveWO() {
   const btn = document.getElementById('apr-btn-ok');
   btn.disabled = true; btn.textContent = 'Memverifikasi…';
   try {
-    const { data: sup, error: supErr } = await db.from('users')
+    const { data: pinUser, error: supErr } = await db.from('users')
       .select('id, nama, role, is_system_admin')
       .eq('pin', pin).eq('aktif', true)
-      .or('role.eq.SUPERVISOR,is_system_admin.eq.true')
       .maybeSingle();
     if (supErr) throw supErr;
+    let sup = null;
+    if (pinUser) {
+      // Legacy check: role=SUPERVISOR or is_system_admin
+      if (pinUser.is_system_admin || pinUser.role === 'SUPERVISOR') {
+        sup = pinUser;
+      } else {
+        // New granular permission check: does this PIN owner have supervisor/admin-level
+        // access to the 'workorder' module via user_module_permissions?
+        const pinUserPerms = await RPA_PERM.fetchPermissions(db, pinUser.id);
+        if (RPA_PERM.canApprove(pinUserPerms['workorder'])) sup = pinUser;
+      }
+    }
     if (!sup) { pinErr.textContent = 'PIN salah atau bukan Supervisor.'; pinErr.style.display = 'block'; return; }
 
     const { error: updErr } = await db.from('processing_orders').update({

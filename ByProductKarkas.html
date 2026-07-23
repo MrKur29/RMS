@@ -5,7 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>By-product Karkas — Kurnia's Food</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="permissions.js"></script>
+<script src="viewstate.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="labelPrint.js"></script>
 <style>
 /* ===== RESET & BASE ===== */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -157,85 +160,6 @@ tr:hover td{background:#fafafa}
 .btn-secondary{padding:9px 18px;background:#f3f4f6;color:#374151;border:1.5px solid #e5e7eb;border-radius:7px;font-size:13px;font-weight:600}
 .btn-primary{padding:9px 20px;background:#2563eb;color:white;border:none;border-radius:7px;font-size:13px;font-weight:700}
 .btn-primary:hover{background:#1d4ed8}
-/* ===== PRINT LABEL 57x38mm ===== */
-@media print {
-  @page { size: 57mm 38mm; margin: 0; }
-  body > *:not(#label-print-area) { display: none !important; }
-  #label-print-area { display: block !important; }
-  #label-print-area * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-}
-#label-print-area {
-  display: none;
-  width: 57mm;
-  height: 38mm;
-  padding: 2mm 2mm 1mm 2mm;
-  background: white;
-  font-family: 'Segoe UI', sans-serif;
-  position: fixed;
-  left: -9999px;
-  top: 0;
-}
-.lbl-inner {
-  display: flex;
-  height: 100%;
-  gap: 2mm;
-}
-.lbl-qr {
-  width: 22mm;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.lbl-qr img, .lbl-qr canvas {
-  width: 20mm !important;
-  height: 20mm !important;
-}
-.lbl-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  overflow: hidden;
-  min-width: 0;
-}
-.lbl-title {
-  font-size: 9pt;
-  font-weight: 900;
-  color: #111;
-  line-height: 1.1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.lbl-keterangan {
-  font-size: 8pt;
-  font-weight: 700;
-  color: #374151;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.lbl-qty-kg {
-  font-size: 11pt;
-  font-weight: 900;
-  color: #111;
-  line-height: 1;
-}
-.lbl-qty-unit {
-  font-size: 7pt;
-  color: #6b7280;
-}
-.lbl-code {
-  font-size: 6pt;
-  color: #9ca3af;
-  font-family: monospace;
-  letter-spacing: .3px;
-}
-.lbl-date {
-  font-size: 6.5pt;
-  color: #374151;
-}
 /* ===== TOAST ===== */
 #toast{position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;flex-direction:column;gap:8px}
 .toast-msg{background:#1e293b;color:white;padding:10px 16px;border-radius:8px;font-size:13px;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,.25);animation:toastIn .25s ease;display:flex;align-items:center;gap:8px}
@@ -308,14 +232,14 @@ tr:hover td{background:#fafafa}
         <div class="nav-item" onclick="navTo('Boneless.html')"><span class="nav-icon">🥩</span><span class="nav-label-text">Boneless</span></div>
         <div class="nav-item" onclick="navTo('Marinasi.html')"><span class="nav-icon">🌶️</span><span class="nav-label-text">Marinasi</span></div>
         <div class="nav-item" onclick="navTo('Blasting.html')"><span class="nav-icon">🧊</span><span class="nav-label-text">Blasting</span></div>
-        <div class="nav-item active"><span class="nav-icon">📦</span><span class="nav-label-text">By-product Karkas</span></div>
+        <div class="nav-item active"><span class="nav-icon">📦</span><span class="nav-label-text">By-product Karkas</span><span class="nav-tag">Aktif</span></div>
         <div class="nav-section-label">Penjualan</div>
-        <div class="nav-item disabled"><span class="nav-icon">🛒</span><span class="nav-label-text">Penjualan</span></div>
+        <div class="nav-item" onclick="navTo('Penjualan.html')"><span class="nav-icon">🛒</span><span class="nav-label-text">Penjualan</span></div>
         <div class="nav-section-label">Manajemen</div>
         <div class="nav-item disabled"><span class="nav-icon">✅</span><span class="nav-label-text">Koreksi &amp; Approval</span></div>
-        <div class="nav-item disabled"><span class="nav-icon">📊</span><span class="nav-label-text">Traceability</span></div>
+        <div class="nav-item" onclick="navTo('Laporan.html')"><span class="nav-icon">📊</span><span class="nav-label-text">Laporan</span></div>
         <div class="nav-item" onclick="navTo('MasterData.html')"><span class="nav-icon">🗂️</span><span class="nav-label-text">Master Data</span></div>
-        <div class="nav-item" id="nav-usermgmt" style="display:none" onclick="navTo('UserManagement.html')"><span class="nav-icon">👥</span><span class="nav-label-text">Manajemen User</span></div>
+        <div class="nav-item" id="nav-user-mgmt" style="display:none" onclick="navTo('UserManagement.html')"><span class="nav-icon">👥</span><span class="nav-label-text">Manajemen User</span></div>
       </nav>
       <div class="sidebar-footer">
         <div class="user-card">
@@ -534,38 +458,13 @@ tr:hover td{background:#fafafa}
     </div>
     <div class="modal-body">
       <p style="font-size:12px;color:#6b7280;margin-bottom:14px">Preview label 57×38mm untuk barang ke Chiller. Label dicetak di area Karkas.</p>
-      <!-- Preview label (skala besar untuk layar) -->
-      <div id="label-preview" style="border:2px solid #e5e7eb;border-radius:8px;padding:12px;background:#fff;min-height:120px;display:flex;gap:12px;align-items:flex-start">
-        <div id="preview-qr" style="width:80px;height:80px;flex-shrink:0"></div>
-        <div style="flex:1;min-width:0">
-          <div id="prev-title" style="font-size:14px;font-weight:900;color:#111;margin-bottom:4px"></div>
-          <div id="prev-keterangan" style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px"></div>
-          <div id="prev-qty" style="font-size:18px;font-weight:900;color:#111"></div>
-          <div id="prev-unit" style="font-size:11px;color:#6b7280;margin-bottom:4px"></div>
-          <div id="prev-code" style="font-size:10px;color:#9ca3af;font-family:monospace"></div>
-          <div id="prev-date" style="font-size:10px;color:#374151"></div>
-        </div>
-      </div>
+      <!-- Preview label (ukuran asli 57x38mm) -->
+      <div id="qr-label-container" style="display:flex;justify-content:center;padding:8px 0 4px"></div>
       <p style="font-size:11px;color:#9ca3af;margin-top:10px;text-align:center">Klik "Cetak Label" untuk print ke printer 57mm</p>
     </div>
     <div class="modal-footer">
       <button class="btn-secondary" onclick="closeModal('modal-label')">Tutup</button>
       <button class="btn-primary" onclick="doPrint()">🖨️ Cetak Label</button>
-    </div>
-  </div>
-</div>
-
-<!-- ===== AREA PRINT (hidden, untuk @media print) ===== -->
-<div id="label-print-area">
-  <div class="lbl-inner">
-    <div class="lbl-qr" id="print-qr-container"></div>
-    <div class="lbl-info">
-      <div class="lbl-title" id="print-title"></div>
-      <div class="lbl-keterangan" id="print-keterangan"></div>
-      <div class="lbl-qty-kg" id="print-qty"></div>
-      <div class="lbl-qty-unit" id="print-unit"></div>
-      <div class="lbl-code" id="print-code"></div>
-      <div class="lbl-date" id="print-date"></div>
     </div>
   </div>
 </div>
@@ -626,6 +525,9 @@ function toast(msg, type='info', dur=3000){
   t.appendChild(d);
   setTimeout(()=>d.remove(), dur);
 }
+// Alias so shared helpers (RPA_PERM) that look for a global showToast() use
+// this page's existing toast UI instead of falling back to alert().
+function showToast(msg, type='info'){ toast(msg, type); }
 function showModal(id){ document.getElementById(id).classList.add('visible'); }
 function closeModal(id){ document.getElementById(id).classList.remove('visible'); }
 function openSidebar(){ document.getElementById('sidebar').classList.add('open'); document.getElementById('sidebar-overlay').classList.add('visible'); }
@@ -660,10 +562,8 @@ async function doLogin(){
     if(error||!data){ errEl.textContent='Username atau password salah'; errEl.style.display='block'; return; }
     if(!data.aktif){ errEl.textContent='Akun nonaktif'; errEl.style.display='block'; return; }
     // load permissions
-    const { data: perms } = await db.from('user_module_permissions').select('module,role').eq('user_id', data.id);
-    const permissions = {};
-    (perms||[]).forEach(p=>{ permissions[p.module]=p.role; });
-    currentUser = {...data, permissions};
+    currentUser = {...data};
+    currentUser.permissions = await RPA_PERM.fetchPermissions(db, currentUser.id);
     sessionStorage.setItem('rpa_user', JSON.stringify(currentUser));
     startApp();
   } catch(e){ errEl.textContent='Error: '+e.message; errEl.style.display='block'; }
@@ -676,14 +576,32 @@ function logout(){ sessionStorage.removeItem('rpa_user'); location.reload(); }
 
 // ===== START APP =====
 function startApp(){
+  // Gate this page behind the 'byproduct' module permission. Covers both the
+  // fresh-login path (doLogin -> startApp) and the session-restore path
+  // (auto-login IIFE / DOMContentLoaded -> startApp), since currentUser.permissions
+  // is populated before startApp() runs in both cases.
+  const moduleRole = RPA_PERM.enforceModuleAccess(currentUser, 'byproduct');
+  if(!moduleRole) return;
+  currentUser.moduleRole = moduleRole;
+
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app-screen').style.display='block';
   document.getElementById('user-name').textContent = currentUser.nama;
   document.getElementById('user-role').textContent = currentUser.is_system_admin ? 'System Admin' : (currentUser.role||'Operator');
   document.getElementById('user-avatar').textContent = currentUser.nama.charAt(0).toUpperCase();
-  if(currentUser.is_system_admin) document.getElementById('nav-usermgmt').style.display='';
-  // set tanggal filter ke hari ini
-  document.getElementById('filter-tanggal').value = todayStr();
+  if(currentUser.is_system_admin) document.getElementById('nav-user-mgmt').style.display='';
+  // Viewer role (per-module permission) cannot input data — disable the
+  // primary add entry point. Read-only views (table, rekap) remain accessible.
+  if(RPA_PERM.isViewOnly(currentUser.moduleRole)){
+    const bt = document.getElementById('btn-tambah');
+    if(bt){ bt.disabled = true; bt.textContent = 'Hanya Lihat'; }
+  }
+  // set tanggal filter ke hari ini — kecuali ada filter tersimpan sebelumnya
+  const restoredFilters = RPA_STATE.bindFilters('ByProductKarkas', ['.filter-bar']);
+  if (!restoredFilters) {
+    document.getElementById('filter-tanggal').value = todayStr();
+  }
+  RPA_STATE.bindScroll('ByProductKarkas');
   loadProduk();
   loadMasterPelanggan();
   loadAll();
@@ -1084,81 +1002,38 @@ async function confirmHapus(){
 }
 
 // ===== PRINT LABEL =====
+// Format standar 57x38mm — lihat labelPrint.js. By-product karkas tidak
+// terikat ke basket/WO, jadi kode di QR pakai label_code (fallback ke
+// potongan id kalau belum ada), dan baris terakhir label pakai Keterangan.
+function toLabelData(e){
+  const code = e.label_code || e.id.slice(0,12).toUpperCase();
+  return {
+    code,
+    namaProduk: e.product_master?.nama_produk || '-',
+    qtyText:    `${e.qty_bungkus} bks`,
+    kgText:     `${fmtKg(e.kg)} kg`,
+    tglText:    fmtTgl(e.tanggal),
+    refLabel:   'Keterangan',
+    refValue:   e.keterangan || 'Chiller'
+  };
+}
+
 function openPrintLabel(id){
   const e = entriesList.find(x=>x.id===id);
   if(!e) return;
   printTarget = e;
-  const namaP = e.product_master?.nama_produk||'-';
-  const ket   = e.keterangan||'';
-  const code  = e.label_code||e.id.slice(0,12).toUpperCase();
-  const tgl   = fmtTgl(e.tanggal);
-
-  const labelKet = [e.keterangan].filter(Boolean).join(' — ');
-  document.getElementById('prev-title').textContent      = namaP;
-  document.getElementById('prev-keterangan').textContent = labelKet||'Chiller';
-  document.getElementById('prev-qty').textContent        = `${e.qty_bungkus} bks`;
-  document.getElementById('prev-unit').textContent       = `${fmtKg(e.kg)} kg`;
-  document.getElementById('prev-code').textContent       = code;
-  document.getElementById('prev-date').textContent       = tgl;
-
-  const qrDiv = document.getElementById('preview-qr');
-  qrDiv.innerHTML = '';
-  new QRCode(qrDiv, { text: code, width:80, height:80, correctLevel: QRCode.CorrectLevel.M });
-
+  const container = document.getElementById('qr-label-container');
+  if (container) container.innerHTML = RPALabel.buildStandardLabelHTML(toLabelData(e));
   showModal('modal-label');
 }
 
 function doPrint(){
   if(!printTarget) return;
   const e = printTarget;
-  const namaP = e.product_master?.nama_produk||'-';
-  const ket   = e.keterangan||'';
-  const code  = e.label_code||e.id.slice(0,12).toUpperCase();
-  const tgl   = fmtTgl(e.tanggal);
-
-
-  const win = window.open('','_print_label','width=400,height=300');
-  win.document.write(`<!DOCTYPE html><html><head>
-<style>
-@page { size: 57mm 38mm; margin: 0; }
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { width: 57mm; height: 38mm; font-family: Arial, sans-serif; overflow: hidden; }
-.label { width: 57mm; height: 38mm; display: flex; flex-direction: column; padding: 2mm; }
-.label-top { display: flex; gap: 2mm; flex: 1; }
-.label-info { flex: 1; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; }
-.label-produk { font-size: 9pt; font-weight: bold; line-height: 1.2; }
-.label-ket { font-size: 7pt; color: #444; }
-.label-qty { font-size: 10pt; font-weight: bold; margin-top: 2mm; }
-.label-qr { width: 28mm; display: flex; align-items: center; justify-content: center; }
-.label-qr img { width: 28mm; height: 28mm; }
-.label-bottom { display: flex; justify-content: space-between; align-items: flex-end; }
-.label-code { font-size: 6pt; font-family: monospace; }
-.label-date { font-size: 6pt; }
-</style>
-</head><body>
-<div class="label">
-  <div class="label-top">
-    <div class="label-info">
-      <div class="label-produk">${namaP}</div>
-      <div class="label-ket">${ket||'Chiller'}</div>
-      <div class="label-qty">${e.qty_bungkus} bks &bull; ${fmtKg(e.kg)} kg</div>
-    </div>
-    <div class="label-qr"><img src="https://api.qrserver.com/v1/create-qr-code/?size=112x112&data=${encodeURIComponent(code)}" /></div>
-  </div>
-  <div class="label-bottom">
-    <span class="label-code">${code}</span>
-    <span class="label-date">${tgl}</span>
-  </div>
-</div>
-</body></html>`);
-  win.document.close();
-  win.onload = async () => {
-    win.focus(); win.print(); win.close();
-    try {
-      await db.from('byproduct_karkas_entries').update({ label_printed: true }).eq('id', e.id);
-      loadAll();
-    } catch(err){ /* silent */ }
-  };
+  RPALabel.printStandardLabel(toLabelData(e));
+  db.from('byproduct_karkas_entries').update({ label_printed: true }).eq('id', e.id)
+    .then(() => loadAll())
+    .catch(() => { /* silent */ });
   closeModal('modal-label');
 }
 

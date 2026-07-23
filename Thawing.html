@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Thawing — Kurnia's Food</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="permissions.js"></script>
+<script src="viewstate.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -277,7 +279,7 @@ tr:hover td{background:#f9fafb}
         <div class="nav-section-label">Produksi</div>
         <div class="nav-item" onclick="navTo('BatchAyamHidup.html')"><span class="nav-icon">🐔</span><span class="nav-label-text">Batch Ayam Hidup</span></div>
         <div class="nav-item" onclick="navTo('ProduksiKarkas.html')"><span class="nav-icon">⚙️</span><span class="nav-label-text">Produksi Karkas</span></div>
-        <div class="nav-item active"><span class="nav-icon">🧊</span><span class="nav-label-text">Thawing</span></div>
+        <div class="nav-item active"><span class="nav-icon">🧊</span><span class="nav-label-text">Thawing</span><span class="nav-tag">Aktif</span></div>
         <div class="nav-item" onclick="navTo('Chiller.html')"><span class="nav-icon">❄️</span><span class="nav-label-text">Chiller</span></div>
         <div class="nav-item" onclick="navTo('WorkOrder.html')"><span class="nav-icon">📋</span><span class="nav-label-text">Work Order</span></div>
         <div class="nav-item" onclick="navTo('Parting.html')"><span class="nav-icon">✂️</span><span class="nav-label-text">Parting</span></div>
@@ -286,10 +288,10 @@ tr:hover td{background:#f9fafb}
         <div class="nav-item" onclick="navTo('Blasting.html')"><span class="nav-icon">🧊</span><span class="nav-label-text">Blasting</span></div>
         <div class="nav-item" onclick="navTo('ByProductKarkas.html')"><span class="nav-icon">📦</span><span class="nav-label-text">By-product Karkas</span></div>
         <div class="nav-section-label">Penjualan</div>
-        <div class="nav-item disabled"><span class="nav-icon">🛒</span><span class="nav-label-text">Penjualan</span></div>
+        <div class="nav-item" onclick="navTo('Penjualan.html')"><span class="nav-icon">🛒</span><span class="nav-label-text">Penjualan</span></div>
         <div class="nav-section-label">Manajemen</div>
         <div class="nav-item disabled"><span class="nav-icon">✅</span><span class="nav-label-text">Koreksi &amp; Approval</span></div>
-        <div class="nav-item disabled"><span class="nav-icon">📊</span><span class="nav-label-text">Traceability</span></div>
+        <div class="nav-item" onclick="navTo('Laporan.html')"><span class="nav-icon">📊</span><span class="nav-label-text">Laporan</span></div>
         <div class="nav-item" onclick="navTo('MasterData.html')"><span class="nav-icon">🗂️</span><span class="nav-label-text">Master Data</span></div>
         <div class="nav-item" id="nav-user-mgmt" style="display:none" onclick="navTo('UserManagement.html')"><span class="nav-icon">👥</span><span class="nav-label-text">Manajemen User</span></div>
       </nav>
@@ -362,7 +364,7 @@ tr:hover td{background:#f9fafb}
               <div class="icon">🧊</div>
               <h3>Belum Ada Sesi Thawing</h3>
               <p>Mulai sesi thawing baru untuk mencatat karung dari Cold Storage yang akan di-thaw hari ini.</p>
-              <button class="btn btn-primary" onclick="showModalBuatSesi()">＋ Mulai Thawing Baru</button>
+              <button class="btn btn-primary rpa-edit-action" onclick="showModalBuatSesi()">＋ Mulai Thawing Baru</button>
             </div>
           </div>
 
@@ -374,7 +376,7 @@ tr:hover td{background:#f9fafb}
                 <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
                   <span style="font-size:12px;font-weight:700;color:#374151;white-space:nowrap">🔄 Sesi berjalan:</span>
                   <div id="session-picker-btns" style="display:flex;gap:8px;flex-wrap:wrap;flex:1"></div>
-                  <button class="btn btn-primary btn-sm" onclick="showModalBuatSesi()">＋ Sesi Baru</button>
+                  <button class="btn btn-primary btn-sm rpa-edit-action" onclick="showModalBuatSesi()">＋ Sesi Baru</button>
                 </div>
               </div>
             </div>
@@ -431,7 +433,7 @@ tr:hover td{background:#f9fafb}
                   <input type="number" id="inp-kg" placeholder="0.00" min="0" step="0.01">
                 </div>
                 <div class="form-field" style="display:flex;align-items:flex-end">
-                  <button class="btn btn-primary" style="width:100%" onclick="tambahKarung()">＋ Tambah Karung</button>
+                  <button class="btn btn-primary rpa-edit-action" style="width:100%" onclick="tambahKarung()">＋ Tambah Karung</button>
                 </div>
               </div>
             </div>
@@ -508,7 +510,7 @@ tr:hover td{background:#f9fafb}
                     <input type="number" id="inp-output-kg" placeholder="0.00" min="0" step="0.01">
                   </div>
                   <div class="form-field btn-col" style="display:flex;align-items:flex-end">
-                    <button class="btn btn-success" onclick="tambahOutput()">＋ Tambah</button>
+                    <button class="btn btn-success rpa-edit-action" onclick="tambahOutput()">＋ Tambah</button>
                   </div>
                 </div>
               </div>
@@ -516,8 +518,8 @@ tr:hover td{background:#f9fafb}
 
             <!-- Action buttons -->
             <div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap">
-              <button class="btn btn-ghost" onclick="showModalBuatSesi()">＋ Sesi Baru</button>
-              <button class="btn btn-success" id="btn-selesaikan" onclick="selesaikanSesi()">✅ Selesaikan Sesi</button>
+              <button class="btn btn-ghost rpa-edit-action" onclick="showModalBuatSesi()">＋ Sesi Baru</button>
+              <button class="btn btn-success rpa-edit-action" id="btn-selesaikan" onclick="selesaikanSesi()">✅ Selesaikan Sesi</button>
             </div>
 
           </div><!-- /area-active-session -->
@@ -587,7 +589,7 @@ tr:hover td{background:#f9fafb}
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('modal-buat-sesi')">Batal</button>
-      <button class="btn btn-primary" onclick="buatSesi()">Mulai Thawing →</button>
+      <button class="btn btn-primary rpa-edit-action" onclick="buatSesi()">Mulai Thawing →</button>
     </div>
   </div>
 </div>
@@ -705,7 +707,8 @@ async function doLogin() {
     if (error) throw error;
     if (!data) { showLoginErr('Username atau password salah.'); return; }
     currentUser = data;
-    localStorage.setItem('rpa_user', JSON.stringify(data));
+    currentUser.permissions = await RPA_PERM.fetchPermissions(db, currentUser.id);
+    localStorage.setItem('rpa_user', JSON.stringify(currentUser));
     startApp();
   } catch(e) {
     console.error(e);
@@ -729,6 +732,10 @@ function doLogout() {
 }
 
 function startApp() {
+  const moduleRole = RPA_PERM.enforceModuleAccess(currentUser, 'thawing');
+  if (!moduleRole) return;
+  currentUser.moduleRole = moduleRole;
+
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app-screen').style.display = 'block';
   document.getElementById('user-avatar').textContent = currentUser.nama.charAt(0).toUpperCase();
@@ -738,10 +745,18 @@ function startApp() {
     const umEl = document.getElementById('nav-user-mgmt');
     if (umEl) umEl.style.display = 'flex';
   }
+  if (RPA_PERM.isViewOnly(currentUser.moduleRole)) {
+    document.querySelectorAll('.rpa-edit-action').forEach(el => el.disabled = true);
+  }
   updateClock();
   clockTimer = setInterval(updateClock, 1000);
   setEl('topbar-date', new Date().toLocaleDateString('id-ID',{weekday:'long',day:'2-digit',month:'long',year:'numeric'}));
-  document.getElementById('inp-filter-date').value = todayISO();
+  const restoredFilters = RPA_STATE.bindFilters('Thawing', ['.filter-bar']);
+  if (!restoredFilters) {
+    document.getElementById('inp-filter-date').value = todayISO();
+  }
+  RPA_STATE.bindScroll('Thawing');
+  switchTab(RPA_STATE.getTab('Thawing', 'sesi'));
   // Load product master cache
   loadProductMaster();
   loadAll();
@@ -774,6 +789,7 @@ function navTo(url) {
 // TAB
 // ============================================================
 function switchTab(tab) {
+  RPA_STATE.saveTab('Thawing', tab);
   const tabs = ['sesi','riwayat'];
   tabs.forEach(t => {
     document.getElementById(`tab-${t}`).classList.toggle('active', t===tab);
@@ -1674,12 +1690,13 @@ function updateAcFocus(items) {
 // ============================================================
 // INIT
 // ============================================================
-window.addEventListener('DOMContentLoaded', () => {
+window.addEventListener('DOMContentLoaded', async () => {
   // Try auto-login from localStorage
   const saved = localStorage.getItem('rpa_user');
   if (saved) {
     try {
       currentUser = JSON.parse(saved);
+      currentUser.permissions = await RPA_PERM.fetchPermissions(db, currentUser.id);
       startApp();
       return;
     } catch(e) {}
