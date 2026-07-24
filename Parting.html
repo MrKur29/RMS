@@ -3774,10 +3774,10 @@ function closeSidebar() {
 // ============================================================
 // INIT
 // ============================================================
-window.addEventListener('DOMContentLoaded', () => {
+window.addEventListener('DOMContentLoaded', async () => {
   const saved = localStorage.getItem('rpa_user');
   if (saved) {
-    try { currentUser = JSON.parse(saved); startApp(); } catch(e) { localStorage.removeItem('rpa_user'); }
+    try { currentUser = await RPA_PERM.restoreSession(db); if (currentUser) startApp(); } catch(e) { localStorage.removeItem('rpa_user'); }
   }
 });
 </script>

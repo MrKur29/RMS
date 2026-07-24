@@ -139,6 +139,15 @@ tr:hover td{background:#fafafa}
 .btn-delete:hover{background:#fecaca}
 .btn-kirim{background:#dbeafe;color:#1d4ed8}
 .btn-kirim:hover{background:#bfdbfe}
+.btn-submit{padding:7px 14px;background:#16a34a;color:white;border:none;border-radius:7px;font-size:12px;font-weight:700;transition:background .15s}
+.btn-submit:hover{background:#15803d}
+.btn-submit:disabled{background:#86efac;cursor:not-allowed}
+/* ===== SUBMISSION / REVISI GATE ===== */
+#submission-bar{display:none;padding:10px 18px;background:#fef3c7;border-bottom:1px solid #fde68a}
+.submission-locked{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:12.5px;color:#92400e}
+.btn-revisi{padding:6px 12px;background:#92400e;color:white;border:none;border-radius:6px;font-size:11px;font-weight:700;white-space:nowrap;transition:background .15s}
+.btn-revisi:hover{background:#78350f}
+.pin-error{display:none;color:#dc2626;font-size:12px;margin-top:6px}
 /* ===== REKAP PER PELANGGAN ===== */
 .rekap-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;padding:14px 18px}
 .rekap-card{border:1.5px solid #e5e7eb;border-radius:8px;padding:12px 14px}
@@ -375,8 +384,13 @@ tr:hover td{background:#fafafa}
               <span class="panel-title">📋 Entries Hari Ini</span>
               <span class="panel-sub" id="entries-count"></span>
             </div>
-            <button class="btn-refresh" onclick="loadAll()" style="font-size:11px;padding:5px 10px">🔄</button>
+            <div style="display:flex;gap:8px;align-items:center">
+              <button class="btn-submit" id="btn-submit-hari-ini" onclick="submitHariIni()">📤 Submit Hari Ini</button>
+              <button class="btn-refresh" onclick="loadAll()" style="font-size:11px;padding:5px 10px">🔄</button>
+            </div>
           </div>
+          <!-- SUBMISSION / REVISI GATE BAR -->
+          <div id="submission-bar"></div>
           <!-- FILTER BAR -->
           <div class="filter-bar" id="filter-bar">
             <select id="f-produk" onchange="applyFilter()">
@@ -494,6 +508,35 @@ tr:hover td{background:#fafafa}
   </div>
 </div>
 
+<!-- ===== MODAL REVISI (PIN SUPERVISOR + ALASAN) ===== -->
+<div class="modal-overlay" id="modal-revisi-pin">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-header">
+      <div class="modal-title">🔑 Revisi Data (PIN Supervisor)</div>
+      <button class="modal-close" onclick="closeModal('modal-revisi-pin')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p id="revisi-pin-desc" style="color:#374151;font-size:13px;margin-bottom:14px"></p>
+      <div class="form-group" style="margin-bottom:14px">
+        <label class="form-label">PIN Supervisor *</label>
+        <input type="password" id="revisi-pin-input" class="form-input" placeholder="••••••" maxlength="6"
+               oninput="document.getElementById('revisi-pin-error').style.display='none'"
+               onkeydown="if(event.key==='Enter')submitRevisiPin()">
+        <div class="pin-error" id="revisi-pin-error">PIN salah atau bukan Supervisor</div>
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label">Alasan Revisi *</label>
+        <input type="text" id="revisi-pin-alasan" class="form-input" placeholder="cth: salah input kg, tambah entry terlupa...">
+      </div>
+      <div id="revisi-pin-err" style="display:none;color:#dc2626;font-size:12px;font-weight:700;margin-top:10px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeModal('modal-revisi-pin')">Batal</button>
+      <button class="btn-primary" id="revisi-pin-btn" onclick="submitRevisiPin()">✓ Konfirmasi</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===== TOAST ===== -->
 <div id="toast"></div>
 
@@ -514,6 +557,7 @@ let entriesList  = [];
 let selectedTujuan = 'SOLD_DIRECT';
 let hapusTargetId  = null;
 let printTarget    = null; // entry object untuk print
+let submissionState = null; // row byproduct_karkas_submissions utk tanggal aktif, atau null (= belum pernah disubmit / OPEN)
 
 // ===== HELPERS =====
 function toast(msg, type='info', dur=3000){
@@ -608,10 +652,9 @@ function startApp(){
 }
 
 // ===== AUTO LOGIN =====
-(function(){
-  const saved = sessionStorage.getItem('rpa_user');
-  if(saved){ try{ currentUser=JSON.parse(saved); startApp(); }catch(e){ sessionStorage.removeItem('rpa_user'); } }
-})();
+// (moved to a single DOMContentLoaded handler further down, which now also
+// refreshes permissions via RPA_PERM.restoreSession — this duplicate IIFE
+// was redundant with that listener and only used the stale cached blob.)
 
 // ===== LOAD PRODUK =====
 async function loadProduk(){
@@ -750,6 +793,7 @@ function resetForm(){
 
 // ===== TAMBAH ENTRY =====
 async function tambahEntry(){
+  if(isLocked()){ toast('Data tanggal ini sudah disubmit. Lakukan revisi (PIN Supervisor) untuk membuka kembali.','error'); return; }
   const product_id = document.getElementById('inp-produk').value;
   const qty_bungkus = parseInt(document.getElementById('inp-qty').value)||0;
   const kg = parseFloat(document.getElementById('inp-kg').value)||0;
@@ -815,6 +859,130 @@ async function loadAll(){
   renderEntries();
   renderSummary();
   renderRekapPelanggan();
+  await loadSubmission(tanggal);
+}
+
+// ===== SUBMISSION / REVISI GATE =====
+function isLocked(){ return !!(submissionState && submissionState.status === 'SUBMITTED'); }
+
+async function loadSubmission(tanggal){
+  try {
+    const { data, error } = await db.from('byproduct_karkas_submissions')
+      .select('id,tanggal,status,submitted_by,submitted_at,revisi_count,last_revisi_by,last_revisi_alasan,last_revisi_at,submitted_user:submitted_by(nama)')
+      .eq('tanggal', tanggal).maybeSingle();
+    if(error) throw error;
+    submissionState = data || null;
+  } catch(e){
+    console.warn('byproduct_karkas_submissions belum ada — jalankan migration 43:', e.message);
+    submissionState = null;
+  }
+  renderSubmissionBar();
+}
+
+function renderSubmissionBar(){
+  const bar = document.getElementById('submission-bar');
+  const btnTambah = document.getElementById('btn-tambah');
+  const btnSubmit = document.getElementById('btn-submit-hari-ini');
+  const viewOnly = RPA_PERM.isViewOnly(currentUser?.moduleRole);
+  const locked = isLocked();
+
+  if(locked){
+    const nama  = submissionState.submitted_user?.nama || '-';
+    const waktu = submissionState.submitted_at ? new Date(submissionState.submitted_at).toLocaleString('id-ID') : '-';
+    const revisiInfo = submissionState.revisi_count>0
+      ? ` <span style="color:#b45309">(direvisi ${submissionState.revisi_count}×, terakhir oleh alasan: "${submissionState.last_revisi_alasan||'-'}")</span>` : '';
+    bar.innerHTML = `<div class="submission-locked">
+        <span>🔒 Data tanggal ini sudah <strong>Disubmit</strong> oleh ${nama} — ${waktu}${revisiInfo}</span>
+        ${viewOnly ? '' : '<button class="btn-revisi" onclick="openRevisiPin()">🔑 Revisi (PIN Supervisor)</button>'}
+      </div>`;
+    bar.style.display = '';
+  } else {
+    bar.innerHTML = '';
+    bar.style.display = 'none';
+  }
+
+  if(btnTambah && !viewOnly){
+    btnTambah.disabled = locked;
+    btnTambah.textContent = locked ? '🔒 Sudah Disubmit' : '+ Tambah';
+  }
+  if(btnSubmit){
+    btnSubmit.style.display = (locked || viewOnly) ? 'none' : '';
+    btnSubmit.disabled = entriesList.length === 0;
+  }
+}
+
+async function submitHariIni(){
+  if(RPA_PERM.isViewOnly(currentUser?.moduleRole)){ toast('Anda tidak memiliki akses submit','error'); return; }
+  const tanggal = document.getElementById('filter-tanggal').value || todayStr();
+  if(!entriesList.length){ toast('Belum ada entry untuk disubmit pada tanggal ini','error'); return; }
+  const btn = document.getElementById('btn-submit-hari-ini');
+  btn.disabled = true; btn.textContent = 'Menyimpan...';
+  try {
+    const { data, error } = await db.from('byproduct_karkas_submissions')
+      .upsert({ tanggal, status:'SUBMITTED', submitted_by: currentUser.id, submitted_at: new Date().toISOString(),
+                updated_at: new Date().toISOString() }, { onConflict:'tanggal' })
+      .select().single();
+    if(error) throw error;
+    toast(`Data tanggal ${fmtTgl(tanggal)} berhasil disubmit ✅`,'success');
+    await loadSubmission(tanggal);
+  } catch(e){
+    if(e.message.includes('does not exist')) toast('⚠️ Tabel belum ada — jalankan migration 43 di Supabase','warning',6000);
+    else toast('Gagal submit: '+e.message,'error');
+  } finally { btn.disabled = false; btn.textContent = '📤 Submit Hari Ini'; }
+}
+
+function openRevisiPin(){
+  const tanggal = document.getElementById('filter-tanggal').value || todayStr();
+  document.getElementById('revisi-pin-desc').textContent =
+    `Data tanggal ${fmtTgl(tanggal)} sudah disubmit. Masukkan PIN Supervisor dan alasan untuk membuka kembali (revisi).`;
+  document.getElementById('revisi-pin-input').value = '';
+  document.getElementById('revisi-pin-alasan').value = '';
+  document.getElementById('revisi-pin-error').style.display = 'none';
+  document.getElementById('revisi-pin-err').style.display = 'none';
+  showModal('modal-revisi-pin');
+  setTimeout(()=>document.getElementById('revisi-pin-input').focus(), 150);
+}
+
+// Sama seperti pola di ProduksiKarkas.html: cek role SUPERVISOR di tabel users,
+// atau currentUser sendiri jika module role-nya (byproduct) punya hak approve.
+async function verifySupervisorPin(pin){
+  if(!pin) return null;
+  const { data } = await db.from('users').select('id,nama,role,pin').eq('role','SUPERVISOR').eq('aktif', true);
+  const sup = (data||[]).find(u => u.pin === pin);
+  if(sup) return sup;
+  if(currentUser && pin === currentUser.pin && RPA_PERM.canApprove(currentUser.moduleRole)) return currentUser;
+  return null;
+}
+
+async function submitRevisiPin(){
+  const pin    = document.getElementById('revisi-pin-input').value.trim();
+  const alasan = document.getElementById('revisi-pin-alasan').value.trim();
+  const errEl  = document.getElementById('revisi-pin-err');
+  errEl.style.display = 'none';
+  if(!pin){ errEl.textContent = 'PIN wajib diisi'; errEl.style.display = 'block'; return; }
+  if(!alasan){ errEl.textContent = 'Alasan wajib diisi'; errEl.style.display = 'block'; return; }
+  const btn = document.getElementById('revisi-pin-btn');
+  btn.disabled = true; btn.textContent = 'Memverifikasi...';
+  try {
+    const sup = await verifySupervisorPin(pin);
+    if(!sup){ document.getElementById('revisi-pin-error').style.display = 'block'; return; }
+    const tanggal = document.getElementById('filter-tanggal').value || todayStr();
+    const { error } = await db.from('byproduct_karkas_submissions')
+      .update({
+        status: 'OPEN',
+        revisi_count: (submissionState?.revisi_count||0) + 1,
+        last_revisi_by: sup.id,
+        last_revisi_alasan: alasan,
+        last_revisi_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }).eq('tanggal', tanggal);
+    if(error) throw error;
+    await db.from('byproduct_karkas_revisi_log').insert({ tanggal, alasan, revisi_by: sup.id });
+    closeModal('modal-revisi-pin');
+    toast('Data dibuka untuk revisi ✅','success');
+    await loadSubmission(tanggal);
+  } catch(e){ errEl.textContent = 'Gagal: '+e.message; errEl.style.display = 'block'; }
+  finally { btn.disabled = false; btn.textContent = '✓ Konfirmasi'; }
 }
 
 // ===== RENDER ENTRIES =====
@@ -883,7 +1051,7 @@ function renderEntries(){
     if(e.tujuan==='CHILLER'){
       aksi += `<button class="btn-action btn-print" onclick="openPrintLabel('${e.id}')">🏷️ ${e.label_printed?'Reprint':'Print'}</button> `;
     }
-    if(e.status!=='CONFIRMED'){
+    if(e.status!=='CONFIRMED' && !isLocked()){
       const escNama = namaP.replace(/'/g,"\\'");
       aksi += `<button class="btn-action btn-delete" onclick="openHapus('${e.id}','${escNama}','${e.qty_bungkus} bks / ${fmtKg(e.kg)} kg')">🗑️</button>`;
     }
@@ -989,6 +1157,7 @@ function openHapus(id, namaP, detail){
 }
 async function confirmHapus(){
   if(!hapusTargetId) return;
+  if(isLocked()){ toast('Data tanggal ini sudah disubmit. Lakukan revisi (PIN Supervisor) untuk membuka kembali.','error'); closeModal('modal-hapus'); return; }
   const btn = document.getElementById('btn-confirm-hapus');
   btn.disabled=true; btn.textContent='Menghapus...';
   try {
@@ -1038,12 +1207,12 @@ function doPrint(){
 }
 
 // ===== INIT =====
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   const saved = sessionStorage.getItem('rpa_user');
   if(saved){
     try {
-      currentUser = JSON.parse(saved);
-      startApp();
+      currentUser = await RPA_PERM.restoreSession(db);
+      if (currentUser) startApp();
     } catch(ex){ sessionStorage.removeItem('rpa_user'); }
   }
 });

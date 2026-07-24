@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Laporan Produksi Karkas — Kurnia's Food</title>
+<title>Laporan Produksi Karkas Harian — Kurnia's Food</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="permissions.js"></script>
@@ -93,47 +93,26 @@ a{text-decoration:none}
 .btn-sm{padding:5px 9px;font-size:11px;min-height:28px}
 .btn:disabled{opacity:.5;cursor:not-allowed}
 
-/* SEARCH RESULTS */
-.search-results{position:relative}
-.search-results-list{position:absolute;top:2px;left:0;right:0;background:white;border:1.5px solid #e5e7eb;border-radius:8px;box-shadow:0 10px 24px rgba(0,0,0,.12);max-height:280px;overflow-y:auto;z-index:50}
-.search-result-item{padding:10px 14px;font-size:13px;cursor:pointer;border-bottom:1px solid #f3f4f6}
-.search-result-item:last-child{border-bottom:none}
-.search-result-item:hover{background:#f0fdfa}
-.search-result-item .sr-code{font-weight:800;color:#111827}
-.search-result-item .sr-meta{font-size:11px;color:#9ca3af;margin-top:2px}
-
-/* BATCH LIST (quick pick) */
-.batch-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px;margin-top:14px}
-.batch-card{border:1.5px solid #e5e7eb;border-radius:10px;padding:12px;cursor:pointer;transition:all .15s}
-.batch-card:hover{border-color:#0d9488;background:#f0fdfa}
-.batch-card .bc-code{font-weight:800;font-size:13px;color:#111827}
-.batch-card .bc-meta{font-size:11px;color:#6b7280;margin-top:3px;line-height:1.5}
-
 /* BADGES */
 .badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:12px;font-size:11px;font-weight:700;white-space:nowrap}
 .b-gradeA{background:#d1fae5;color:#065f46}
 .b-gradeB{background:#fef3c7;color:#92400e}
 .b-gradeC{background:#fee2e2;color:#dc2626}
-.b-draft{background:#f3f4f6;color:#374151}
-.b-active{background:#dbeafe;color:#1e40af}
-.b-complete{background:#d1fae5;color:#065f46}
-.b-revisi{background:#fef3c7;color:#92400e}
-.rpt-revisi-table{width:100%;border-collapse:collapse;font-size:12px;margin:6px 0 4px}
-.rpt-revisi-table th{text-align:left;padding:5px 8px;background:#fffbeb;font-size:10px;font-weight:800;color:#92400e;text-transform:uppercase;letter-spacing:.3px;border:1px solid #fde68a}
-.rpt-revisi-table td{padding:5px 8px;border:1px solid #fde68a}
 
 /* REPORT SHEET */
 .print-sheet{background:white;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);padding:28px 30px;margin-top:0}
 .rpt-header{border-bottom:2px solid #111827;padding-bottom:14px;margin-bottom:18px}
 .rpt-title{font-size:19px;font-weight:900;letter-spacing:.5px;color:#111827;margin-bottom:10px;text-align:center}
 .rpt-info-table{width:100%;border-collapse:collapse;font-size:13px}
-.rpt-info-table td{padding:3px 6px}
-.rpt-info-table td:nth-child(1),.rpt-info-table td:nth-child(3){color:#6b7280;font-weight:700;width:110px}
+.rpt-info-table td{padding:3px 6px;vertical-align:top}
+.rpt-info-table td:nth-child(1),.rpt-info-table td:nth-child(3){color:#6b7280;font-weight:700;width:130px}
 .rpt-info-table td:nth-child(2){font-weight:700;width:32%}
 .rpt-info-table td:nth-child(4){font-weight:700}
 
 .rpt-section-title{font-size:13px;font-weight:800;color:#111827;text-transform:uppercase;letter-spacing:.5px;margin:22px 0 8px;padding-bottom:5px;border-bottom:1.5px solid #e5e7eb;display:flex;align-items:center;justify-content:space-between;gap:10px}
 .rpt-section-title .btn-excel{text-transform:none;letter-spacing:normal}
+.btn-excel{background:#15803d;color:white}
+.btn-excel:hover{background:#166534}
 
 .rpt-table{width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:6px}
 .rpt-table th{text-align:left;padding:7px 10px;background:#f3f4f6;font-size:10.5px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:.3px;border:1px solid #e5e7eb}
@@ -151,18 +130,6 @@ a{text-decoration:none}
 .rekap-table tr.rekap-strong td{font-weight:800;background:#f0fdfa}
 .rekap-table tr.rekap-sub td:first-child{padding-left:20px;color:#6b7280;font-weight:400}
 .rekap-table tr.rekap-section td{padding-top:12px;font-weight:800;color:#0d9488;text-transform:uppercase;font-size:11px;letter-spacing:.4px;border-bottom:none}
-
-/* RINCIAN KERANJANG (detail table, layar saja — tidak ikut print) */
-.rincian-toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:13px 16px;border-bottom:1px solid #f3f4f6}
-.rincian-toolbar .hint{margin:0}
-.btn-excel{background:#15803d;color:white}
-.btn-excel:hover{background:#166534}
-.rincian-wrap{max-height:520px;overflow:auto}
-.rincian-table{width:100%;border-collapse:collapse;font-size:12px}
-.rincian-table th{position:sticky;top:0;text-align:left;padding:7px 9px;background:#f3f4f6;font-size:10px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:.3px;border:1px solid #e5e7eb;white-space:nowrap;z-index:1}
-.rincian-table td{padding:5px 9px;border:1px solid #e5e7eb;white-space:nowrap}
-.rincian-table tbody tr:nth-child(even){background:#fafafa}
-.rincian-table tbody tr:hover{background:#f0fdfa}
 
 .no-print{}
 @media print {
@@ -185,7 +152,7 @@ a{text-decoration:none}
     <div class="login-logo">
       <span class="icon">📊</span>
       <h1>RPA Management System</h1>
-      <p>Laporan Produksi Karkas — Login</p>
+      <p>Laporan Produksi Karkas Harian — Login</p>
     </div>
     <div class="login-error" id="login-error"></div>
     <div class="form-group">
@@ -286,7 +253,7 @@ a{text-decoration:none}
       <div class="topbar-left">
         <button class="btn-hamburger" onclick="toggleSidebar()">☰</button>
         <div class="topbar-left-text">
-          <h1>Laporan Produksi Karkas</h1>
+          <h1>Laporan Produksi Karkas Harian</h1>
           <p id="topbar-date">—</p>
         </div>
       </div>
@@ -297,63 +264,45 @@ a{text-decoration:none}
 
     <div class="content-area">
 
-      <!-- BATCH PICKER -->
+      <!-- DATE PICKER -->
       <div class="panel no-print" id="panel-picker">
         <div class="panel-head">
-          <span class="panel-title">Pilih Batch</span>
+          <span class="panel-title">Pilih Tanggal</span>
         </div>
         <div class="panel-body">
           <div class="form-row">
-            <div class="form-group" style="flex:2">
-              <label>Cari Batch (kode batch / no polisi / nama supir / kandang)</label>
-              <div class="search-results">
-                <input type="text" id="batch-search" placeholder="Ketik kode batch, no polisi, atau nama supir…" oninput="onBatchSearchInput()" autocomplete="off">
-                <div class="search-results-list" id="batch-search-results" style="display:none"></div>
-              </div>
-            </div>
-            <div class="form-group">
-              <label>Filter Tanggal — Dari</label>
-              <input type="date" id="batch-date-filter" onchange="loadRecentBatches()">
-            </div>
-            <div class="form-group">
-              <label>s/d</label>
-              <input type="date" id="batch-date-filter-to" onchange="loadRecentBatches()">
+            <div class="form-group" style="flex:0 0 220px">
+              <label>Tanggal Produksi</label>
+              <input type="date" id="rpt-date" onchange="loadReport()">
             </div>
             <div class="form-group" style="flex:0">
-              <button class="btn btn-ghost" onclick="clearDateFilter()">✕ Reset</button>
+              <button class="btn btn-primary" onclick="loadReport()">🔄 Tampilkan</button>
             </div>
           </div>
-          <div class="hint">Menampilkan batch terbaru. Ketik di kolom pencarian untuk mencari batch spesifik.</div>
-          <div class="batch-list" id="batch-list">
-            <div class="empty">Memuat batch…</div>
-          </div>
+          <div class="hint">Laporan ini merangkum TOTAL semua batch produksi karkas pada tanggal terpilih (bukan per batch), ditambah rekapan hasil by-product hari itu.</div>
         </div>
       </div>
 
       <!-- REPORT -->
       <div id="report-area" style="display:none">
         <div class="panel no-print" style="padding:12px 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-          <div><strong id="report-batch-label">—</strong> <span class="hint" id="report-session-count"></span></div>
+          <div><strong id="report-date-label">—</strong> <span class="hint" id="report-batch-count"></span></div>
           <div>
-            <button class="btn btn-ghost" onclick="backToPicker()">↩ Ganti Batch</button>
             <button class="btn btn-primary" onclick="window.print()">🖨️ Print / Simpan PDF</button>
           </div>
         </div>
 
         <div class="print-sheet" id="print-sheet">
           <div class="rpt-header">
-            <div class="rpt-title">LAPORAN PRODUKSI KARKAS</div>
-            <div id="rpt-status-row" style="margin-bottom:10px;text-align:center"></div>
+            <div class="rpt-title">LAPORAN PRODUKSI KARKAS HARIAN</div>
             <table class="rpt-info-table">
-              <tr><td>Tanggal</td><td id="ri-tanggal">—</td><td>Sumber (Kandang)</td><td id="ri-sumber">—</td></tr>
-              <tr><td>No Batch</td><td id="ri-batch">—</td><td>Ekspedisi</td><td id="ri-ekspedisi">—</td></tr>
-              <tr><td>No BK (Polisi)</td><td id="ri-nobk">—</td><td>Driver</td><td id="ri-driver">—</td></tr>
+              <tr><td>Tanggal</td><td id="ri-tanggal">—</td><td>Jumlah Batch</td><td id="ri-jumlah-batch">—</td></tr>
             </table>
-            <div id="rpt-revisi-wrap" style="display:none;margin-top:10px">
-              <div class="hint" style="font-weight:700;color:#92400e;margin-bottom:4px">Riwayat Revisi (via Koreksi &amp; Approval)</div>
-              <table class="rpt-revisi-table">
-                <thead><tr><th>Field</th><th>Lama → Baru</th><th>Alasan</th><th>Direview</th><th>Tanggal</th></tr></thead>
-                <tbody id="tbody-revisi"></tbody>
+            <div id="ri-batch-daftar-wrap" style="margin-top:10px;display:none">
+              <div class="hint" style="font-weight:700;color:#374151;margin-bottom:4px">Batch yang termasuk dalam laporan ini:</div>
+              <table class="rpt-table" style="margin-bottom:0">
+                <thead><tr><th>No Batch</th><th>Sumber (Kandang)</th></tr></thead>
+                <tbody id="ri-batch-daftar"></tbody>
               </table>
             </div>
           </div>
@@ -391,31 +340,20 @@ a{text-decoration:none}
             </tbody>
           </table>
 
-          <div class="hint no-print" style="margin-top:14px">Catatan: Rincian ini merangkum semua sesi timbang karkas untuk batch ini. Kolom "Produk Transfer" menunjukkan lokasi terkini keranjang karkas hasil batch ini (Parting/Boneless jika sudah masuk proses lanjutan, sisanya dihitung sebagai Chiller).</div>
-        </div>
+          <div class="rpt-section-title">
+            <span>Rekapan Hasil By-Product</span>
+            <button class="btn btn-sm btn-excel no-print" id="btn-excel-byproduct" onclick="downloadByproductExcel()" disabled>⬇️ Excel</button>
+          </div>
+          <table class="rpt-table" id="tbl-byproduct">
+            <thead>
+              <tr><th>Barang</th><th class="num">Bungkus</th><th class="num">Kg</th></tr>
+            </thead>
+            <tbody id="tbody-byproduct">
+              <tr><td colspan="3"><div class="empty">Memuat…</div></td></tr>
+            </tbody>
+          </table>
 
-        <!-- RINCIAN KERANJANG — layar saja, tidak ikut print, bisa di-download Excel -->
-        <div class="panel no-print" id="panel-rincian-keranjang">
-          <div class="rincian-toolbar">
-            <div>
-              <span class="panel-title">📋 Rincian Keranjang</span>
-              <div class="hint" id="rincian-count">—</div>
-            </div>
-            <button class="btn btn-excel" onclick="downloadRincianExcel()" id="btn-download-excel" disabled>⬇️ Download Excel</button>
-          </div>
-          <div class="rincian-wrap">
-            <table class="rincian-table">
-              <thead>
-                <tr>
-                  <th>Kode Keranjang</th><th>Barang</th><th class="num">Qty (Ekor)</th><th class="num">Kg</th>
-                  <th>Tipe Rusak</th><th>Tujuan Pindah</th><th>Waktu Timbang</th>
-                </tr>
-              </thead>
-              <tbody id="tbody-rincian-keranjang">
-                <tr><td colspan="7"><div class="empty">Memuat…</div></td></tr>
-              </tbody>
-            </table>
-          </div>
+          <div class="hint no-print" style="margin-top:14px">Catatan: Rincian ini merangkum TOTAL semua sesi timbang karkas dari seluruh batch pada tanggal ini. Kolom "Produk Transfer" menunjukkan lokasi terkini keranjang karkas hasil batch-batch tersebut. Rekapan By-Product merangkum entri By-product Karkas pada tanggal yang sama (tidak termasuk entri yang berstatus "Ditolak").</div>
         </div>
       </div>
 
@@ -433,12 +371,11 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ── STATE ──
-let currentUser   = null;
-let currentBatch  = null;
-let searchTimer   = null;
-let currentRincianRows = [];  // rincian keranjang (raw carcass_baskets + join), dipakai render tabel & export Excel
-let currentItemGroups = [];   // rincian produk per grade & kelas berat, dipakai export Excel
-let currentTransferGroups = [];// produk transfer (parting/boneless/chiller), dipakai export Excel
+let currentUser = null;
+let currentReportDate = null;
+let currentItemGroups = [];       // rincian produk per grade & kelas berat, utk export Excel
+let currentTransferGroups = [];   // produk transfer (parting/boneless/chiller), utk export Excel
+let currentByproductGroups = [];  // rekapan hasil by-product, utk export Excel
 
 // ── UTILS ──
 async function sha256(str) {
@@ -446,7 +383,6 @@ async function sha256(str) {
   const hash = await crypto.subtle.digest('SHA-256', buf);
   return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
 }
-function fmtDT(s){if(!s)return'—';return new Date(s).toLocaleString('id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}
 function fmtDateID(s){if(!s)return'—';return new Date(s+'T00:00:00').toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'})}
 function showToast(msg,type='success'){const t=document.getElementById('toast');t.textContent=msg;t.className=`show ${type}`;setTimeout(()=>{t.className=''},3800)}
 function navTo(url){closeSidebar();if(currentUser){localStorage.setItem('rpa_user',JSON.stringify(currentUser));sessionStorage.setItem('rpa_user',JSON.stringify(currentUser))}window.location.href=url}
@@ -492,14 +428,13 @@ function startApp(){
   document.getElementById('sidebar-name').textContent=currentUser.nama;
   document.getElementById('sidebar-role').textContent=currentUser.role+(currentUser.is_system_admin?' (Admin)':'');
   if(currentUser.is_system_admin){const el=document.getElementById('nav-user-mgmt');if(el)el.style.display='flex'}
-  const restoredFilters=RPA_STATE.bindFilters('LaporanProduksiKarkas', ['#panel-picker']);
+  const restoredFilters=RPA_STATE.bindFilters('LaporanProduksiKarkasHarian', ['#panel-picker']);
   if(!restoredFilters){
-    document.getElementById('batch-date-filter').value=yesterdayISO();
-    document.getElementById('batch-date-filter-to').value=todayISO();
+    document.getElementById('rpt-date').value=todayISO();
   }
-  RPA_STATE.bindScroll('LaporanProduksiKarkas');
+  RPA_STATE.bindScroll('LaporanProduksiKarkasHarian');
   startClock();
-  loadRecentBatches();
+  loadReport();
 }
 
 function startClock(){
@@ -518,131 +453,55 @@ window.addEventListener('DOMContentLoaded',async ()=>{
 });
 
 // ══════════════════════════════════════════════════════════════
-// BATCH PICKER
-// ══════════════════════════════════════════════════════════════
-function todayISO(){return new Date().toISOString().split('T')[0]}
-function yesterdayISO(){const d=new Date();d.setDate(d.getDate()-1);return d.toISOString().split('T')[0]}
-
-function clearDateFilter(){
-  document.getElementById('batch-date-filter').value=yesterdayISO();
-  document.getElementById('batch-date-filter-to').value=todayISO();
-  loadRecentBatches();
-}
-
-async function loadRecentBatches(){
-  let dateFrom=document.getElementById('batch-date-filter').value;
-  let dateTo=document.getElementById('batch-date-filter-to').value;
-  if(dateFrom && dateTo && dateTo<dateFrom) [dateFrom,dateTo]=[dateTo,dateFrom];
-  let q=db.from('live_chicken_batches')
-    .select('id,batch_code,status,tanggal,nama_kandang,nama_ekspedisi,no_polisi,nama_supir,ekor_kandang,kg_kandang,ekor_timbang_ulang,kg_timbang_ulang,ekor_mati,kg_mati')
-    .order('tanggal',{ascending:false})
-    .limit(24);
-  if(dateFrom) q=q.gte('tanggal',dateFrom);
-  if(dateTo) q=q.lte('tanggal',dateTo);
-  const{data,error}=await q;
-  const wrap=document.getElementById('batch-list');
-  if(error){wrap.innerHTML='<div class="empty">Gagal memuat batch.</div>';console.error(error);return}
-  if(!data||!data.length){wrap.innerHTML='<div class="empty">Tidak ada batch ditemukan.</div>';return}
-  wrap.innerHTML=data.map(b=>batchCardHTML(b)).join('');
-}
-
-function batchCardHTML(b){
-  return `
-    <div class="batch-card" onclick='selectBatch(${JSON.stringify(b)})'>
-      <div class="bc-code">${esc(b.batch_code)} ${statusBadge(b.status)}</div>
-      <div class="bc-meta">
-        📅 ${fmtDateID(b.tanggal)}<br>
-        🏠 ${esc(b.nama_kandang)||'—'}<br>
-        🚚 ${esc(b.no_polisi)||'—'} · ${esc(b.nama_supir)||'—'}
-      </div>
-    </div>`;
-}
-
-let searchDebounce=null;
-function onBatchSearchInput(){
-  clearTimeout(searchDebounce);
-  const term=document.getElementById('batch-search').value.trim();
-  const box=document.getElementById('batch-search-results');
-  if(!term){box.style.display='none';box.innerHTML='';return}
-  searchDebounce=setTimeout(async()=>{
-    const{data,error}=await db.from('live_chicken_batches')
-      .select('id,batch_code,status,tanggal,nama_kandang,nama_ekspedisi,no_polisi,nama_supir,ekor_kandang,kg_kandang,ekor_timbang_ulang,kg_timbang_ulang,ekor_mati,kg_mati')
-      .or(`batch_code.ilike.%${term}%,no_polisi.ilike.%${term}%,nama_supir.ilike.%${term}%,nama_kandang.ilike.%${term}%`)
-      .order('tanggal',{ascending:false})
-      .limit(15);
-    if(error){console.error(error);return}
-    if(!data||!data.length){box.innerHTML='<div class="search-result-item">Tidak ditemukan</div>';box.style.display='block';return}
-    box.innerHTML=data.map(b=>`
-      <div class="search-result-item" onclick='selectBatch(${JSON.stringify(b)})'>
-        <div class="sr-code">${esc(b.batch_code)} ${statusBadge(b.status)}</div>
-        <div class="sr-meta">${fmtDateID(b.tanggal)} · ${esc(b.nama_kandang)||'—'} · ${esc(b.no_polisi)||'—'}</div>
-      </div>`).join('');
-    box.style.display='block';
-  },300);
-}
-
-function backToPicker(){
-  document.getElementById('report-area').style.display='none';
-  document.getElementById('panel-picker').style.display='block';
-  currentBatch=null;
-}
-
-// ══════════════════════════════════════════════════════════════
 // REPORT
 // ══════════════════════════════════════════════════════════════
-async function selectBatch(batch){
-  currentBatch=batch;
-  document.getElementById('batch-search-results').style.display='none';
-  document.getElementById('batch-search').value='';
-  document.getElementById('panel-picker').style.display='none';
+function todayISO(){return new Date().toISOString().split('T')[0]}
+
+async function loadReport(){
+  const tanggal=document.getElementById('rpt-date').value;
+  if(!tanggal){showToast('Pilih tanggal terlebih dahulu','error');return}
+  currentReportDate = tanggal;
   document.getElementById('report-area').style.display='block';
-  document.getElementById('report-batch-label').textContent=`${batch.batch_code} — ${fmtDateID(batch.tanggal)}`;
-  document.getElementById('report-session-count').textContent='Memuat data…';
-  currentRincianRows=[];
-  document.getElementById('tbody-rincian-keranjang').innerHTML='<tr><td colspan="7"><div class="empty">Memuat…</div></td></tr>';
-  document.getElementById('rincian-count').textContent='—';
-  document.getElementById('btn-download-excel').disabled=true;
-  await renderReport(batch);
-}
+  document.getElementById('report-date-label').textContent=fmtDateID(tanggal);
+  document.getElementById('report-batch-count').textContent='Memuat data…';
 
-async function renderReport(batch){
   try{
-    const [sessionsRes, basketsRes, transferRes, correctionsRes, rincianRes] = await Promise.all([
-      db.from('carcass_sessions').select('id,session_code,status,total_keranjang').eq('batch_id',batch.id),
-      db.from('carcass_baskets').select('qty_timbang,kg_timbang,tipe_kerusakan,product:product_id(product_code,nama_produk,grade,sub_kategori,kg_min,kg_max)').eq('batch_id',batch.id),
-      db.from('baskets').select('qty_awal,kg_awal,lokasi,product:product_id(product_code,nama_produk,grade,sub_kategori,kg_min,kg_max,kategori)').eq('batch_id',batch.id),
-      db.from('corrections').select('field_salah,nilai_lama,nilai_baru,reviewed_at,reviewed_by(nama),alasan')
-        .eq('tabel_terkait','live_chicken_batches').eq('record_id',batch.id).eq('status','APPROVED')
-        .order('reviewed_at',{ascending:false}),
-      db.from('carcass_baskets').select(`
-          qty_timbang,kg_timbang,tipe_kerusakan,created_at,
-          product:product_id(nama_produk),
-          basket:basket_id(basket_code,lokasi)
-        `).eq('batch_id',batch.id).order('created_at',{ascending:true})
-    ]);
+    const batchesRes = await db.from('live_chicken_batches')
+      .select('id,batch_code,nama_kandang,ekor_kandang,kg_kandang,ekor_timbang_ulang,kg_timbang_ulang,ekor_mati,kg_mati')
+      .eq('tanggal',tanggal);
+    if(batchesRes.error) throw batchesRes.error;
+    const batches = batchesRes.data||[];
+    const batchIds = batches.map(b=>b.id);
 
-    if(sessionsRes.error) throw sessionsRes.error;
-    if(basketsRes.error) throw basketsRes.error;
-    if(transferRes.error) throw transferRes.error;
-    if(correctionsRes.error) throw correctionsRes.error;
-    if(rincianRes.error) throw rincianRes.error;
+    let cbaskets=[], allBaskets=[];
+    if(batchIds.length){
+      const [basketsRes, transferRes] = await Promise.all([
+        db.from('carcass_baskets').select('qty_timbang,kg_timbang,tipe_kerusakan,product:product_id(product_code,nama_produk,grade,sub_kategori,kg_min,kg_max)').in('batch_id',batchIds),
+        db.from('baskets').select('qty_awal,kg_awal,lokasi,product:product_id(product_code,nama_produk,grade,sub_kategori,kg_min,kg_max,kategori)').in('batch_id',batchIds)
+      ]);
+      if(basketsRes.error) throw basketsRes.error;
+      if(transferRes.error) throw transferRes.error;
+      cbaskets = (basketsRes.data||[]).filter(r=>r.product);
+      allBaskets = (transferRes.data||[]).filter(r=>r.product && r.product.kategori==='KARKAS');
+    }
 
-    const sessions = sessionsRes.data||[];
-    const cbaskets = (basketsRes.data||[]).filter(r=>r.product); // guard against orphaned rows
-    const allBaskets = (transferRes.data||[]).filter(r=>r.product && r.product.kategori==='KARKAS');
-    const corrections = correctionsRes.data||[];
+    const byproductRes = await db.from('byproduct_karkas_entries')
+      .select('qty_bungkus,kg,status,product:product_id(nama_produk)')
+      .eq('tanggal',tanggal);
+    if(byproductRes.error) throw byproductRes.error;
+    const byproductRows = (byproductRes.data||[]).filter(r=>r.product && r.status!=='REJECTED');
 
-    document.getElementById('report-session-count').textContent =
-      sessions.length ? `${sessions.length} sesi timbang karkas` : 'Belum ada sesi timbang karkas untuk batch ini';
+    document.getElementById('report-batch-count').textContent =
+      batches.length ? `${batches.length} batch produksi` : 'Belum ada batch produksi pada tanggal ini';
 
-    renderHeader(batch);
-    renderStatus(batch, corrections);
+    renderHeader(tanggal, batches);
     const itemGroups = groupItems(cbaskets);
     renderItemBreakdown(itemGroups);
-    const totals = computeTotals(batch, cbaskets, itemGroups);
-    renderRekap(batch, totals);
+    const pseudoBatch = aggregateBatchTotals(batches);
+    const totals = computeTotals(pseudoBatch, cbaskets, itemGroups);
+    renderRekap(totals);
     renderTransfer(allBaskets);
-    renderRincianKeranjang(rincianRes.data||[]);
+    renderByproduct(byproductRows);
 
   }catch(e){
     console.error(e);
@@ -650,48 +509,31 @@ async function renderReport(batch){
   }
 }
 
-const BATCH_STATUS_MAP = {
-  DRAFT:    {label:'Draft',   cls:'b-draft'},
-  ACTIVE:   {label:'Aktif',   cls:'b-active'},
-  COMPLETE: {label:'Selesai', cls:'b-complete'}
-};
-function statusBadge(status){
-  const s = BATCH_STATUS_MAP[status] || {label:status||'—', cls:'b-draft'};
-  return `<span class="badge ${s.cls}">${esc(s.label)}</span>`;
+function aggregateBatchTotals(batches){
+  const t={ekor_kandang:0,kg_kandang:0,ekor_timbang_ulang:0,kg_timbang_ulang:0,ekor_mati:0,kg_mati:0};
+  batches.forEach(b=>{
+    t.ekor_kandang       += Number(b.ekor_kandang)||0;
+    t.kg_kandang         += Number(b.kg_kandang)||0;
+    t.ekor_timbang_ulang += Number(b.ekor_timbang_ulang)||0;
+    t.kg_timbang_ulang   += Number(b.kg_timbang_ulang)||0;
+    t.ekor_mati          += Number(b.ekor_mati)||0;
+    t.kg_mati            += Number(b.kg_mati)||0;
+  });
+  return t;
 }
 
-function renderStatus(b, corrections){
-  let html = statusBadge(b.status);
-  if(corrections.length){
-    html += ` <span class="badge b-revisi">✏️ Direvisi ${corrections.length}×</span>`;
-  }
-  document.getElementById('rpt-status-row').innerHTML = html;
-
-  const wrap = document.getElementById('rpt-revisi-wrap');
-  const tbody = document.getElementById('tbody-revisi');
-  if(!corrections.length){
-    wrap.style.display='none';
+function renderHeader(tanggal, batches){
+  document.getElementById('ri-tanggal').textContent = fmtDateID(tanggal);
+  document.getElementById('ri-jumlah-batch').textContent = batches.length ? `${batches.length} batch` : '—';
+  const wrap = document.getElementById('ri-batch-daftar-wrap');
+  const tbody = document.getElementById('ri-batch-daftar');
+  if(batches.length){
+    tbody.innerHTML = batches.map(b=>`<tr><td>${esc(b.batch_code)||'—'}</td><td>${esc(b.nama_kandang)||'—'}</td></tr>`).join('');
+    wrap.style.display='block';
+  } else {
     tbody.innerHTML='';
-    return;
+    wrap.style.display='none';
   }
-  wrap.style.display='block';
-  tbody.innerHTML = corrections.map(c=>`
-    <tr>
-      <td>${esc(c.field_salah)}</td>
-      <td>${esc(c.nilai_lama)||'—'} → ${esc(c.nilai_baru)||'—'}</td>
-      <td>${esc(c.alasan)||'—'}</td>
-      <td>${esc(c.reviewed_by?.nama)||'—'}</td>
-      <td>${fmtDT(c.reviewed_at)}</td>
-    </tr>`).join('');
-}
-
-function renderHeader(b){
-  document.getElementById('ri-tanggal').textContent  = fmtDateID(b.tanggal);
-  document.getElementById('ri-sumber').textContent    = b.nama_kandang || '—';
-  document.getElementById('ri-batch').textContent     = b.batch_code;
-  document.getElementById('ri-ekspedisi').textContent = b.nama_ekspedisi || '—';
-  document.getElementById('ri-nobk').textContent      = b.no_polisi || '—';
-  document.getElementById('ri-driver').textContent    = b.nama_supir || '—';
 }
 
 // Ukuran (kelas berat) untuk kategori KARKAS disimpan di product_master.sub_kategori
@@ -735,7 +577,7 @@ function renderItemBreakdown(groups){
   currentItemGroups = groups;
   const btnExcel=document.getElementById('btn-excel-item');
   const tbody=document.getElementById('tbody-item-breakdown');
-  if(!groups.length){tbody.innerHTML='<tr><td colspan="6"><div class="empty">Belum ada data timbang karkas untuk batch ini.</div></td></tr>';if(btnExcel)btnExcel.disabled=true;return}
+  if(!groups.length){tbody.innerHTML='<tr><td colspan="6"><div class="empty">Belum ada data timbang karkas untuk tanggal ini.</div></td></tr>';if(btnExcel)btnExcel.disabled=true;return}
   if(btnExcel)btnExcel.disabled=false;
   const totalKg=groups.reduce((s,g)=>s+g.kg,0)||1;
   const gradeBadge=g=>g==='A'?'<span class="badge b-gradeA">A</span>':g==='B'?'<span class="badge b-gradeB">B</span>':g==='C'?'<span class="badge b-gradeC">C</span>':'—';
@@ -829,7 +671,7 @@ function rekapRow(label,value,opts={}){
   return `<tr class="${cls}"><td>${esc(label)}</td><td>${value}</td></tr>`;
 }
 
-function renderRekap(batch, t){
+function renderRekap(t){
   const kiri = [
     rekapRow('Data Kandang',null,{section:true}),
     rekapRow('Ekor Kandang', int(t.ekKandang)+' Ek'),
@@ -895,7 +737,7 @@ function renderTransfer(basketRows){
   currentTransferGroups = groups;
   const btnExcel=document.getElementById('btn-excel-transfer');
   const tbody=document.getElementById('tbody-transfer');
-  if(!groups.length){tbody.innerHTML='<tr><td colspan="7"><div class="empty">Belum ada keranjang karkas untuk batch ini.</div></td></tr>';if(btnExcel)btnExcel.disabled=true;return}
+  if(!groups.length){tbody.innerHTML='<tr><td colspan="7"><div class="empty">Belum ada keranjang karkas untuk tanggal ini.</div></td></tr>';if(btnExcel)btnExcel.disabled=true;return}
   if(btnExcel)btnExcel.disabled=false;
   const tot={parting:{ek:0,kg:0},boneless:{ek:0,kg:0},chiller:{ek:0,kg:0}};
   let rows=groups.map(g=>{
@@ -917,67 +759,40 @@ function renderTransfer(basketRows){
 }
 
 // ══════════════════════════════════════════════════════════════
-// RINCIAN KERANJANG — tabel detail per keranjang (layar saja) + export Excel
+// REKAPAN HASIL BY-PRODUCT — Barang, Bungkus, Kg (tanpa rincian pelanggan/tujuan)
 // ══════════════════════════════════════════════════════════════
-const TIPE_RUSAK_MAP = {1:'Dari Kandang', 2:'Dari RPA (Proses)'};
-
-function renderRincianKeranjang(rows){
-  currentRincianRows = rows;
-  const tbody  = document.getElementById('tbody-rincian-keranjang');
-  const countEl = document.getElementById('rincian-count');
-  const btn    = document.getElementById('btn-download-excel');
-
-  if(!rows.length){
-    tbody.innerHTML = '<tr><td colspan="7"><div class="empty">Belum ada keranjang yang ditimbang untuk batch ini.</div></td></tr>';
-    countEl.textContent = '0 keranjang';
-    btn.disabled = true;
-    return;
-  }
-
-  countEl.textContent = `${rows.length} keranjang`;
-  btn.disabled = false;
-
-  tbody.innerHTML = rows.map(r=>{
-    const b = r.basket||{};
-    const p = r.product||{};
-    return `<tr>
-      <td>${esc(b.basket_code)||'—'}</td>
-      <td>${esc(p.nama_produk)||'—'}</td>
-      <td class="num">${int(r.qty_timbang)}</td>
-      <td class="num">${num(r.kg_timbang)}</td>
-      <td>${TIPE_RUSAK_MAP[r.tipe_kerusakan]||'—'}</td>
-      <td>${esc(b.lokasi)||'—'}</td>
-      <td>${fmtDT(r.created_at)}</td>
-    </tr>`;
-  }).join('');
+function renderByproduct(rows){
+  const btnExcel=document.getElementById('btn-excel-byproduct');
+  const tbody=document.getElementById('tbody-byproduct');
+  if(!rows.length){currentByproductGroups=[];tbody.innerHTML='<tr><td colspan="3"><div class="empty">Belum ada data by-product untuk tanggal ini.</div></td></tr>';if(btnExcel)btnExcel.disabled=true;return}
+  if(btnExcel)btnExcel.disabled=false;
+  const map={};
+  rows.forEach(r=>{
+    const nama=r.product.nama_produk;
+    if(!map[nama]) map[nama]={nama_produk:nama, bungkus:0, kg:0};
+    map[nama].bungkus += Number(r.qty_bungkus)||0;
+    map[nama].kg += Number(r.kg)||0;
+  });
+  const groups=Object.values(map).sort((a,b)=>a.nama_produk.localeCompare(b.nama_produk));
+  currentByproductGroups = groups;
+  let out=groups.map(g=>`
+    <tr>
+      <td>${esc(g.nama_produk)}</td>
+      <td class="num">${int(g.bungkus)}</td>
+      <td class="num">${num(g.kg)}</td>
+    </tr>`).join('');
+  const totBungkus=groups.reduce((s,g)=>s+g.bungkus,0);
+  const totKg=groups.reduce((s,g)=>s+g.kg,0);
+  out+=`<tfoot><tr><td>TOTAL</td><td class="num">${int(totBungkus)}</td><td class="num">${num(totKg)}</td></tr></tfoot>`;
+  tbody.innerHTML=out;
 }
 
-function downloadRincianExcel(){
-  if(!currentRincianRows.length){ showToast('Tidak ada data untuk diunduh','error'); return; }
-  if(typeof XLSX === 'undefined'){ showToast('Modul Excel gagal dimuat, coba refresh halaman','error'); return; }
-
-  const rows = currentRincianRows.map(r=>{
-    const b = r.basket||{};
-    const p = r.product||{};
-    return {
-      'Kode Keranjang':   b.basket_code || '',
-      'Barang':           p.nama_produk || '',
-      'Qty (Ekor)':       Number(r.qty_timbang)||0,
-      'Kg':               Number(r.kg_timbang)||0,
-      'Tipe Rusak':       TIPE_RUSAK_MAP[r.tipe_kerusakan] || '',
-      'Tujuan Pindah':    b.lokasi || '',
-      'Waktu Timbang':    r.created_at ? new Date(r.created_at).toLocaleString('id-ID') : ''
-    };
-  });
-
-  const ws = XLSX.utils.json_to_sheet(rows);
-  ws['!cols'] = [
-    {wch:16},{wch:24},{wch:11},{wch:10},{wch:16},{wch:14},{wch:18}
-  ];
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Rincian Keranjang');
-  const safeCode = (currentBatch?.batch_code || 'batch').replace(/[^a-zA-Z0-9_-]/g,'_');
-  XLSX.writeFile(wb, `Rincian_Keranjang_${safeCode}.xlsx`);
+// ══════════════════════════════════════════════════════════════
+// EXPORT EXCEL — Rincian Produk / Produk Transfer / Rekapan By-Product
+// (pola sama seperti downloadRincianExcel() di LaporanProduksiKarkas.html)
+// ══════════════════════════════════════════════════════════════
+function safeDateSuffix(){
+  return (currentReportDate || todayISO()).replace(/[^0-9-]/g,'');
 }
 
 function downloadItemBreakdownExcel(){
@@ -1000,8 +815,7 @@ function downloadItemBreakdownExcel(){
   ws['!cols'] = [{wch:24},{wch:10},{wch:8},{wch:12},{wch:12},{wch:8}];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Rincian Produk');
-  const safeCode = (currentBatch?.batch_code || 'batch').replace(/[^a-zA-Z0-9_-]/g,'_');
-  XLSX.writeFile(wb, `Rincian_Produk_${safeCode}.xlsx`);
+  XLSX.writeFile(wb, `Rincian_Produk_Harian_${safeDateSuffix()}.xlsx`);
 }
 
 function downloadTransferExcel(){
@@ -1032,15 +846,28 @@ function downloadTransferExcel(){
   ws['!cols'] = [{wch:24},{wch:10},{wch:10},{wch:11},{wch:11},{wch:10},{wch:10}];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Produk Transfer');
-  const safeCode = (currentBatch?.batch_code || 'batch').replace(/[^a-zA-Z0-9_-]/g,'_');
-  XLSX.writeFile(wb, `Produk_Transfer_${safeCode}.xlsx`);
+  XLSX.writeFile(wb, `Produk_Transfer_Harian_${safeDateSuffix()}.xlsx`);
 }
 
-// Close search results when clicking outside
-document.addEventListener('click',(e)=>{
-  const box=document.getElementById('batch-search-results');
-  if(box && !e.target.closest('.search-results')) box.style.display='none';
-});
+function downloadByproductExcel(){
+  if(!currentByproductGroups.length){ showToast('Tidak ada data untuk diunduh','error'); return; }
+  if(typeof XLSX === 'undefined'){ showToast('Modul Excel gagal dimuat, coba refresh halaman','error'); return; }
+
+  const rows = currentByproductGroups.map(g=>({
+    'Barang':  g.nama_produk || '',
+    'Bungkus': Number(g.bungkus)||0,
+    'Kg':      Number(g.kg)||0
+  }));
+  const totBungkus = currentByproductGroups.reduce((s,g)=>s+g.bungkus,0);
+  const totKg = currentByproductGroups.reduce((s,g)=>s+g.kg,0);
+  rows.push({'Barang':'TOTAL','Bungkus':totBungkus,'Kg':totKg});
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{wch:24},{wch:10},{wch:10}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Rekapan By-Product');
+  XLSX.writeFile(wb, `Rekapan_ByProduct_Harian_${safeDateSuffix()}.xlsx`);
+}
 </script>
 </body>
 </html>

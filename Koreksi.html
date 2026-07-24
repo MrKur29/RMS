@@ -460,9 +460,16 @@ a{text-decoration:none}
               </div>
             </div>
 
-            <div class="form-group">
+            <div class="form-group" id="kf-nilai-baru-text-wrap">
               <label>Nilai Baru</label>
               <input type="text" id="kf-nilai-baru" placeholder="nilai yang seharusnya">
+            </div>
+            <div class="form-group" id="kf-nilai-baru-product-wrap" style="display:none">
+              <label>Item/Produk Baru</label>
+              <select id="kf-product-baru">
+                <option value="">— Pilih Produk —</option>
+              </select>
+              <div class="hint" id="kf-nilai-lama-product-hint"></div>
             </div>
 
             <div class="form-group">
@@ -528,9 +535,11 @@ let pendingList         = [];
 let riwayatList         = [];
 let activeCorrectionId  = null;
 let foundRecord         = null;   // hasil pencarian basket/batch di tab Ajukan
+let productOptions      = [];     // {id, product_code, nama_produk} — buat dropdown koreksi item
+let productMap          = {};     // id -> "product_code — nama_produk", buat tampilan ringkas
 
 const FIELD_SUGGEST = {
-  baskets: ['qty_sisa', 'kg_sisa', 'qty_awal', 'kg_awal', 'lokasi', 'status'],
+  baskets: ['product_id', 'qty_sisa', 'kg_sisa', 'qty_awal', 'kg_awal', 'lokasi', 'status'],
   live_chicken_batches: ['ekor_kandang', 'kg_kandang', 'ekor_timbang_ulang', 'kg_timbang_ulang', 'ekor_mati', 'kg_mati', 'no_polisi', 'nama_supir', 'tanggal', 'catatan']
 };
 
@@ -601,8 +610,22 @@ function startApp(){
   RPA_STATE.bindFilters('Koreksi', ['#tab-riwayat']);
   RPA_STATE.bindScroll('Koreksi');
   switchTab(RPA_STATE.getTab('Koreksi', 'pending'));
-  startClock();loadAll();
+  startClock();loadAll();loadProductOptions();
 }
+
+// ── PRODUK (buat dropdown koreksi item, bukan isi manual) ──
+async function loadProductOptions(){
+  const{data,error}=await db.from('product_master').select('id,product_code,nama_produk,kategori').eq('aktif',true).order('kategori').order('product_code');
+  if(error){console.error(error);return}
+  productOptions=data||[];
+  productMap={};
+  productOptions.forEach(p=>{productMap[p.id]=`${p.product_code} — ${p.nama_produk}`});
+  const sel=document.getElementById('kf-product-baru');
+  if(sel){
+    sel.innerHTML='<option value="">— Pilih Produk —</option>'+productOptions.map(p=>`<option value="${p.id}">${esc(p.product_code)} — ${esc(p.nama_produk)}</option>`).join('');
+  }
+}
+function prodLabel(id){return id&&productMap[id]?productMap[id]:(id||'—')}
 
 // ── VIEW-ONLY GUARD ──
 function applyViewOnlyGuard(){
@@ -621,9 +644,9 @@ function startClock(){
 }
 
 // ── AUTO LOGIN ──
-window.addEventListener('DOMContentLoaded',()=>{
+window.addEventListener('DOMContentLoaded',async ()=>{
   const saved=localStorage.getItem('rpa_user')||sessionStorage.getItem('rpa_user');
-  if(saved){try{currentUser=JSON.parse(saved);startApp();}catch{}}
+  if(saved){try{currentUser=await RPA_PERM.restoreSession(db);if(currentUser)startApp();}catch{}}
 });
 
 // ── LOAD ──
@@ -662,11 +685,12 @@ function renderPending(){
     return;
   }
   const canApprove=RPA_PERM.canApprove(currentUser.moduleRole);
+  const isProdField=r=>r.tabel_terkait==='baskets'&&r.field_salah==='product_id';
   tbody.innerHTML=pendingList.map(r=>`
     <tr>
       <td><code style="font-size:11px;background:#f3f4f6;padding:2px 6px;border-radius:4px">${esc(r.tabel_terkait)}</code></td>
       <td>${esc(r.field_salah)}</td>
-      <td><span style="color:#dc2626">${esc(r.nilai_lama)||'—'}</span> → <span style="color:#16a34a">${esc(r.nilai_baru)||'—'}</span></td>
+      <td><span style="color:#dc2626">${isProdField(r)?esc(prodLabel(r.nilai_lama)):(esc(r.nilai_lama)||'—')}</span> → <span style="color:#16a34a">${isProdField(r)?esc(prodLabel(r.nilai_baru)):(esc(r.nilai_baru)||'—')}</span></td>
       <td style="max-width:220px">${esc(r.alasan)}</td>
       <td>${esc(r.requested_by?.nama)||'—'}</td>
       <td>${fmtDT(r.created_at)}</td>
@@ -705,11 +729,12 @@ function renderRiwayat(){
     const upCount=Array.isArray(r.upstream_ids)?r.upstream_ids.length:0;
     const statusBadge=r.status==='APPROVED'?'<span class="badge b-approved">Disetujui</span>':'<span class="badge b-rejected">Ditolak</span>';
     const appliedBadge=r.status==='APPROVED'?(r.auto_applied?'<span class="badge b-auto">Auto</span>':'<span class="badge b-manual">Manual</span>'):'';
+    const isProdField=r.tabel_terkait==='baskets'&&r.field_salah==='product_id';
     return `
     <tr>
       <td><code style="font-size:11px;background:#f3f4f6;padding:2px 6px;border-radius:4px">${esc(r.tabel_terkait)}</code></td>
       <td>${esc(r.field_salah)}</td>
-      <td><span style="color:#dc2626">${esc(r.nilai_lama)||'—'}</span> → <span style="color:#16a34a">${esc(r.nilai_baru)||'—'}</span></td>
+      <td><span style="color:#dc2626">${isProdField?esc(prodLabel(r.nilai_lama)):(esc(r.nilai_lama)||'—')}</span> → <span style="color:#16a34a">${isProdField?esc(prodLabel(r.nilai_baru)):(esc(r.nilai_baru)||'—')}</span></td>
       <td>${statusBadge} ${appliedBadge}</td>
       <td>${downCount>0?`${downCount} basket`:'—'}</td>
       <td>${upCount>0?`<span class="badge b-manual">${upCount} basket</span>`:'—'}</td>
@@ -805,12 +830,14 @@ function onTabelChange(){
   const suggest=document.getElementById('kf-field-suggest');
   const key=val==='__manual'?null:val;
   suggest.innerHTML=(FIELD_SUGGEST[key]||[]).map(f=>`<option value="${f}">`).join('');
+  document.getElementById('kf-field').value='';
+  onFieldChange();
 }
 
 async function cariBasket(){
   const code=document.getElementById('kf-basket-code').value.trim();
   if(!code){showToast('Isi kode basket dulu','error');return}
-  const{data,error}=await db.from('baskets').select('id,basket_code,qty_sisa,kg_sisa,qty_awal,kg_awal,lokasi,status,product_master(nama_produk,product_code)').eq('basket_code',code).maybeSingle();
+  const{data,error}=await db.from('baskets').select('id,basket_code,product_id,qty_sisa,kg_sisa,qty_awal,kg_awal,lokasi,status,product_master(nama_produk,product_code)').eq('basket_code',code).maybeSingle();
   if(error||!data){showToast('Basket tidak ditemukan','error');return}
   foundRecord=data;
   document.getElementById('kf-found-box').style.display='block';
@@ -822,7 +849,7 @@ async function cariBasket(){
     <div class="modal-info-row"><span class="modal-info-label">Kg Awal</span><span class="modal-info-val">${esc(data.kg_awal)}</span></div>
     <div class="modal-info-row"><span class="modal-info-label">Kg Sisa</span><span class="modal-info-val">${esc(data.kg_sisa)}</span></div>
     <div class="modal-info-row"><span class="modal-info-label">Lokasi</span><span class="modal-info-val">${esc(data.lokasi)}</span></div>
-    <div class="hint" style="margin-top:6px">Salah hitung waktu produksi? Koreksi <strong>Qty/Kg Awal</strong> (sisa ikut menyesuaikan otomatis). Cuma mau ubah stok saat ini? Koreksi <strong>Qty/Kg Sisa</strong>.</div>
+    <div class="hint" style="margin-top:6px">Salah hitung waktu produksi? Koreksi <strong>Qty/Kg Awal</strong> (sisa ikut menyesuaikan otomatis). Cuma mau ubah stok saat ini? Koreksi <strong>Qty/Kg Sisa</strong>. Salah pilih item/produk? Isi Field = <strong>product_id</strong>, lalu pilih produk yang benar lewat dropdown di bawah — otomatis ikut memperbaiki catatan timbang &amp; validasi beratnya juga.</div>
   `;
   showToast('Basket ditemukan — pilih field yang mau dikoreksi','success');
 }
@@ -844,10 +871,28 @@ async function cariBatch(){
   showToast('Batch ditemukan — pilih field yang mau dikoreksi','success');
 }
 
+function isProductFieldSelected(){
+  return document.getElementById('kf-tabel').value==='baskets' && document.getElementById('kf-field').value.trim()==='product_id';
+}
+
 function onFieldChange(){
   const field=document.getElementById('kf-field').value.trim();
   if(foundRecord && field && Object.prototype.hasOwnProperty.call(foundRecord,field)){
     document.getElementById('kf-nilai-lama').value=foundRecord[field]==null?'':foundRecord[field];
+  }
+
+  const isProd=isProductFieldSelected();
+  document.getElementById('kf-nilai-baru-text-wrap').style.display=isProd?'none':'block';
+  document.getElementById('kf-nilai-baru-product-wrap').style.display=isProd?'block':'none';
+
+  const hintEl=document.getElementById('kf-nilai-lama-product-hint');
+  if(isProd){
+    const current=foundRecord?.product_id?prodLabel(foundRecord.product_id):null;
+    hintEl.textContent=current?`Produk saat ini: ${current}. Pilih produk yang benar di bawah.`:'Cari basket dulu di atas supaya produk saat ini diketahui, lalu pilih produk yang benar.';
+    const sel=document.getElementById('kf-product-baru');
+    if(sel) sel.value='';
+  }else{
+    hintEl.textContent='';
   }
 }
 
@@ -868,11 +913,13 @@ async function submitKoreksi(){
 
   const fieldSalah=document.getElementById('kf-field').value.trim();
   const nilaiLama=document.getElementById('kf-nilai-lama').value;
-  const nilaiBaru=document.getElementById('kf-nilai-baru').value.trim();
+  const isProd=isProductFieldSelected();
+  const nilaiBaru=isProd?document.getElementById('kf-product-baru').value:document.getElementById('kf-nilai-baru').value.trim();
   const alasan=document.getElementById('kf-alasan').value.trim();
 
   if(!fieldSalah){showToast('Isi field yang salah','error');return}
-  if(!nilaiBaru){showToast('Isi nilai baru','error');return}
+  if(!nilaiBaru){showToast(isProd?'Pilih produk yang benar dulu':'Isi nilai baru','error');return}
+  if(isProd && nilaiBaru===foundRecord?.product_id){showToast('Produk baru sama dengan produk saat ini','error');return}
   if(!alasan){showToast('Alasan koreksi wajib diisi','error');return}
 
   const btn=document.getElementById('kf-btn-submit');
@@ -905,6 +952,8 @@ function resetAjukanForm(){
   document.getElementById('kf-field').value='';
   document.getElementById('kf-nilai-lama').value='';
   document.getElementById('kf-nilai-baru').value='';
+  const prodSel=document.getElementById('kf-product-baru');
+  if(prodSel) prodSel.value='';
   document.getElementById('kf-alasan').value='';
   document.getElementById('kf-found-box').style.display='none';
   foundRecord=null;

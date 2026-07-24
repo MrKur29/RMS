@@ -6,6 +6,7 @@
 <title>Manajemen User — Kurnia's Food</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="viewstate.js"></script>
+<script src="permissions.js"></script>
 <style>
 /* =====================================================
    RESET & BASE
@@ -795,17 +796,11 @@ async function doLogin() {
         }
 
         // Load permissions (even admin might have explicit ones)
-        const { data: permsData } = await db
-            .from('user_module_permissions')
-            .select('module, role')
-            .eq('user_id', data.id);
-
-        const permissions = {};
-        if (permsData) permsData.forEach(p => { permissions[p.module] = p.role; });
-        data.permissions = permissions;
+        data.permissions = await RPA_PERM.fetchPermissions(db, data.id);
 
         currentUser = data;
         localStorage.setItem('rpa_user', JSON.stringify(data));
+        sessionStorage.setItem('rpa_user', JSON.stringify(data));
         startApp();
 
     } catch (e) {
@@ -823,15 +818,8 @@ function showLoginErr(msg) {
     el.style.display = 'block';
 }
 
-function doLogout() {
-    currentUser = null;
-    localStorage.removeItem('rpa_user');
-    document.getElementById('app-screen').style.display   = 'none';
-    document.getElementById('login-screen').style.display = 'flex';
-    document.getElementById('inp-username').value = '';
-    document.getElementById('inp-password').value = '';
-    document.getElementById('login-error').style.display  = 'none';
-}
+// doLogout() is defined once, further down, alongside the session-restore
+// listener (this file previously had two competing copies of both).
 
 document.addEventListener('keydown', e => {
     if (e.key === 'Enter' && document.getElementById('login-screen').style.display !== 'none') doLogin();
@@ -861,30 +849,7 @@ function startApp() {
     loadUsers();
 }
 
-// Restore session
-window.addEventListener('DOMContentLoaded', () => {
-    const saved = localStorage.getItem('rpa_user');
-    console.log('[UM] localStorage rpa_user:', saved ? JSON.parse(saved) : 'KOSONG');
-    if (saved) {
-        try {
-            const user = JSON.parse(saved);
-            console.log('[UM] user.id:', user?.id, '| is_system_admin:', user?.is_system_admin, '| aktif:', user?.aktif);
-            const isAllowed = user && user.id && (user.is_system_admin || user.role === 'SUPERVISOR');
-            console.log('[UM] isAllowed:', isAllowed, '| role:', user?.role, '| is_system_admin:', user?.is_system_admin);
-            if (isAllowed) {
-                currentUser = user;
-                startApp();
-            } else {
-                console.log('[UM] Kondisi gagal → tampilkan login form');
-            }
-        } catch(e) {
-            console.log('[UM] Parse error:', e);
-            localStorage.removeItem('rpa_user');
-        }
-    } else {
-        console.log('[UM] Tidak ada sesi → tampilkan login form');
-    }
-});
+// Session restore is handled once, further down, right next to doLogout().
 
 // ============================================================
 // SIDEBAR
@@ -901,7 +866,7 @@ async function loadUsers() {
     try {
         const { data: users, error } = await db
             .from('users')
-            .select('id, nama, username, role, aktif, is_system_admin, created_at')
+            .select('id, nama, username, role, aktif, is_system_admin, pin, created_at')
             .order('nama');
 
         if (error) throw error;
@@ -1274,6 +1239,15 @@ async function saveUser() {
         } else {
             await updateUser(editingUserId, nama, password, pin, isAdmin, aktif);
         }
+    } catch (e) {
+        console.error(e);
+        if (e?.code === '23505' && (e.message || '').includes('users_pin_unique')) {
+            showModalAlert('PIN ini sudah dipakai oleh user lain. Setiap user dengan PIN harus punya PIN yang berbeda — gunakan PIN lain.');
+        } else if (e?.code === '23505') {
+            showModalAlert('Data ini sudah dipakai oleh user lain.');
+        } else {
+            showModalAlert('Gagal menyimpan user: ' + (e?.message || e));
+        }
     } finally {
         btn.disabled    = false;
         btn.textContent = 'Simpan';
@@ -1400,13 +1374,20 @@ function doLogout() {
     location.reload();
 }
 
-window.addEventListener('DOMContentLoaded', () => {
+// Restore session on page load. Re-fetches permissions from the DB (via
+// RPA_PERM.restoreSession) rather than trusting the cached blob, so a
+// permission change made to this account elsewhere takes effect on the
+// next load instead of requiring an explicit logout/login.
+window.addEventListener('DOMContentLoaded', async () => {
     const saved = sessionStorage.getItem('rpa_user') || localStorage.getItem('rpa_user');
     if (saved) {
         try {
-            const user = JSON.parse(saved);
-            const ok = user && user.id && (user.is_system_admin || user.role === 'SUPERVISOR');
-            if (ok) { currentUser = user; startApp(); }
+            const cached = JSON.parse(saved);
+            const ok = cached && cached.id && (cached.is_system_admin || cached.role === 'SUPERVISOR');
+            if (ok) {
+                currentUser = await RPA_PERM.restoreSession(db);
+                if (currentUser) startApp();
+            }
         } catch(e) {}
     }
 });

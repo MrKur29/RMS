@@ -832,6 +832,10 @@ a{text-decoration:none}
              onkeydown="if(event.key==='Enter')mpcSubmit()">
       <div class="pin-error" id="mpc-pin-error">PIN salah atau bukan Supervisor</div>
     </div>
+    <div class="form-group modal-fg" id="mpc-alasan-wrap" style="display:none">
+      <label>Alasan <span style="color:#dc2626">*</span></label>
+      <textarea id="mpc-alasan" placeholder="Jelaskan alasan…" rows="2"></textarea>
+    </div>
     <div id="mpc-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-top:8px;display:none"></div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="mpcCancel()">Batal</button>
@@ -856,6 +860,7 @@ const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 let currentUser    = null;
 let currentBatch   = null;   // live_chicken_batches object
 let currentSession = null;   // carcass_sessions object
+let lastClosedSession = null; // sesi CLOSED terakhir untuk batch ini (jika ada) — dipakai untuk gate revisi
 let masterProducts = [];     // KARKAS products from product_master
 let sessionKeranjang = [];   // carcass_baskets for current session
 let lantaiBaskets  = [];     // baskets at LANTAI for current batch
@@ -1104,6 +1109,7 @@ async function loadSession(batchId) {
     .maybeSingle();
   if (data) {
     currentSession = data;
+    lastClosedSession = null;
     showState('active');
     updateSessionBadge('OPEN');
     showEl('btn-buka-sesi', false);
@@ -1116,13 +1122,32 @@ async function loadSession(batchId) {
   } else {
     currentSession = null;
     showState('no-session');
-    updateSessionBadge(null);
     const desc = document.getElementById('no-session-desc');
     if (currentBatch.status === 'COMPLETE') {
       // Batch sudah selesai — tidak bisa buka sesi baru
+      lastClosedSession = null;
+      updateSessionBadge(null);
       showEl('btn-buka-sesi', false);
       if (desc) desc.textContent = `Batch ${currentBatch.batch_code} sudah berstatus Selesai. Sesi produksi tidak bisa dibuka lagi.`;
+      return;
+    }
+    // Cek apakah batch ini sudah pernah punya sesi yang DITUTUP.
+    // Kalau ya, sesi baru = revisi dan wajib otorisasi PIN Supervisor.
+    const { data: closedData } = await db.from('carcass_sessions')
+      .select('*')
+      .eq('batch_id', batchId)
+      .eq('status', 'CLOSED')
+      .order('closed_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    lastClosedSession = closedData || null;
+
+    if (lastClosedSession) {
+      updateSessionBadge('CLOSED');
+      showEl('btn-buka-sesi', true);
+      if (desc) desc.textContent = `Sesi produksi batch ${currentBatch.batch_code} sudah Selesai (${lastClosedSession.session_code}, ditutup ${fmtDate(lastClosedSession.closed_at)}). Untuk membuka sesi baru (revisi), diperlukan otorisasi PIN Supervisor.`;
     } else {
+      updateSessionBadge(null);
       showEl('btn-buka-sesi', true);
       if (desc) desc.textContent = `Batch ${currentBatch.batch_code} belum memiliki sesi produksi. Klik "Buka Sesi Produksi" untuk mulai mencatat hasil timbang karkas.`;
     }
@@ -1145,19 +1170,49 @@ function showState(state) {
 }
 async function bukaSession() {
   if (!currentBatch) return;
+  // Batch ini sudah pernah punya sesi yang DITUTUP → sesi baru = revisi,
+  // wajib otorisasi PIN Supervisor + alasan.
+  if (lastClosedSession) {
+    showPinConfirm({
+      title: '🔑 Buka Sesi Baru (Revisi)',
+      desc: `Sesi produksi batch ${currentBatch.batch_code} sudah Selesai (${lastClosedSession.session_code}). Membuka sesi baru untuk revisi memerlukan otorisasi PIN Supervisor.`,
+      requireAlasan: true,
+      onConfirm: async (sup, alasan) => {
+        await doBukaSession({
+          isRevisi: true,
+          revisiAlasan: alasan,
+          revisiBy: sup.id,
+          revisiDariSessionId: lastClosedSession.id
+        });
+      }
+    });
+    return;
+  }
+  await doBukaSession({});
+}
+async function doBukaSession({ isRevisi = false, revisiAlasan = null, revisiBy = null, revisiDariSessionId = null }) {
   const btn = document.getElementById('btn-buka-sesi');
   btn.disabled = true; btn.textContent = 'Membuka…';
   try {
     const { data: code } = await db.rpc('generate_session_code');
-    const { data, error } = await db.from('carcass_sessions').insert({
+    const insertData = {
       session_code: code,
       batch_id: currentBatch.id,
       tanggal: todayISO(),
       created_by: currentUser.id
-    }).select().single();
+    };
+    if (isRevisi) {
+      insertData.is_revisi = true;
+      insertData.revisi_alasan = revisiAlasan;
+      insertData.revisi_by = revisiBy;
+      insertData.revisi_dari_session_id = revisiDariSessionId;
+      insertData.revisi_at = new Date().toISOString();
+    }
+    const { data, error } = await db.from('carcass_sessions').insert(insertData).select().single();
     if (error) throw error;
     currentSession = data;
-    showToast(`Sesi ${code} dibuka`, 'success');
+    lastClosedSession = null;
+    showToast(`Sesi ${code} dibuka${isRevisi ? ' (revisi)' : ''}`, 'success');
     showState('active');
     updateSessionBadge('OPEN');
     showEl('btn-buka-sesi', false);
@@ -1591,7 +1646,11 @@ async function submitKeranjang() {
     currentSession.total_kg = parseFloat(currentSession.total_kg || 0) + kg;
 
     // Save for step 2
-    lastSavedBasket = { ...basket, product_code: opt.textContent, qty, kg, avg, batch_code: currentBatch.batch_code };
+    // NB: product_code di sini dipakai sebagai field "nama produk" untuk label cetak
+    // (lihat toLabelData) — HARUS nama produk saja, TANPA kode, biar label tidak
+    // menampilkan kode produk.
+    const prodMaster = masterProducts.find(p => String(p.id) === String(productId));
+    lastSavedBasket = { ...basket, product_code: prodMaster?.nama_produk || opt.textContent, qty, kg, avg, batch_code: currentBatch.batch_code };
 
     // Refresh data in background
     loadAll();
@@ -1728,6 +1787,9 @@ async function pkConfirmScan() {
     document.getElementById('scan-partial-wrap').style.display = 'none';
     pkScanDest = null; scanResultBasket = null;
     loadLantai(); updateSummaryCards();
+    const scanInput = document.getElementById('scan-input');
+    scanInput.value = '';
+    scanInput.focus();
   }
 }
 
@@ -2204,21 +2266,27 @@ function clearPinError(elId) {
 // Pemakaian: showPinConfirm({ title, desc, onConfirm(supervisor) })
 // ============================================================
 let _mpcCallback = null;
-function showPinConfirm({ title = '🔑 Konfirmasi Supervisor', desc = 'Masukkan PIN Supervisor untuk melanjutkan.', onConfirm }) {
+let _mpcRequireAlasan = false;
+function showPinConfirm({ title = '🔑 Konfirmasi Supervisor', desc = 'Masukkan PIN Supervisor untuk melanjutkan.', requireAlasan = false, onConfirm }) {
   _mpcCallback = onConfirm;
+  _mpcRequireAlasan = requireAlasan;
   setEl('mpc-title', title);
   setEl('mpc-desc', desc);
   document.getElementById('mpc-pin').value = '';
   document.getElementById('mpc-pin-error').style.display = 'none';
   document.getElementById('mpc-err').style.display = 'none';
+  showEl('mpc-alasan-wrap', requireAlasan);
+  if (document.getElementById('mpc-alasan')) document.getElementById('mpc-alasan').value = '';
   openModal('modal-pin-confirm');
   setTimeout(() => document.getElementById('mpc-pin').focus(), 200);
 }
 async function mpcSubmit() {
   const pin = document.getElementById('mpc-pin').value.trim();
+  const alasan = document.getElementById('mpc-alasan')?.value.trim() || '';
   const errEl = document.getElementById('mpc-err');
   errEl.style.display = 'none';
   if (!pin) { errEl.textContent = 'PIN wajib diisi.'; errEl.style.display = 'block'; return; }
+  if (_mpcRequireAlasan && !alasan) { errEl.textContent = 'Alasan wajib diisi.'; errEl.style.display = 'block'; return; }
   const btn = document.getElementById('mpc-ok-btn');
   btn.disabled = true; btn.textContent = 'Memverifikasi…';
   try {
@@ -2228,7 +2296,7 @@ async function mpcSubmit() {
       return;
     }
     closeModal('modal-pin-confirm');
-    if (_mpcCallback) await _mpcCallback(sup);
+    if (_mpcCallback) await _mpcCallback(sup, alasan);
     _mpcCallback = null;
   } finally {
     btn.disabled = false; btn.textContent = '✓ Konfirmasi';
@@ -2258,8 +2326,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   const stored = localStorage.getItem('rpa_user');
   if (stored) {
     try {
-      currentUser = JSON.parse(stored);
-      await startApp();
+      currentUser = await RPA_PERM.restoreSession(db);
+      if (currentUser) await startApp();
     } catch(e) { /* stay on login */ }
   }
   // Close modal on backdrop click

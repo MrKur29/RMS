@@ -242,6 +242,13 @@ const REPORTS = [
     enabled: true
   },
   {
+    icon: '📆',
+    title: 'Laporan Produksi Karkas Harian',
+    desc: 'Rekap produksi karkas TOTAL 1 hari (semua batch digabung): rendeman, susut jalan, grade A/B/C, uniformity, produk transfer, plus rekapan hasil by-product (barang, bungkus, kg).',
+    url: 'LaporanProduksiKarkasHarian.html',
+    enabled: true
+  },
+  {
     icon: '📒',
     title: 'Laporan Kartu Stok',
     desc: 'Kartu stok per produk & lokasi: saldo berjalan dari produksi, transfer antar lokasi, konsumsi ke proses lanjutan, hasil produksi, dan koreksi disetujui.',
@@ -253,6 +260,13 @@ const REPORTS = [
     title: 'Laporan Stok Barang',
     desc: 'Saldo semua produk per lokasi pada tanggal saldo akhir pilihan. Klik salah satu produk untuk membuka Kartu Stok-nya.',
     url: 'LaporanStokBarang.html',
+    enabled: true
+  },
+  {
+    icon: '❄️',
+    title: 'Rincian Transaksi Chiller',
+    desc: 'Seluruh transaksi masuk & keluar (semua produk) di lokasi Chiller dalam rentang tanggal pilihan, lengkap Qty dan Kg.',
+    url: 'LaporanRincianTransaksiChiller.html',
     enabled: true
   }
   // Contoh laporan berikutnya (nonaktif dulu sampai dibangun):
@@ -337,9 +351,9 @@ function renderReportGrid(){
 }
 
 // ── AUTO LOGIN ──
-window.addEventListener('DOMContentLoaded',()=>{
+window.addEventListener('DOMContentLoaded',async ()=>{
   const saved=localStorage.getItem('rpa_user')||sessionStorage.getItem('rpa_user');
-  if(saved){try{currentUser=JSON.parse(saved);startApp();}catch{}}
+  if(saved){try{currentUser=await RPA_PERM.restoreSession(db);if(currentUser)startApp();}catch{}}
 });
 </script>
 </body>

@@ -6,6 +6,7 @@
 <title>Master Data — Kurnia's Food</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="viewstate.js"></script>
+<script src="permissions.js"></script>
 <style>
 /* =====================================================
    RESET & BASE
@@ -712,11 +713,10 @@ async function doLogin() {
         if (error || !data) { showLoginErr('Username atau password salah.'); return; }
         if (!data.aktif) { showLoginErr('Akun Anda dinonaktifkan.'); return; }
         // Load permissions
-        const { data: perms } = await sb.from('user_module_permissions').select('module, role').eq('user_id', data.id);
-        const permissions = {};
-        (perms || []).forEach(p => { permissions[p.module] = p.role; });
-        currentUser = { ...data, permissions };
+        data.permissions = await RPA_PERM.fetchPermissions(sb, data.id);
+        currentUser = data;
         localStorage.setItem('rpa_user', JSON.stringify(currentUser));
+        sessionStorage.setItem('rpa_user', JSON.stringify(currentUser));
         initApp();
     } catch(e) {
         showLoginErr('Terjadi kesalahan. Coba lagi.');
@@ -734,6 +734,7 @@ function showLoginErr(msg) {
 
 function doLogout() {
     localStorage.removeItem('rpa_user');
+    sessionStorage.removeItem('rpa_user');
     location.reload();
 }
 
@@ -757,9 +758,14 @@ async function initApp() {
     switchTab(RPA_STATE.getTab('MasterData', 'product'));
 }
 
-function checkSession() {
+async function checkSession() {
     const saved = sessionStorage.getItem('rpa_user') || localStorage.getItem('rpa_user');
-    if (saved) { try { currentUser = JSON.parse(saved); initApp(); } catch { localStorage.removeItem('rpa_user'); sessionStorage.removeItem('rpa_user'); } }
+    if (saved) {
+        try {
+            currentUser = await RPA_PERM.restoreSession(sb);
+            if (currentUser) initApp();
+        } catch { localStorage.removeItem('rpa_user'); sessionStorage.removeItem('rpa_user'); }
+    }
 }
 
 // =====================================================
@@ -1208,11 +1214,6 @@ async function confirmDeleteWs() {
 
 // =====================================================
 // BOOT
-// =====================================================
-checkSession();
-</script>
-</body>
-</html>
 // =====================================================
 checkSession();
 </script>

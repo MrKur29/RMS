@@ -82,6 +82,60 @@ const RPA_PERM = (function () {
     }
 
     /**
+     * Restore a logged-in session from localStorage/sessionStorage AND
+     * refresh currentUser.permissions from the DB before returning it.
+     *
+     * Why this exists: pages used to JSON.parse the cached 'rpa_user' blob
+     * on page load and trust its .permissions field as-is. That blob is a
+     * snapshot taken at the moment of the last fresh login, so any
+     * permission grant/revoke made via UserManagement.html while a user's
+     * session was still active silently had NO effect until that user
+     * explicitly logged out (clearing storage) and logged back in. This
+     * function re-fetches permissions on every restore so grants apply on
+     * the user's very next page load/navigation instead.
+     *
+     * Usage (replaces the old "JSON.parse + startApp()" restore blocks):
+     *
+     *   (async function () {
+     *       currentUser = await RPA_PERM.restoreSession(db);
+     *       if (currentUser) startApp();
+     *   })();
+     *
+     * Returns the restored user object (with fresh .permissions), or null
+     * if there was no saved session / it failed to parse.
+     */
+    async function restoreSession(db) {
+        let saved = null;
+        try { saved = sessionStorage.getItem('rpa_user') || localStorage.getItem('rpa_user'); }
+        catch (e) { /* storage may be unavailable, e.g. privacy mode */ }
+        if (!saved) return null;
+
+        let user;
+        try {
+            user = JSON.parse(saved);
+        } catch (e) {
+            try { localStorage.removeItem('rpa_user'); } catch (e2) {}
+            try { sessionStorage.removeItem('rpa_user'); } catch (e2) {}
+            return null;
+        }
+
+        try {
+            user.permissions = await fetchPermissions(db, user.id);
+        } catch (e) {
+            // Network hiccup etc: fall back to the cached permissions rather
+            // than locking the user out entirely.
+            console.error('[RPA_PERM] restoreSession: could not refresh permissions, using cached copy', e);
+        }
+
+        try {
+            localStorage.setItem('rpa_user', JSON.stringify(user));
+            sessionStorage.setItem('rpa_user', JSON.stringify(user));
+        } catch (e) { /* ignore storage write errors */ }
+
+        return user;
+    }
+
+    /**
      * Gate a whole page behind a module key. Call this once, after
      * currentUser (with .permissions already populated) is known and the
      * app shell has started rendering.
@@ -119,5 +173,6 @@ const RPA_PERM = (function () {
         canInput,
         isViewOnly,
         enforceModuleAccess,
+        restoreSession,
     };
 })();

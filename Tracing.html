@@ -424,9 +424,9 @@ function startClock(){
 }
 
 // ── AUTO LOGIN ──
-window.addEventListener('DOMContentLoaded',()=>{
+window.addEventListener('DOMContentLoaded',async ()=>{
   const saved=localStorage.getItem('rpa_user')||sessionStorage.getItem('rpa_user');
-  if(saved){try{currentUser=JSON.parse(saved);startApp();}catch{}}
+  if(saved){try{currentUser=await RPA_PERM.restoreSession(db);if(currentUser)startApp();}catch{}}
 });
 
 // ============================================================

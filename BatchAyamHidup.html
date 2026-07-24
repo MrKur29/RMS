@@ -2225,12 +2225,12 @@ document.addEventListener('click', e => {
 // ============================================================
 // INIT — cek session yang sudah ada
 // ============================================================
-(function init() {
+(async function init() {
     const saved = localStorage.getItem('rpa_user');
     if (saved) {
         try {
-            currentUser = JSON.parse(saved);
-            startApp();
+            currentUser = await RPA_PERM.restoreSession(db);
+            if (currentUser) startApp();
         } catch (e) {
             localStorage.removeItem('rpa_user');
         }
