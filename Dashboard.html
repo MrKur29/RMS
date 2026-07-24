@@ -601,13 +601,14 @@ a { text-decoration: none; }
                             <tr>
                                 <th>Kode Batch</th>
                                 <th>Status</th>
-                                <th>No. Polisi</th>
+                                <th>Sumber</th>
                                 <th>Ekor</th>
-                                <th>Kg Karkas</th>
+                                <th>Kg</th>
+                                <th>Yield</th>
                             </tr>
                         </thead>
                         <tbody id="tbody-batch">
-                            <tr><td colspan="5"><div class="empty"><div class="e-icon">⏳</div>Memuat...</div></td></tr>
+                            <tr><td colspan="6"><div class="empty"><div class="e-icon">⏳</div>Memuat...</div></td></tr>
                         </tbody>
                     </table>
                     </div>
@@ -1111,7 +1112,7 @@ function renderBatch(rows) {
 
     const tbody = document.getElementById('tbody-batch');
     if (!rows.length) {
-        tbody.innerHTML = `<tr><td colspan="5"><div class="empty"><div class="e-icon">🐔</div>Belum ada batch hari ini</div></td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6"><div class="empty"><div class="e-icon">🐔</div>Belum ada batch hari ini</div></td></tr>`;
         return;
     }
 
@@ -1119,9 +1120,10 @@ function renderBatch(rows) {
         <tr>
             <td><strong>${r.batch_code || '—'}</strong></td>
             <td>${badgeStatus(r.status)}</td>
-            <td>${r.no_polisi || '<span style="color:#9ca3af">—</span>'}</td>
+            <td>${r.nama_kandang || '<span style="color:#9ca3af">—</span>'}</td>
             <td>${fmt(r.total_karkas_qty)} ekor</td>
             <td><strong>${fmt(r.total_karkas_kg, 1)} kg</strong></td>
+            <td>${r.pct_rendemen_kandang != null ? fmt(r.pct_rendemen_kandang, 1) + '%' : '<span style="color:#9ca3af">—</span>'}</td>
         </tr>
     `).join('');
 }
