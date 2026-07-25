@@ -370,7 +370,7 @@ a{text-decoration:none}
       <div class="nav-section-label">Penjualan</div>
       <div class="nav-item" onclick="navTo('Penjualan.html')"><span class="nav-icon">🛒</span><span class="nav-label-text">Penjualan</span></div>
       <div class="nav-section-label">Manajemen</div>
-      <div class="nav-item disabled"><span class="nav-icon">✅</span><span class="nav-label-text">Koreksi &amp; Approval</span></div>
+      <div class="nav-item" onclick="navTo('Koreksi.html')"><span class="nav-icon">✅</span><span class="nav-label-text">Koreksi &amp; Approval</span></div>
       <div class="nav-item" onclick="navTo('Laporan.html')"><span class="nav-icon">📊</span><span class="nav-label-text">Laporan</span></div>
       <div class="nav-item" onclick="navTo('MasterData.html')"><span class="nav-icon">🗂️</span><span class="nav-label-text">Master Data</span></div>
       <div class="nav-item" id="nav-user-mgmt" style="display:none" onclick="navTo('UserManagement.html')"><span class="nav-icon">👥</span><span class="nav-label-text">Manajemen User</span></div>
@@ -718,6 +718,59 @@ a{text-decoration:none}
   </div>
 </div>
 
+<!-- ==================== MODAL: EDIT KERANJANG ==================== -->
+<div class="modal-overlay" id="modal-edit-keranjang">
+  <div class="modal-box">
+    <div class="modal-title">✏️ Edit Keranjang</div>
+    <div class="modal-desc">Revisi data timbang keranjang <strong id="ek-basket-code">—</strong>. Wajib PIN Supervisor untuk menyimpan.</div>
+    <div class="modal-grid">
+      <div class="form-group modal-fg full">
+        <label>Produk (Grade + Ukuran) <span style="color:#dc2626">*</span></label>
+        <select id="ek-product" onchange="onEkProductChange()">
+          <option value="">— Pilih Produk —</option>
+        </select>
+      </div>
+      <div class="form-group modal-fg full" id="ek-range-info" style="display:none">
+        <div style="background:#f0f7ff;padding:8px 12px;border-radius:6px;font-size:12px;color:#1e40af;border:1px solid #bfdbfe">
+          <strong>Range validasi:</strong> <span id="ek-range-text">—</span> kg/ekor
+        </div>
+      </div>
+      <div class="form-group modal-fg full" id="ek-tipe-rusak-section" style="display:none">
+        <label>Tipe Kerusakan <span style="color:#dc2626">*</span></label>
+        <select id="ek-tipe-rusak">
+          <option value="">— Pilih Tipe —</option>
+          <option value="1">1 — Dari Kandang (supplier)</option>
+          <option value="2">2 — Dari RPA (proses produksi)</option>
+        </select>
+      </div>
+      <div class="form-group modal-fg">
+        <label>Jumlah Ekor <span style="color:#dc2626">*</span></label>
+        <input type="number" id="ek-qty" placeholder="Ekor" min="1" step="1" oninput="onEkKgQtyChange()">
+      </div>
+      <div class="form-group modal-fg">
+        <label>Berat Timbang (kg) <span style="color:#dc2626">*</span></label>
+        <input type="number" id="ek-kg" placeholder="0.0" min="0.1" step="0.1" oninput="onEkKgQtyChange()">
+      </div>
+      <div class="full">
+        <div style="display:flex;gap:16px;align-items:center">
+          <div style="font-size:12px;color:#6b7280">Avg kg/ekor:</div>
+          <div style="font-size:16px;font-weight:800;color:#111827" id="ek-avg">—</div>
+        </div>
+        <div class="val-box" id="ek-val-box"></div>
+      </div>
+      <div class="form-group modal-fg full">
+        <label>Alasan Revisi <span style="color:#dc2626">*</span></label>
+        <input type="text" id="ek-alasan" placeholder="Jelaskan alasan revisi…">
+      </div>
+    </div>
+    <div id="ek-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-top:12px;display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-edit-keranjang')">Batal</button>
+      <button class="btn btn-primary" id="ek-btn-simpan" onclick="submitEditKeranjang()">💾 Simpan Revisi</button>
+    </div>
+  </div>
+</div>
+
 <!-- ==================== MODAL: KARKAS RUSAK ==================== -->
 <div class="modal-overlay" id="modal-rusak">
   <div class="modal-box modal-sm">
@@ -772,11 +825,11 @@ a{text-decoration:none}
     <!-- REKON BOX -->
     <div class="rekon-box">
       <div class="rekon-row">
-        <span class="rekon-label">Ekor siap potong (dari batch)</span>
+        <span class="rekon-label">Ekor timbang ulang</span>
         <span class="rekon-val" id="rc-ekor-batch">—</span>
       </div>
       <div class="rekon-row">
-        <span class="rekon-label">Total ekor ditimbang (keranjang)</span>
+        <span class="rekon-label">Ekor Karkas</span>
         <span class="rekon-val" id="rc-ekor-produksi">—</span>
       </div>
       <div class="rekon-row">
@@ -861,6 +914,9 @@ let currentUser    = null;
 let currentBatch   = null;   // live_chicken_batches object
 let currentSession = null;   // carcass_sessions object
 let lastClosedSession = null; // sesi CLOSED terakhir untuk batch ini (jika ada) — dipakai untuk gate revisi
+let batchSessionIds = [];    // semua session_id (OPEN + CLOSED, termasuk revisi) milik batch ini —
+                              // dipakai supaya keranjang/rusak yang dicatat di sesi sebelum revisi tetap
+                              // ikut terhitung, bukan cuma yang tercatat di currentSession.id
 let masterProducts = [];     // KARKAS products from product_master
 let sessionKeranjang = [];   // carcass_baskets for current session
 let lantaiBaskets  = [];     // baskets at LANTAI for current batch
@@ -1028,18 +1084,21 @@ async function loadMasterProducts() {
     .eq('kategori', 'KARKAS').eq('aktif', true)
     .order('nama_produk');
   masterProducts = data || [];
-  // Populate product dropdown in modal
-  const sel = document.getElementById('mk-product');
-  sel.innerHTML = '<option value="">— Pilih Produk —</option>';
-  masterProducts.forEach(p => {
-    const opt = document.createElement('option');
-    opt.value = p.id;
-    opt.textContent = `${p.nama_produk} (${p.product_code})`;
-    opt.dataset.kgMin  = p.kg_min;
-    opt.dataset.kgMax  = p.kg_max;
-    opt.dataset.valType = p.validation_type;
-    opt.dataset.grade  = p.grade || '';   // 'A' | 'B' | 'C' | ''
-    sel.appendChild(opt);
+  // Populate product dropdown in modal (Tambah Keranjang + Edit Keranjang)
+  ['mk-product', 'ek-product'].forEach(selId => {
+    const sel = document.getElementById(selId);
+    if (!sel) return;
+    sel.innerHTML = '<option value="">— Pilih Produk —</option>';
+    masterProducts.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = `${p.nama_produk} (${p.product_code})`;
+      opt.dataset.kgMin  = p.kg_min;
+      opt.dataset.kgMax  = p.kg_max;
+      opt.dataset.valType = p.validation_type;
+      opt.dataset.grade  = p.grade || '';   // 'A' | 'B' | 'C' | ''
+      sel.appendChild(opt);
+    });
   });
 }
 
@@ -1101,6 +1160,11 @@ async function onBatchChange() {
   // Load open session for this batch
   await loadSession(batchId);
 }
+async function refreshBatchSessionIds(batchId) {
+  const { data } = await db.from('carcass_sessions').select('id').eq('batch_id', batchId);
+  batchSessionIds = (data || []).map(s => s.id);
+  return batchSessionIds;
+}
 async function loadSession(batchId) {
   const { data } = await db.from('carcass_sessions')
     .select('*')
@@ -1110,6 +1174,7 @@ async function loadSession(batchId) {
   if (data) {
     currentSession = data;
     lastClosedSession = null;
+    await refreshBatchSessionIds(batchId);
     showState('active');
     updateSessionBadge('OPEN');
     showEl('btn-buka-sesi', false);
@@ -1212,6 +1277,7 @@ async function doBukaSession({ isRevisi = false, revisiAlasan = null, revisiBy =
     if (error) throw error;
     currentSession = data;
     lastClosedSession = null;
+    await refreshBatchSessionIds(currentBatch.id);
     showToast(`Sesi ${code} dibuka${isRevisi ? ' (revisi)' : ''}`, 'success');
     showState('active');
     updateSessionBadge('OPEN');
@@ -1238,11 +1304,15 @@ async function loadAll() {
 }
 async function loadKeranjang() {
   if (!currentSession) return;
+  // Pakai batchSessionIds (bukan cuma currentSession.id) supaya keranjang yang dicatat
+  // di sesi sebelumnya (sebelum sesi ini dibuka sebagai revisi) tetap ikut ditampilkan
+  // dan ikut terhitung — bukan malah hilang/dianggap 0.
+  const ids = batchSessionIds.length ? batchSessionIds : [currentSession.id];
   const { data } = await db.from('carcass_baskets')
     .select(`id, qty_timbang, kg_timbang, avg_kg, validation_status, override, tipe_kerusakan, created_at,
-             basket:basket_id(id, basket_code, lokasi, status),
-             product:product_id(product_code, nama_produk, grade)`)
-    .eq('session_id', currentSession.id)
+             basket:basket_id(id, basket_code, lokasi, status, qty_awal, qty_sisa, kg_awal, kg_sisa, product_id),
+             product:product_id(id, product_code, nama_produk, grade, kg_min, kg_max, validation_type)`)
+    .in('session_id', ids)
     .order('created_at', {ascending: false});
   sessionKeranjang = data || [];
   renderKeranjangTable();
@@ -1280,10 +1350,11 @@ async function loadLantai() {
 }
 async function loadRusak() {
   if (!currentSession) return;
+  const ids = batchSessionIds.length ? batchSessionIds : [currentSession.id];
   const { data } = await db.from('karkas_rusak')
     .select(`id, jumlah_ekor, alasan, catatan, status, created_at,
              requested_by:requested_by(nama), reviewed_by:reviewed_by(nama)`)
-    .eq('session_id', currentSession.id)
+    .in('session_id', ids)
     .order('created_at', {ascending: false});
   rusakList = data || [];
   renderRusakList();
@@ -1307,7 +1378,11 @@ function renderKeranjangTable() {
                        PARTING:'<span class="badge b-parting">Parting</span>',
                        BONELESS:'<span class="badge b-boneless">Boneless</span>',
                        MUSNAH:'<span class="badge b-musnah">Musnah</span>'};
-    const lokasiLabel = b ? (lokasiMap[b.lokasi] || `<span class="badge b-lantai">${b.lokasi}</span>`) : '—';
+    const lokasiLabel = !b ? '—'
+      : b.status === 'VOID' ? '<span class="badge b-block">🗑️ VOID</span>'
+      : (lokasiMap[b.lokasi] || `<span class="badge b-lantai">${b.lokasi}</span>`);
+    const canEdit = b && b.status === 'AKTIF' && b.lokasi === 'LANTAI'
+      && Number(b.qty_sisa) === Number(b.qty_awal) && Number(b.kg_sisa) === Number(b.kg_awal);
     const code = b ? b.basket_code : '—';
     const grade = p?.grade || '';
     const gradeBadge = grade === 'A'
@@ -1333,7 +1408,11 @@ function renderKeranjangTable() {
       <td>${tipeBadge}</td>
       <td>${lokasiLabel}</td>
       <td>
-        ${b ? `<button class="btn btn-ghost btn-sm" onclick="printLabelById('${b.id}','${b.basket_code}')">🖨️</button>` : ''}
+        <div style="display:flex;gap:4px">
+        ${b ? `<button class="btn btn-ghost btn-sm" onclick="printLabelById('${b.id}','${b.basket_code}')" title="Cetak ulang label">🖨️</button>` : ''}
+        ${canEdit ? `<button class="btn btn-outline btn-sm" onclick="openEditKeranjang('${cb.id}')" title="Edit keranjang">✏️</button>
+        <button class="btn btn-red btn-sm" onclick="confirmVoidKeranjang('${cb.id}')" title="Hapus keranjang">🗑️</button>` : ''}
+        </div>
       </td>
     </tr>`;
   }).join('');
@@ -1413,9 +1492,10 @@ function renderRusakList() {
   }).join('');
 }
 function updateSummaryCards() {
-  const totalKeranjang = sessionKeranjang.length;
-  const totalEkor = sessionKeranjang.reduce((s, cb) => s + Number(cb.qty_timbang || 0), 0);
-  const totalKg = sessionKeranjang.reduce((s, cb) => s + Number(cb.kg_timbang || 0), 0);
+  const aktifKeranjang = sessionKeranjang.filter(cb => cb.basket?.status !== 'VOID');
+  const totalKeranjang = aktifKeranjang.length;
+  const totalEkor = aktifKeranjang.reduce((s, cb) => s + Number(cb.qty_timbang || 0), 0);
+  const totalKg = aktifKeranjang.reduce((s, cb) => s + Number(cb.kg_timbang || 0), 0);
   const diLantai = lantaiBaskets.filter(b => !b.pendingTo).length;
   const pending  = lantaiBaskets.filter(b => b.pendingTo).length;
   const rusakApproved = rusakList.filter(r => r.status === 'APPROVED')
@@ -1678,6 +1758,262 @@ function closeModalAndRefresh() {
   // Reset for next keranjang
   lastSavedBasket = null;
 }
+
+// ============================================================
+// EDIT & HAPUS (VOID) KERANJANG
+// Hanya boleh selama keranjang masih di lokasi asal (belum dipindah
+// sama sekali) — qty_sisa/kg_sisa == qty_awal/kg_awal. Kedua aksi wajib
+// PIN Supervisor + alasan (lihat showPinConfirm, migrasi 47 utk kolom audit).
+// ============================================================
+let editKeranjangData = null;
+
+function isKeranjangEditable(b) {
+  return !!b && b.status === 'AKTIF' && b.lokasi === 'LANTAI'
+    && Number(b.qty_sisa) === Number(b.qty_awal) && Number(b.kg_sisa) === Number(b.kg_awal);
+}
+
+function openEditKeranjang(cbId) {
+  const cb = sessionKeranjang.find(x => String(x.id) === String(cbId));
+  if (!cb || !cb.basket) { showToast('Data keranjang tidak ditemukan', 'error'); return; }
+  const b = cb.basket;
+  if (!isKeranjangEditable(b)) {
+    showToast('Keranjang sudah dipindah/diproses, tidak bisa diedit.', 'warning');
+    return;
+  }
+  editKeranjangData = cb;
+  setEl('ek-basket-code', b.basket_code);
+  document.getElementById('ek-product').value = cb.product?.id || '';
+  document.getElementById('ek-qty').value = cb.qty_timbang;
+  document.getElementById('ek-kg').value  = cb.kg_timbang;
+  document.getElementById('ek-alasan').value = '';
+  showEl('ek-err', false);
+  onEkProductChange();
+  openModal('modal-edit-keranjang');
+}
+
+function onEkProductChange() {
+  const sel = document.getElementById('ek-product');
+  const opt = sel.options[sel.selectedIndex];
+  const kgMin = parseFloat(opt.dataset.kgMin);
+  const kgMax = parseFloat(opt.dataset.kgMax);
+  const grade = opt.dataset.grade || '';
+
+  const rangeInfo = document.getElementById('ek-range-info');
+  if (!isNaN(kgMin) && !isNaN(kgMax)) {
+    rangeInfo.style.display = '';
+    setEl('ek-range-text', `${kgMin.toFixed(3)} – ${kgMax.toFixed(3)}`);
+  } else {
+    rangeInfo.style.display = 'none';
+  }
+
+  const tipeSection = document.getElementById('ek-tipe-rusak-section');
+  const tipoSel = document.getElementById('ek-tipe-rusak');
+  if (grade === 'B' || grade === 'C') {
+    tipeSection.style.display = '';
+    if (editKeranjangData && editKeranjangData.tipe_kerusakan && !tipoSel.value) {
+      tipoSel.value = editKeranjangData.tipe_kerusakan;
+    }
+  } else {
+    tipeSection.style.display = 'none';
+    tipoSel.value = '';
+  }
+  onEkKgQtyChange();
+}
+
+function onEkKgQtyChange() {
+  const qty = parseFloat(document.getElementById('ek-qty').value);
+  const kg  = parseFloat(document.getElementById('ek-kg').value);
+  const vb = document.getElementById('ek-val-box');
+  if (!qty || !kg || qty <= 0 || kg <= 0) {
+    setEl('ek-avg', '—');
+    if (vb) vb.className = 'val-box';
+    return;
+  }
+  const avg = kg / qty;
+  setEl('ek-avg', avg.toFixed(4) + ' kg/ekor');
+  const sel = document.getElementById('ek-product');
+  const opt = sel.options[sel.selectedIndex];
+  if (!opt || !opt.value) return;
+  const kgMin = parseFloat(opt.dataset.kgMin);
+  const kgMax = parseFloat(opt.dataset.kgMax);
+  const valType = opt.dataset.valType;
+  if (isNaN(kgMin) || isNaN(kgMax)) {
+    vb.className = 'val-box visible val-ok';
+    vb.textContent = '✓ Tidak ada range validasi';
+    return;
+  }
+  if (avg >= kgMin && avg <= kgMax) {
+    vb.className = 'val-box visible val-ok';
+    vb.textContent = `✓ OK — avg ${avg.toFixed(4)} kg/ekor dalam range`;
+  } else if (valType === 'HARD') {
+    vb.className = 'val-box visible val-block';
+    vb.textContent = `✗ Di luar range (${kgMin.toFixed(3)}–${kgMax.toFixed(3)}) — HARD. Tetap bisa disimpan sbg revisi ber-PIN Supervisor, akan ditandai override.`;
+  } else {
+    vb.className = 'val-box visible val-warn';
+    vb.textContent = `⚠ Di luar range (${kgMin.toFixed(3)}–${kgMax.toFixed(3)}) — SOFT: akan ditandai review`;
+  }
+}
+
+async function submitEditKeranjang() {
+  if (!editKeranjangData) return;
+  const cb = editKeranjangData;
+  const b = cb.basket;
+  const productId = document.getElementById('ek-product').value;
+  const qty = parseFloat(document.getElementById('ek-qty').value);
+  const kg  = roundKg(document.getElementById('ek-kg').value);
+  const alasan = document.getElementById('ek-alasan').value.trim();
+  const errEl = document.getElementById('ek-err');
+  errEl.style.display = 'none';
+
+  if (!productId) { errEl.textContent = 'Pilih produk terlebih dahulu.'; errEl.style.display = 'block'; return; }
+  if (!qty || qty <= 0) { errEl.textContent = 'Jumlah ekor tidak valid.'; errEl.style.display = 'block'; return; }
+  if (!kg  || kg  <= 0) { errEl.textContent = 'Berat tidak valid.'; errEl.style.display = 'block'; return; }
+  if (!alasan) { errEl.textContent = 'Alasan revisi wajib diisi.'; errEl.style.display = 'block'; return; }
+
+  const sel = document.getElementById('ek-product');
+  const opt = sel.options[sel.selectedIndex];
+  const grade = opt.dataset.grade || '';
+  let tipoKerusakan = null;
+  if (grade === 'B' || grade === 'C') {
+    const tipoVal = document.getElementById('ek-tipe-rusak').value;
+    if (!tipoVal) { errEl.textContent = `Grade ${grade} wajib memilih Tipe Kerusakan (1=Kandang / 2=RPA).`; errEl.style.display = 'block'; return; }
+    tipoKerusakan = parseInt(tipoVal);
+  }
+
+  const avg = kg / qty;
+  const kgMin = parseFloat(opt.dataset.kgMin);
+  const kgMax = parseFloat(opt.dataset.kgMax);
+  const valType = opt.dataset.valType;
+  let validationStatus = 'OK';
+  let needsOverride = false;
+  if (!isNaN(kgMin) && !isNaN(kgMax) && (avg < kgMin || avg > kgMax)) {
+    if (valType === 'HARD') { validationStatus = 'BLOCKED'; needsOverride = true; }
+    else validationStatus = 'WARNING';
+  }
+
+  // Re-cek basket belum berubah sejak modal dibuka (mis. dipindah user lain)
+  const { data: freshBasket } = await db.from('baskets')
+    .select('status,lokasi,qty_awal,qty_sisa,kg_awal,kg_sisa,revision_count,override_by,override_at,override_alasan')
+    .eq('id', b.id).maybeSingle();
+  if (!isKeranjangEditable(freshBasket)) {
+    errEl.textContent = 'Keranjang sudah berubah status (mungkin sudah dipindah). Tutup modal dan muat ulang.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  showPinConfirm({
+    title: '✏️ Konfirmasi Revisi Keranjang',
+    desc: `Revisi ${b.basket_code} — masukkan PIN Supervisor untuk menyimpan perubahan.`,
+    requireAlasan: false,
+    onConfirm: async (sup) => {
+      const btn = document.getElementById('ek-btn-simpan');
+      if (btn) { btn.disabled = true; btn.textContent = 'Menyimpan…'; }
+      try {
+        const oldQty = Number(cb.qty_timbang);
+        const oldKg  = Number(cb.kg_timbang);
+        const diffQty = qty - oldQty;
+        const diffKg  = Number((kg - oldKg).toFixed(1));
+        const nowIso  = new Date().toISOString();
+
+        const basketUpdate = {
+          product_id: productId,
+          qty_awal: qty, qty_sisa: qty,
+          kg_awal: kg, kg_sisa: kg,
+          needs_review: validationStatus === 'WARNING',
+          revised_by: sup.id, revised_at: nowIso, revised_alasan: alasan,
+          revision_count: (freshBasket.revision_count || 0) + 1,
+          updated_at: nowIso
+        };
+        if (needsOverride) {
+          basketUpdate.override = true;
+          basketUpdate.override_by = sup.id;
+          basketUpdate.override_at = nowIso;
+          basketUpdate.override_alasan = alasan;
+        }
+        await db.from('baskets').update(basketUpdate).eq('id', b.id);
+
+        const cbUpdate = {
+          product_id: productId,
+          qty_timbang: qty, kg_timbang: kg,
+          avg_kg: avg,
+          tipe_kerusakan: tipoKerusakan,
+          validation_status: validationStatus,
+          needs_review: validationStatus === 'WARNING',
+          revised_by: sup.id, revised_at: nowIso, revised_alasan: alasan
+        };
+        if (needsOverride) {
+          cbUpdate.override = true;
+          cbUpdate.override_by = sup.id;
+          cbUpdate.override_at = nowIso;
+          cbUpdate.override_alasan = alasan;
+        }
+        await db.from('carcass_baskets').update(cbUpdate).eq('id', cb.id);
+
+        await db.from('carcass_sessions').update({
+          total_qty: parseFloat(currentSession.total_qty || 0) + diffQty,
+          total_kg: parseFloat(currentSession.total_kg || 0) + diffKg
+        }).eq('id', currentSession.id);
+        currentSession.total_qty = parseFloat(currentSession.total_qty || 0) + diffQty;
+        currentSession.total_kg = parseFloat(currentSession.total_kg || 0) + diffKg;
+
+        closeModal('modal-edit-keranjang');
+        editKeranjangData = null;
+        await loadAll();
+        showToast(`Keranjang ${b.basket_code} berhasil direvisi`, 'success');
+      } catch(e) {
+        console.error(e);
+        errEl.textContent = 'Gagal menyimpan revisi: ' + e.message;
+        errEl.style.display = 'block';
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '💾 Simpan Revisi'; }
+      }
+    }
+  });
+}
+
+function confirmVoidKeranjang(cbId) {
+  const cb = sessionKeranjang.find(x => String(x.id) === String(cbId));
+  if (!cb || !cb.basket) { showToast('Data keranjang tidak ditemukan', 'error'); return; }
+  const b = cb.basket;
+  if (!isKeranjangEditable(b)) {
+    showToast('Keranjang sudah dipindah/diproses, tidak bisa dihapus.', 'warning');
+    return;
+  }
+  showPinConfirm({
+    title: '🗑️ Hapus Keranjang',
+    desc: `Keranjang ${b.basket_code} akan ditandai VOID (bukan hapus permanen) dan dikeluarkan dari total sesi. Alasan wajib diisi.`,
+    requireAlasan: true,
+    onConfirm: async (sup, alasan) => {
+      try {
+        const nowIso = new Date().toISOString();
+        await db.from('baskets').update({
+          status: 'VOID',
+          voided_by: sup.id, voided_at: nowIso, voided_alasan: alasan,
+          updated_at: nowIso
+        }).eq('id', b.id);
+        await db.from('carcass_baskets').update({
+          voided_by: sup.id, voided_at: nowIso, voided_alasan: alasan
+        }).eq('id', cb.id);
+
+        await db.from('carcass_sessions').update({
+          total_keranjang: Math.max(0, (currentSession.total_keranjang || 0) - 1),
+          total_qty: Math.max(0, parseFloat(currentSession.total_qty || 0) - Number(cb.qty_timbang)),
+          total_kg: Math.max(0, parseFloat(currentSession.total_kg || 0) - Number(cb.kg_timbang))
+        }).eq('id', currentSession.id);
+        currentSession.total_keranjang = Math.max(0, (currentSession.total_keranjang || 0) - 1);
+        currentSession.total_qty = Math.max(0, parseFloat(currentSession.total_qty || 0) - Number(cb.qty_timbang));
+        currentSession.total_kg = Math.max(0, parseFloat(currentSession.total_kg || 0) - Number(cb.kg_timbang));
+
+        await loadAll();
+        showToast(`Keranjang ${b.basket_code} dihapus (VOID)`, 'success');
+      } catch(e) {
+        console.error(e);
+        showToast('Gagal menghapus: ' + e.message, 'error');
+      }
+    }
+  });
+}
+
 // ============================================================
 // PARTIAL TRANSFER — state & helpers
 // ============================================================
@@ -2153,12 +2489,24 @@ function rejectRusak(rusakId) {
 // ============================================================
 async function openModalClose() {
   if (!currentSession) return;
-  // Recalculate from DB
-  const { data: sesData } = await db.from('carcass_sessions')
-    .select('total_qty, ekor_rusak').eq('id', currentSession.id).single();
+  // Recalculate live dari carcass_baskets/karkas_rusak (bukan dari counter total_qty/ekor_rusak
+  // yang tersimpan di carcass_sessions), dan across SEMUA sesi milik batch ini (batchSessionIds) —
+  // bukan cuma currentSession.id — supaya:
+  //  1. keranjang yang sudah di-VOID/hapus tidak pernah ikut terhitung meski counter sempat tidak sinkron
+  //  2. keranjang/rusak yang tercatat sebelum sesi ini dibuka sebagai revisi tetap ikut terhitung,
+  //     bukan dianggap 0 hanya karena "revisi" membuat baris carcass_sessions baru
+  const ids = batchSessionIds.length ? batchSessionIds : [currentSession.id];
+  const { data: kjData } = await db.from('carcass_baskets')
+    .select('qty_timbang, kg_timbang, basket:basket_id(status)')
+    .in('session_id', ids);
+  const { data: rusakData } = await db.from('karkas_rusak')
+    .select('jumlah_ekor, status')
+    .in('session_id', ids);
+  const aktifKj = (kjData || []).filter(cb => cb.basket?.status !== 'VOID');
   const ekorBatch = currentBatch.ekor_timbang_ulang - currentBatch.ekor_mati;
-  const ekorProduksi = Number(sesData?.total_qty || 0);
-  const ekorRusak = Number(sesData?.ekor_rusak || 0);
+  const ekorProduksi = aktifKj.reduce((s, cb) => s + Number(cb.qty_timbang || 0), 0);
+  const ekorRusak = (rusakData || []).filter(r => r.status === 'APPROVED')
+    .reduce((s, r) => s + Number(r.jumlah_ekor || 0), 0);
   const selisih = ekorBatch - ekorProduksi - ekorRusak;
 
   setEl('rc-ekor-batch', fmt(ekorBatch));

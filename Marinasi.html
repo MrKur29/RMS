@@ -206,6 +206,13 @@ a{text-decoration:none}
 .pin-input:focus{outline:none;border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.15)}
 .pin-error{color:#dc2626;font-size:12px;font-weight:700;margin-top:6px;display:none}
 
+/* ===== VALIDASI BOX (edit output/keranjang) ===== */
+.val-box{padding:8px 12px;border-radius:6px;font-size:12px;font-weight:700;margin-top:8px;display:none}
+.val-box.visible{display:block}
+.val-ok{background:#d1fae5;color:#065f46;border:1px solid #a7f3d0}
+.val-warn{background:#fef3c7;color:#92400e;border:1px solid #fde68a}
+.val-block{background:#fee2e2;color:#991b1b;border:1px solid #fecaca}
+
 /* ===== EMPTY ===== */
 .empty{text-align:center;padding:28px 16px;color:#9ca3af;font-size:13px}
 .empty .e-icon{font-size:28px;margin-bottom:8px}
@@ -341,7 +348,7 @@ a{text-decoration:none}
       <div class="nav-section-label">Penjualan</div>
       <div class="nav-item" onclick="navTo('Penjualan.html')"><span class="nav-icon">🛒</span><span class="nav-label-text">Penjualan</span></div>
       <div class="nav-section-label">Manajemen</div>
-      <div class="nav-item disabled"><span class="nav-icon">✅</span><span class="nav-label-text">Koreksi &amp; Approval</span></div>
+      <div class="nav-item" onclick="navTo('Koreksi.html')"><span class="nav-icon">✅</span><span class="nav-label-text">Koreksi &amp; Approval</span></div>
       <div class="nav-item" onclick="navTo('Laporan.html')"><span class="nav-icon">📊</span><span class="nav-label-text">Laporan</span></div>
       <div class="nav-item" onclick="navTo('MasterData.html')"><span class="nav-icon">🗂️</span><span class="nav-label-text">Master Data</span></div>
       <div class="nav-item" id="nav-user-mgmt" style="display:none" onclick="navTo('UserManagement.html')"><span class="nav-icon">👥</span><span class="nav-label-text">Manajemen User</span></div>
@@ -955,6 +962,30 @@ a{text-decoration:none}
   </div>
 </div>
 
+
+<!-- ==================== MODAL: PIN REVISI/HAPUS KERANJANG (reusable) ==================== -->
+<div class="modal-overlay" id="modal-revisi-pin">
+  <div class="modal-box modal-sm">
+    <div class="modal-title" id="rp-title">🔑 Konfirmasi Supervisor</div>
+    <div class="modal-desc" id="rp-desc">Masukkan PIN Supervisor untuk melanjutkan.</div>
+    <div class="form-group" style="margin-bottom:10px">
+      <label>PIN Supervisor <span style="color:#dc2626">*</span></label>
+      <input type="password" class="pin-input" id="rp-pin" placeholder="••••••" maxlength="6"
+             onkeydown="if(event.key==='Enter')rpSubmit()">
+      <div class="pin-error" id="rp-pin-err">PIN salah atau bukan Supervisor.</div>
+    </div>
+    <div class="form-group" id="rp-alasan-wrap" style="display:none;margin-bottom:0">
+      <label>Alasan <span style="color:#dc2626">*</span></label>
+      <input type="text" id="rp-alasan" placeholder="Jelaskan alasan…">
+    </div>
+    <div id="rp-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-top:8px;display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-revisi-pin')">Batal</button>
+      <button class="btn btn-primary" id="rp-btn-ok" onclick="rpSubmit()">✅ Konfirmasi</button>
+    </div>
+  </div>
+</div>
+
 <!-- ==================== MODAL: RECORD OUTPUT ==================== -->
 <div class="modal-overlay" id="modal-record-output">
   <div class="modal-box">
@@ -1029,14 +1060,19 @@ a{text-decoration:none}
 <div class="modal-overlay" id="modal-edit-output">
   <div class="modal-box modal-sm">
     <div class="modal-title">✏️ Edit Output Keranjang</div>
-    <div class="modal-desc">Revisi data output produksi. Keranjang akan ikut diupdate.</div>
+    <div class="modal-desc">Revisi data output produksi. Keranjang akan ikut diupdate. Wajib PIN Supervisor untuk menyimpan.</div>
     <div class="modal-info-box">
       <div class="modal-info-row"><span class="modal-info-label">Kode Keranjang</span><span class="modal-info-val" style="font-family:monospace" id="eo-code">—</span></div>
-      <div class="modal-info-row"><span class="modal-info-label">Produk</span><span class="modal-info-val" id="eo-produk">—</span></div>
       <div class="modal-info-row"><span class="modal-info-label">WO</span><span class="modal-info-val" id="eo-wo">—</span></div>
       <div class="modal-info-row"><span class="modal-info-label">Tipe Output</span><span class="modal-info-val" id="eo-type">—</span></div>
     </div>
     <div id="eo-kaitan" style="display:none;margin-bottom:10px;padding:8px 10px;border-radius:6px;font-size:12px;font-weight:700"></div>
+    <div class="form-group" style="margin-bottom:10px">
+      <label>Produk <span style="color:#dc2626">*</span></label>
+      <select id="eo-produk-select" onchange="updateEOKgHint()">
+        <option value="">— Pilih Produk —</option>
+      </select>
+    </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div class="form-group" style="margin-bottom:0">
         <label>Qty Ekor (Baru) <span style="color:#dc2626">*</span></label>
@@ -1044,10 +1080,15 @@ a{text-decoration:none}
       </div>
       <div class="form-group" style="margin-bottom:0">
         <label>Kg Aktual (Baru) <span style="color:#dc2626">*</span></label>
-        <input type="number" id="eo-kg" placeholder="kg" min="0.1" step="0.1">
+        <input type="number" id="eo-kg" placeholder="kg" min="0.1" step="0.1" oninput="updateEOKgHint()">
       </div>
     </div>
     <div id="eo-kg-hint" style="font-size:11px;color:#6b7280;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:6px 10px;margin-top:6px;display:none"></div>
+    <div class="val-box" id="eo-val-box"></div>
+    <div class="form-group" style="margin-top:10px;margin-bottom:0">
+      <label>Alasan Revisi <span style="color:#dc2626">*</span></label>
+      <input type="text" id="eo-alasan" placeholder="Jelaskan alasan revisi…">
+    </div>
     <div id="eo-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-top:8px;display:none"></div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('modal-edit-output')">Batal</button>
@@ -2623,6 +2664,56 @@ async function doApproveClose() {
 }
 
 // ============================================================
+// MODAL PIN REVISI/HAPUS — reusable (edit & void keranjang output)
+// Pemakaian: showRevisiPin({ title, desc, requireAlasan, onConfirm(supervisor, alasan) })
+// ============================================================
+let _rpCallback = null;
+let _rpRequireAlasan = false;
+async function verifySupervisorPinRevisi(pin) {
+  if (!pin) return null;
+  const { data: sup } = await db.from('users')
+    .select('id,nama').eq('pin', pin).eq('aktif', true)
+    .or('role.eq.SUPERVISOR,is_system_admin.eq.true').maybeSingle();
+  return sup || null;
+}
+function showRevisiPin({ title = '🔑 Konfirmasi Supervisor', desc = 'Masukkan PIN Supervisor untuk melanjutkan.', requireAlasan = false, onConfirm }) {
+  _rpCallback = onConfirm;
+  _rpRequireAlasan = requireAlasan;
+  setEl('rp-title', title);
+  setEl('rp-desc', desc);
+  document.getElementById('rp-pin').value = '';
+  document.getElementById('rp-pin-err').style.display = 'none';
+  document.getElementById('rp-err').style.display = 'none';
+  const alasanWrap = document.getElementById('rp-alasan-wrap');
+  if (alasanWrap) alasanWrap.style.display = requireAlasan ? '' : 'none';
+  if (document.getElementById('rp-alasan')) document.getElementById('rp-alasan').value = '';
+  openModal('modal-revisi-pin');
+  setTimeout(() => document.getElementById('rp-pin').focus(), 200);
+}
+async function rpSubmit() {
+  const pin = document.getElementById('rp-pin').value.trim();
+  const alasan = document.getElementById('rp-alasan')?.value.trim() || '';
+  const errEl = document.getElementById('rp-err');
+  errEl.style.display = 'none';
+  if (!pin) { errEl.textContent = 'PIN wajib diisi.'; errEl.style.display = 'block'; return; }
+  if (_rpRequireAlasan && !alasan) { errEl.textContent = 'Alasan wajib diisi.'; errEl.style.display = 'block'; return; }
+  const btn = document.getElementById('rp-btn-ok');
+  btn.disabled = true; btn.textContent = 'Memverifikasi…';
+  try {
+    const sup = await verifySupervisorPinRevisi(pin);
+    if (!sup) {
+      document.getElementById('rp-pin-err').style.display = 'block';
+      return;
+    }
+    closeModal('modal-revisi-pin');
+    if (_rpCallback) await _rpCallback(sup, alasan);
+    _rpCallback = null;
+  } finally {
+    btn.disabled = false; btn.textContent = '✅ Konfirmasi';
+  }
+}
+
+// ============================================================
 // TAB 3 — SELESAI DI WS
 // ============================================================
 function openSelesaiDiWS(woId) {
@@ -2732,7 +2823,7 @@ async function loadWSOutputsToday() {
       processing_orders ( order_code ),
       product_master ( id, nama_produk, product_code, kg_min, kg_max ),
       users!worker_id ( nama ),
-      baskets ( id, basket_code, qty_sisa, kg_sisa, lokasi, status )
+      baskets ( id, basket_code, qty_awal, kg_awal, qty_sisa, kg_sisa, lokasi, status )
     `)
     .eq('workstation_id', selectedWSId)
     .eq('tanggal_produksi', todayStr)
@@ -2901,21 +2992,30 @@ function renderWSOutputsToday() {
     const bCode    = bsk.basket_code || '—';
     const pm       = o.product_master || {};
     const wo       = o.processing_orders || {};
+    const isVoid   = bsk.status === 'VOID';
     const isOut    = bsk.lokasi && bsk.lokasi !== 'MARINASI';
-    const typeBadge = o.output_type === 'PRIMARY'
-      ? '<span class="badge b-aktif">Primary</span>'
-      : '<span class="badge" style="background:#fce7f3;color:#9d174d">Byproduct</span>';
+    const canEditOut = !isVoid && !isOut && bsk.status === 'AKTIF'
+      && Number(bsk.qty_sisa) === Number(bsk.qty_awal) && Number(bsk.kg_sisa) === Number(bsk.kg_awal);
+    const typeBadge = isVoid
+      ? '<span class="badge b-block">🗑️ VOID</span>'
+      : o.output_type === 'PRIMARY'
+        ? '<span class="badge b-aktif">Primary</span>'
+        : '<span class="badge" style="background:#fce7f3;color:#9d174d">Byproduct</span>';
     return `<tr>
       <td style="font-family:monospace;font-weight:700;font-size:12px">${bCode}
-        ${isOut ? `<div class="tbl-sub" style="color:#dc2626">Sudah keluar: ${bsk.lokasi}</div>` : ''}</td>
+        ${isOut && !isVoid ? `<div class="tbl-sub" style="color:#dc2626">Sudah keluar: ${bsk.lokasi}</div>` : ''}</td>
       <td>${pm.nama_produk || '—'}<div class="tbl-sub">${pm.product_code || ''}</div></td>
       <td style="font-family:monospace;font-size:11px">${wo.order_code || '—'}</td>
       <td>${fmt(o.qty_output)} ekor<div class="tbl-sub">${fmtKg(o.kg_output)}</div></td>
       <td>${typeBadge}</td>
       <td style="font-size:12px">${o.users?.nama || '—'}</td>
       <td>
-        <button class="btn btn-outline btn-sm" onclick="openEditOutputFromToday('${o.id}')" title="Edit output">✏️</button>
-        <button class="btn btn-ghost btn-sm" onclick="reprintLabel('${o.id}')" title="Cetak ulang label">🖨️</button>
+        ${isVoid ? '' : canEditOut
+          ? `<button class="btn btn-outline btn-sm" onclick="openEditOutputFromToday('${o.id}')" title="Edit keranjang">✏️</button>
+        <button class="btn btn-red btn-sm" onclick="confirmDeleteOutputFromToday('${o.id}')" title="Hapus keranjang">🗑️</button>
+        <button class="btn btn-ghost btn-sm" onclick="reprintLabel('${o.id}')" title="Cetak ulang label">🖨️</button>`
+          : `<span style="font-size:11px;color:#9ca3af" title="Sudah pindah/diproses, tidak bisa diedit">🔒</span>
+        <button class="btn btn-ghost btn-sm" onclick="reprintLabel('${o.id}')" title="Cetak ulang label">🖨️</button>`}
       </td>
     </tr>`;
   }).join('');
@@ -3229,7 +3329,7 @@ async function renderWSDetailContent(woId) {
     const { data: outputs } = await db.from('processing_outputs')
       .select(`
         id, qty_output, kg_output, output_type, tanggal_produksi, created_at,
-        baskets ( id, basket_code, qty_sisa, kg_sisa, lokasi, status ),
+        baskets ( id, basket_code, qty_awal, kg_awal, qty_sisa, kg_sisa, lokasi, status ),
         product_master ( id, nama_produk, product_code, kg_min, kg_max ),
         users!worker_id ( nama )
       `)
@@ -3339,7 +3439,9 @@ async function renderWSDetailContent(woId) {
           const bsk = out.baskets || {};
           const pm2 = out.product_master || {};
           const bid = bsk.id;
+          const isVoid = bsk.status === 'VOID';
           const isOut = bsk.lokasi && bsk.lokasi !== 'MARINASI';
+          const canEditOut = !isVoid && !isOut && bsk.status === 'AKTIF' && (kaitanMap[bid]?.level || 'ok') === 'ok';
           const typeBadge = out.output_type === 'PRIMARY'
             ? '<span class="badge b-aktif">Primary</span>'
             : '<span class="badge" style="background:#fce7f3;color:#9d174d">Byproduct</span>';
@@ -3350,20 +3452,25 @@ async function renderWSDetailContent(woId) {
             wo_code: wo ? wo.order_code : '—', wo_id: woId,
             qty_output: out.qty_output, kg_output: out.kg_output,
             output_type: out.output_type,
+            basket_qty_awal: bsk.qty_awal, basket_kg_awal: bsk.kg_awal,
             basket_qty_sisa: bsk.qty_sisa, basket_kg_sisa: bsk.kg_sisa
           }).replace(/'/g, '&#39;');
           return '<tr>' +
             '<td style="font-family:monospace;font-weight:700;font-size:12px">' + (bsk.basket_code||'—') +
-              (isOut ? '<div class="tbl-sub" style="color:#dc2626">Lokasi: ' + bsk.lokasi + '</div>' : '') + '</td>' +
+              (isOut && !isVoid ? '<div class="tbl-sub" style="color:#dc2626">Lokasi: ' + bsk.lokasi + '</div>' : '') + '</td>' +
             '<td>' + (pm2.nama_produk||'—') + '<div class="tbl-sub">' + (pm2.product_code||'') + '</div></td>' +
             '<td><strong>' + fmt(out.qty_output) + ' ekor</strong><div class="tbl-sub">' + fmtKg(out.kg_output) + '</div></td>' +
-            '<td>' + typeBadge + '</td>' +
+            '<td>' + (isVoid ? '<span class="badge b-block">🗑️ VOID</span>' : typeBadge) + '</td>' +
             '<td style="font-size:12px">' + (out.users ? out.users.nama : '—') + '</td>' +
             '<td>' + kBadge(bid) + '</td>' +
             '<td><div style="display:flex;gap:4px">' +
-              "<button class='btn btn-outline btn-sm' onclick='openEditOutput(" + ed + ")'>" + (isOut ? '⚠️' : '✏️') + " Edit</button>" +
-              "<button class='btn btn-red btn-sm' onclick='deleteOutputFromDetail(\"" + out.id + "\",\"" + woId + "\")'>" + (isOut ? '⚠✗' : '✗') + "</button>" +
-              "<button class='btn btn-ghost btn-sm' onclick='reprintLabelById(\"" + out.id + "\")' title='Cetak ulang label'>🖨️</button>" +
+              (isVoid ? '' :
+                canEditOut
+                ? "<button class='btn btn-outline btn-sm' onclick='openEditOutput(" + ed + ")' title='Edit keranjang'>✏️</button>" +
+                  "<button class='btn btn-red btn-sm' onclick='confirmDeleteOutput(" + ed + ")' title='Hapus keranjang'>🗑️</button>" +
+                  "<button class='btn btn-ghost btn-sm' onclick='reprintLabelById(\"" + out.id + "\")' title='Cetak ulang label'>🖨️</button>"
+                : "<span style='font-size:11px;color:#9ca3af' title='Sudah pindah/diproses, tidak bisa diedit'>🔒</span>" +
+                  "<button class='btn btn-ghost btn-sm' onclick='reprintLabelById(\"" + out.id + "\")' title='Cetak ulang label'>🖨️</button>") +
             '</div></td>' +
           '</tr>';
         }).join('') +
@@ -3411,23 +3518,8 @@ async function deleteInputFromDetail(inputId, woId) {
   }
 }
 
-async function deleteOutputFromDetail(outputId, woId) {
-  if (!confirm('Hapus output ini? Data keranjang output akan dihapus.')) return;
-  try {
-    const { data: out } = await db.from('processing_outputs')
-      .select('basket_id').eq('id', outputId).maybeSingle();
-    const { error } = await db.from('processing_outputs').delete().eq('id', outputId);
-    if (error) throw error;
-    if (out?.basket_id) {
-      await db.from('baskets').delete().eq('id', out.basket_id);
-    }
-    showToast('Output dihapus.', 'success');
-    await loadAll();
-    if (wsDetailWOId) await renderWSDetailContent(wsDetailWOId);
-  } catch(e) {
-    console.error(e); showToast('Gagal hapus: ' + e.message, 'error');
-  }
-}
+// Hapus output diganti mekanismenya jadi confirmDeleteOutput() / confirmDeleteOutputFromToday()
+// (PIN Supervisor + void, bukan delete permanen) — lihat bagian EDIT & HAPUS OUTPUT di bawah.
 
 // ============================================================
 // TAB 3 — EDIT INPUT
@@ -3490,96 +3582,139 @@ async function doEditInput() {
 }
 
 // ============================================================
-// TAB 3 — EDIT OUTPUT
+// TAB 3 — EDIT & HAPUS OUTPUT KERANJANG
+// Hanya boleh selama keranjang masih di MARINASI & belum dipindah sama
+// sekali (qty_sisa/kg_sisa == qty_awal/kg_awal). Kedua aksi wajib PIN
+// Supervisor + alasan (showRevisiPin, migrasi 47 utk kolom audit).
+// Hapus = tandai VOID, bukan delete permanen.
 // ============================================================
 function openEditOutput(data) {
   editOutputData = data;
-  setEl('eo-code',   data.basket_code  || '—');
-  setEl('eo-produk', data.produk_name  || '—');
-  setEl('eo-wo',     data.wo_code      || '—');
-  setEl('eo-type',   data.output_type  || '—');
+  setEl('eo-code', data.basket_code || '—');
+  setEl('eo-wo',   data.wo_code     || '—');
+  setEl('eo-type', data.output_type || '—');
+  const prodList = allProducts.filter(p => ['CU', 'EXT', 'MARINASI'].includes(p.kategori));
+  const sel = document.getElementById('eo-produk-select');
+  sel.innerHTML = '<option value="">— Pilih Produk —</option>' + prodList.map(p =>
+    `<option value="${p.id}" data-kg-min="${p.kg_min ?? ''}" data-kg-max="${p.kg_max ?? ''}">${p.nama_produk} (${p.product_code})</option>`
+  ).join('');
+  sel.value = data.produk_id || '';
   document.getElementById('eo-qty').value = data.qty_output || '';
   document.getElementById('eo-kg').value  = data.kg_output  || '';
+  document.getElementById('eo-alasan').value = '';
   const kaitanEl = document.getElementById('eo-kaitan');
-  if (kaitanEl) {
-    const kg_sisa = Number(data.basket_kg_sisa || 0);
-    if (kg_sisa <= 0) {
-      kaitanEl.style.display = '';
-      kaitanEl.style.background = '#fee2e2';
-      kaitanEl.style.color = '#991b1b';
-      kaitanEl.innerHTML = '⚠️ Keranjang ini sudah habis/keluar dari Marinasi. Edit tetap bisa dilakukan tetapi perhatikan dampaknya.';
-    } else {
-      kaitanEl.style.display = 'none';
-    }
-  }
+  if (kaitanEl) kaitanEl.style.display = 'none';
   showErr('eo-err', '');
   updateEOKgHint();
   openModal('modal-edit-output');
 }
 
 function updateEOKgHint() {
-  const qty  = parseInt(document.getElementById('eo-qty')?.value);
+  const qty  = parseFloat(document.getElementById('eo-qty')?.value);
+  const kg   = parseFloat(document.getElementById('eo-kg')?.value);
   const hint = document.getElementById('eo-kg-hint');
-  if (!hint || !editOutputData) return;
-  const kg_min = Number(editOutputData.kg_min || 0);
-  const kg_max = Number(editOutputData.kg_max || 0);
-  if (!qty || qty <= 0 || !kg_min || !kg_max) { hint.style.display = 'none'; return; }
-  const expMin = (qty * kg_min).toFixed(1);
-  const expMax = (qty * kg_max).toFixed(1);
-  hint.innerHTML = '📏 <strong>' + qty + ' ekor ' + (editOutputData.produk_name || '') + '</strong> → expected <strong>' + expMin + ' – ' + expMax + ' kg</strong>';
-  hint.style.display = 'block';
+  const vb   = document.getElementById('eo-val-box');
+  const sel  = document.getElementById('eo-produk-select');
+  const opt  = sel ? sel.options[sel.selectedIndex] : null;
+  const kgMin = opt ? parseFloat(opt.dataset.kgMin) : NaN;
+  const kgMax = opt ? parseFloat(opt.dataset.kgMax) : NaN;
+
+  if (hint) {
+    if (!qty || qty <= 0 || isNaN(kgMin) || isNaN(kgMax)) {
+      hint.style.display = 'none';
+    } else {
+      const expMin = (qty * kgMin).toFixed(1);
+      const expMax = (qty * kgMax).toFixed(1);
+      hint.innerHTML = '📏 <strong>' + qty + ' ekor ' + (opt.textContent || '') + '</strong> → expected <strong>' + expMin + ' – ' + expMax + ' kg</strong>';
+      hint.style.display = 'block';
+    }
+  }
+  if (!vb) return;
+  if (!qty || !kg || qty <= 0 || kg <= 0 || !opt || !opt.value) { vb.className = 'val-box'; return; }
+  const avg = kg / qty;
+  if (isNaN(kgMin) || isNaN(kgMax)) {
+    vb.className = 'val-box visible val-ok';
+    vb.textContent = `Avg ${avg.toFixed(4)} kg/ekor — tidak ada range validasi produk ini`;
+    return;
+  }
+  if (avg >= kgMin && avg <= kgMax) {
+    vb.className = 'val-box visible val-ok';
+    vb.textContent = `✓ OK — avg ${avg.toFixed(4)} kg/ekor dalam range (${kgMin}–${kgMax})`;
+  } else {
+    vb.className = 'val-box visible val-warn';
+    vb.textContent = `⚠ Avg ${avg.toFixed(4)} kg/ekor di luar range standar (${kgMin}–${kgMax}) — tetap bisa disimpan sbg revisi ber-PIN Supervisor`;
+  }
 }
 
 async function doEditOutput() {
   if (!editOutputData) return;
+  const produkId = document.getElementById('eo-produk-select').value;
   const newQty = parseInt(document.getElementById('eo-qty').value)  || 0;
   const newKg  = parseFloat(document.getElementById('eo-kg').value) || 0;
+  const alasan = document.getElementById('eo-alasan').value.trim();
   showErr('eo-err', '');
+  if (!produkId)          { showErr('eo-err', 'Pilih produk terlebih dahulu.'); return; }
   if (!newQty || newQty <= 0) { showErr('eo-err', 'Qty ekor harus lebih dari 0.'); return; }
   if (!newKg  || newKg  <= 0) { showErr('eo-err', 'Kg aktual harus lebih dari 0.'); return; }
-  const btn = document.getElementById('eo-btn-ok');
-  btn.disabled = true; btn.textContent = 'Menyimpan…';
-  try {
-    const oldQty = Number(editOutputData.qty_output || 0);
-    const oldKg  = Number(editOutputData.kg_output  || 0);
-    const diffQ  = newQty - oldQty;
-    const diffKg = Number((newKg - oldKg).toFixed(1));
-    const { error } = await db.from('processing_outputs').update({
-      qty_output: newQty,
-      kg_output:  Number(newKg.toFixed(1))
-    }).eq('id', editOutputData.id);
-    if (error) throw error;
-    if (editOutputData.basket_id) {
-      const { data: bsk } = await db.from('baskets')
-        .select('qty_awal, kg_awal, qty_sisa, kg_sisa').eq('id', editOutputData.basket_id).maybeSingle();
-      if (bsk) {
-        const newQtyAwal = Math.max(0, Number(bsk.qty_awal) + diffQ);
-        const newKgAwal  = Number(Math.max(0, Number(bsk.kg_awal) + diffKg).toFixed(1));
-        const newQtySisa = Math.max(0, Number(bsk.qty_sisa) + diffQ);
-        const newKgSisa  = Number(Math.max(0, Number(bsk.kg_sisa) + diffKg).toFixed(1));
-        await db.from('baskets').update({
-          qty_awal: newQtyAwal, kg_awal: newKgAwal,
-          qty_sisa: newQtySisa, kg_sisa: newKgSisa,
-          status:   newKgSisa > 0.009 ? 'AKTIF' : 'HABIS'
-        }).eq('id', editOutputData.basket_id);
+  if (!alasan)             { showErr('eo-err', 'Alasan revisi wajib diisi.'); return; }
+
+  let freshRevisionCount = 0;
+  if (editOutputData.basket_id) {
+    const { data: freshB } = await db.from('baskets')
+      .select('status, lokasi, qty_awal, kg_awal, qty_sisa, kg_sisa, revision_count')
+      .eq('id', editOutputData.basket_id).maybeSingle();
+    if (!freshB || freshB.status !== 'AKTIF' || freshB.lokasi !== 'MARINASI' ||
+        Number(freshB.qty_sisa) !== Number(freshB.qty_awal) || Number(freshB.kg_sisa) !== Number(freshB.kg_awal)) {
+      showErr('eo-err', 'Keranjang sudah berubah status (mungkin sudah dipindah). Tutup modal dan muat ulang.');
+      return;
+    }
+    freshRevisionCount = freshB.revision_count || 0;
+  }
+
+  showRevisiPin({
+    title: '✏️ Konfirmasi Revisi Keranjang',
+    desc: `Revisi ${editOutputData.basket_code} — masukkan PIN Supervisor untuk menyimpan perubahan.`,
+    requireAlasan: false,
+    onConfirm: async (sup) => {
+      const btn = document.getElementById('eo-btn-ok');
+      if (btn) { btn.disabled = true; btn.textContent = 'Menyimpan…'; }
+      try {
+        const nowIso = new Date().toISOString();
+        const { error } = await db.from('processing_outputs').update({
+          product_id: produkId,
+          qty_output: newQty,
+          kg_output:  Number(newKg.toFixed(1)),
+          revised_by: sup.id, revised_at: nowIso, revised_alasan: alasan
+        }).eq('id', editOutputData.id);
+        if (error) throw error;
+        if (editOutputData.basket_id) {
+          await db.from('baskets').update({
+            product_id: produkId,
+            qty_awal: newQty, qty_sisa: newQty,
+            kg_awal: Number(newKg.toFixed(1)), kg_sisa: Number(newKg.toFixed(1)),
+            revised_by: sup.id, revised_at: nowIso, revised_alasan: alasan,
+            revision_count: freshRevisionCount + 1,
+            updated_at: nowIso
+          }).eq('id', editOutputData.basket_id);
+        }
+        if (wsDetailWOId) await renderWSDetailContent(wsDetailWOId);
+        renderWSWOList();
+        await loadWSOutputsToday();
+        renderWSOutputsToday();
+        showToast('Keranjang berhasil direvisi.', 'success');
+        closeModal('modal-edit-output');
+      } catch(e) {
+        console.error(e); showErr('eo-err', 'Gagal: ' + (e.message || ''));
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '💾 Simpan Revisi'; }
       }
     }
-    if (wsDetailWOId) await renderWSDetailContent(wsDetailWOId);
-    renderWSWOList();
-    await loadWSOutputsToday();
-    renderWSOutputsToday();
-    showToast('Output berhasil diperbarui.', 'success');
-    closeModal('modal-edit-output');
-  } catch(e) {
-    console.error(e); showErr('eo-err', 'Gagal: ' + (e.message || ''));
-  } finally {
-    btn.disabled = false; btn.textContent = '💾 Simpan Revisi';
-  }
+  });
 }
 
 async function openEditOutputFromToday(outputId) {
   const { data: out, error } = await db.from('processing_outputs')
-    .select('id, qty_output, kg_output, output_type, order_id, baskets(id,basket_code,qty_sisa,kg_sisa,lokasi,status), product_master(id,nama_produk,product_code,kg_min,kg_max), processing_orders(order_code)')
+    .select('id, qty_output, kg_output, output_type, order_id, baskets(id,basket_code,qty_awal,kg_awal,qty_sisa,kg_sisa,lokasi,status), product_master(id,nama_produk,product_code,kg_min,kg_max), processing_orders(order_code)')
     .eq('id', outputId).maybeSingle();
   if (error || !out) { showToast('Data output tidak ditemukan.', 'error'); return; }
   const bsk = out.baskets || {}; const pm = out.product_master || {}; const wo = out.processing_orders || {};
@@ -3590,8 +3725,61 @@ async function openEditOutputFromToday(outputId) {
     wo_code: wo.order_code, wo_id: out.order_id,
     qty_output: out.qty_output, kg_output: out.kg_output,
     output_type: out.output_type,
+    basket_qty_awal: bsk.qty_awal, basket_kg_awal: bsk.kg_awal,
     basket_qty_sisa: bsk.qty_sisa, basket_kg_sisa: bsk.kg_sisa
   });
+}
+
+function confirmDeleteOutput(data) {
+  if (!data?.basket_id) { showToast('Data keranjang tidak lengkap.', 'error'); return; }
+  showRevisiPin({
+    title: '🗑️ Hapus Keranjang',
+    desc: `Keranjang ${data.basket_code} akan ditandai VOID (bukan hapus permanen) dan dikeluarkan dari rekap. Alasan wajib diisi.`,
+    requireAlasan: true,
+    onConfirm: async (sup, alasan) => {
+      await voidOutputKeranjang(data.id, data.basket_id, sup, alasan);
+    }
+  });
+}
+
+async function confirmDeleteOutputFromToday(outputId) {
+  const o = wsOutputsToday.find(x => x.id === outputId);
+  if (!o || !o.baskets?.id) { showToast('Data keranjang tidak ditemukan.', 'error'); return; }
+  showRevisiPin({
+    title: '🗑️ Hapus Keranjang',
+    desc: `Keranjang ${o.baskets.basket_code} akan ditandai VOID (bukan hapus permanen) dan dikeluarkan dari rekap. Alasan wajib diisi.`,
+    requireAlasan: true,
+    onConfirm: async (sup, alasan) => {
+      await voidOutputKeranjang(outputId, o.baskets.id, sup, alasan);
+    }
+  });
+}
+
+async function voidOutputKeranjang(outputId, basketId, sup, alasan) {
+  try {
+    const nowIso = new Date().toISOString();
+    const { data: freshB } = await db.from('baskets')
+      .select('status, lokasi, qty_awal, qty_sisa, kg_awal, kg_sisa')
+      .eq('id', basketId).maybeSingle();
+    if (!freshB || freshB.status !== 'AKTIF' || freshB.lokasi !== 'MARINASI' ||
+        Number(freshB.qty_sisa) !== Number(freshB.qty_awal) || Number(freshB.kg_sisa) !== Number(freshB.kg_awal)) {
+      showToast('Keranjang sudah dipindah/diproses, tidak bisa dihapus.', 'warning');
+      return;
+    }
+    await db.from('baskets').update({
+      status: 'VOID', voided_by: sup.id, voided_at: nowIso, voided_alasan: alasan, updated_at: nowIso
+    }).eq('id', basketId);
+    await db.from('processing_outputs').update({
+      voided_by: sup.id, voided_at: nowIso, voided_alasan: alasan
+    }).eq('id', outputId);
+    if (wsDetailWOId) await renderWSDetailContent(wsDetailWOId);
+    renderWSWOList();
+    await loadWSOutputsToday();
+    renderWSOutputsToday();
+    showToast('Keranjang dihapus (VOID).', 'success');
+  } catch(e) {
+    console.error(e); showToast('Gagal menghapus: ' + e.message, 'error');
+  }
 }
 
 async function reprintLabelById(outputId) {
