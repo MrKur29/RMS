@@ -123,6 +123,7 @@ a{text-decoration:none}
 .trace-node.root{background:white;border:2px solid #0d9488;box-shadow:0 2px 10px rgba(13,148,136,.12)}
 .trace-node.origin-PROCESSING{border-left:5px solid #2563eb}
 .trace-node.origin-KARKAS{border-left:5px solid #f59e0b}
+.trace-node.origin-SALDO_AWAL{border-left:5px solid #16a34a}
 .trace-node.origin-UNKNOWN{border-left:5px solid #9ca3af}
 .trace-node.origin-CYCLE{border-left:5px solid #dc2626}
 .tn-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:6px}
@@ -501,7 +502,7 @@ async function doTrace(){
     }
 
     const tree=await buildTraceNode(rootBasket.id,[],0);
-    const stats={levels:0,processing:0,karkas:0,unknown:0};
+    const stats={levels:0,processing:0,karkas:0,saldoAwal:0,unknown:0};
     collectStats(tree,0,stats);
 
     area.innerHTML=`
@@ -509,6 +510,7 @@ async function doTrace(){
         <div class="schip"><b>${stats.levels}</b>Tingkat rantai</div>
         <div class="schip"><b>${stats.processing}</b>Titik proses (WO)</div>
         <div class="schip"><b>${stats.karkas}</b>Sumber batch karkas</div>
+        ${stats.saldoAwal?`<div class="schip"><b>${stats.saldoAwal}</b>Sumber saldo awal</div>`:''}
         ${stats.unknown?`<div class="schip"><b>${stats.unknown}</b>Sumber tidak diketahui</div>`:''}
       </div>
       <div class="panel"><div class="panel-body">${renderNode(tree,0,true)}</div></div>
@@ -524,6 +526,7 @@ function collectStats(node,depth,stats){
   stats.levels=Math.max(stats.levels,depth+1);
   if(node.origin==='PROCESSING')stats.processing++;
   if(node.origin==='KARKAS')stats.karkas++;
+  if(node.origin==='SALDO_AWAL')stats.saldoAwal++;
   if(node.origin==='UNKNOWN')stats.unknown++;
   (node.sources||[]).forEach(s=>collectStats(s.node,depth+1,stats));
 }
@@ -537,6 +540,8 @@ function collectStats(node,depth,stats){
  * jadi "basket sumber" yang ditampilkan adalah SEMUA input WO tsb, bukan pasangan tunggal.
  * Berhenti otomatis begitu sampai basket karkas (basket_id dgn batch_id, tidak pernah
  * jadi output/byproduct WO manapun) -> tampilkan live_chicken_batches + carcass_baskets.
+ * Berhenti juga di basket_type='SALDO_AWAL' (migration 49, stok opname cutover,
+ * tidak terikat batch/WO sama sekali) -> tampilkan saldo_awal_sessions.
  */
 async function buildTraceNode(basketId,path,depth){
   if(path.includes(basketId)){
@@ -545,10 +550,11 @@ async function buildTraceNode(basketId,path,depth){
   const myPath=[...path,basketId];
 
   const{data:basket}=await db.from('baskets')
-    .select(`id,basket_code,qty_awal,qty_sisa,kg_awal,kg_sisa,lokasi,status,tanggal_produksi,needs_review,override,batch_id,
+    .select(`id,basket_code,basket_type,qty_awal,qty_sisa,kg_awal,kg_sisa,lokasi,status,tanggal_produksi,needs_review,override,batch_id,
       product_master(nama_produk,product_code,kategori,satuan_qty),
       users!created_by(nama),
-      live_chicken_batches(batch_code,tanggal,no_polisi,nama_supir,jam_gantung_mulai,jam_gantung_selesai,ekor_kandang,kg_kandang,ekor_timbang_ulang,kg_timbang_ulang,ekor_mati,kg_mati,selisih_ekor)`)
+      live_chicken_batches(batch_code,tanggal,no_polisi,nama_supir,jam_gantung_mulai,jam_gantung_selesai,ekor_kandang,kg_kandang,ekor_timbang_ulang,kg_timbang_ulang,ekor_mati,kg_mati,selisih_ekor),
+      saldo_awal_sessions(tanggal_opname,catatan,status)`)
     .eq('id',basketId).maybeSingle();
 
   if(!basket){
@@ -559,6 +565,15 @@ async function buildTraceNode(basketId,path,depth){
 
   if(depth>=MAX_DEPTH){
     node.depthCut=true;
+    return node;
+  }
+
+  // 0) Keranjang saldo awal (stok opname cutover, lihat migration 49) tidak
+  //    pernah jadi output/byproduct WO manapun — root/leaf, tidak perlu cek
+  //    processing_outputs/byproducts sama sekali.
+  if(basket.basket_type==='SALDO_AWAL'){
+    node.origin='SALDO_AWAL';
+    node.saldoAwal={session:basket.saldo_awal_sessions,operator_nama:basket.users?.nama||null};
     return node;
   }
 
@@ -692,6 +707,17 @@ function renderNode(node,depth,isRoot,inputInfo){
         ${c?`<br><b>Sesi Timbang Karkas:</b> ${esc(c.carcass_sessions?.session_code||'—')} (${fmtDate(c.carcass_sessions?.tanggal)})<br>
         <b>Qty/Kg Timbang:</b> ${fmt(c.qty_timbang)} ekor · ${fmtKg(c.kg_timbang)} &nbsp; <b>Avg:</b> ${c.avg_kg?Number(c.avg_kg).toFixed(3):'—'} kg/ekor`:''}
         <br><b>Dicatat oleh:</b> ${esc(k.operator_nama||'— (belum tercatat)')}
+      </div>`;
+  }
+
+  if(node.origin==='SALDO_AWAL'){
+    const s=node.saldoAwal||{};
+    const sess=s.session;
+    html+=`<div class="tn-karkas-box">
+        📋 <b>Saldo Awal — Stok Opname</b><br>
+        <b>Tanggal Opname:</b> ${fmtDate(sess?.tanggal_opname)}<br>
+        ${sess?.catatan?`<b>Catatan:</b> ${esc(sess.catatan)}<br>`:''}
+        <b>Dicatat oleh:</b> ${esc(s.operator_nama||'— (belum tercatat)')}
       </div>`;
   }
 

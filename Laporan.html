@@ -178,6 +178,9 @@ a{text-decoration:none}
         <span class="nav-icon">📊</span><span class="nav-label-text">Laporan</span>
         <span class="nav-tag">Aktif</span>
       </div>
+      <div class="nav-item" id="nav-saldo-awal" style="display:none" onclick="navTo('SaldoAwal.html')">
+        <span class="nav-icon">📋</span><span class="nav-label-text">Saldo Awal Barang</span>
+      </div>
       <div class="nav-item" onclick="navTo('MasterData.html')">
         <span class="nav-icon">🗂️</span><span class="nav-label-text">Master Data</span>
       </div>
@@ -323,6 +326,7 @@ function startApp(){
   document.getElementById('sidebar-name').textContent=currentUser.nama;
   document.getElementById('sidebar-role').textContent=currentUser.role+(currentUser.is_system_admin?' (Admin)':'');
   if(currentUser.is_system_admin){const el=document.getElementById('nav-user-mgmt');if(el)el.style.display='flex'}
+  if(RPA_PERM.getModuleRole(currentUser,'saldo_awal')!==null){const saEl=document.getElementById('nav-saldo-awal');if(saEl)saEl.style.display='flex'}
   RPA_STATE.bindScroll('Laporan');
   startClock();
   renderReportGrid();

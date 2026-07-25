@@ -521,6 +521,10 @@ a { text-decoration: none; }
                 <span class="nav-icon">🔍</span>
                 <span class="nav-label-text">Tracing Produk</span>
             </div>
+            <div class="nav-item" id="nav-saldo-awal" style="display:none" onclick="navTo('SaldoAwal.html')">
+                <span class="nav-icon">📋</span>
+                <span class="nav-label-text">Saldo Awal Barang</span>
+            </div>
             <div class="nav-item" onclick="navTo('MasterData.html')">
                 <span class="nav-icon">🗂️</span>
                 <span class="nav-label-text">Master Data</span>
@@ -953,6 +957,13 @@ function startApp() {
     // Tampilkan nav Manajemen User hanya untuk System Admin
     if (currentUser.is_system_admin) {
         document.getElementById('nav-user-mgmt').style.display = 'flex';
+    }
+
+    // Tampilkan nav Saldo Awal Barang hanya untuk user yang di-assign modul
+    // 'saldo_awal' (lihat migration 49) — modul ini sengaja dibatasi, tidak
+    // untuk operator harian.
+    if (RPA_PERM.getModuleRole(currentUser, 'saldo_awal') !== null) {
+        document.getElementById('nav-saldo-awal').style.display = 'flex';
     }
 
     // Tanggal topbar

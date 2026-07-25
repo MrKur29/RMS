@@ -391,6 +391,7 @@ a{text-decoration:none}
       <div class="nav-section-label">Manajemen</div>
       <div class="nav-item" onclick="navTo('Koreksi.html')"><span class="nav-icon">✅</span><span class="nav-label-text">Koreksi &amp; Approval</span></div>
       <div class="nav-item" onclick="navTo('Laporan.html')"><span class="nav-icon">📊</span><span class="nav-label-text">Laporan</span></div>
+      <div class="nav-item" id="nav-saldo-awal" style="display:none" onclick="navTo('SaldoAwal.html')"><span class="nav-icon">📋</span><span class="nav-label-text">Saldo Awal Barang</span></div>
       <div class="nav-item" onclick="navTo('MasterData.html')"><span class="nav-icon">🗂️</span><span class="nav-label-text">Master Data</span></div>
       <div class="nav-item" id="nav-user-mgmt" style="display:none" onclick="navTo('UserManagement.html')"><span class="nav-icon">👥</span><span class="nav-label-text">Manajemen User</span></div>
     </nav>
@@ -1359,6 +1360,10 @@ function startApp() {
   document.getElementById('user-avatar').textContent = currentUser.nama.charAt(0).toUpperCase();
   setEl('sidebar-name', currentUser.nama);
   setEl('sidebar-role', currentUser.is_system_admin ? 'Admin' : currentUser.role === 'SUPERVISOR' ? 'Supervisor' : 'Operator');
+  if (RPA_PERM.getModuleRole(currentUser, 'saldo_awal') !== null) {
+    const saEl = document.getElementById('nav-saldo-awal');
+    if (saEl) saEl.style.display = 'flex';
+  }
   if (currentUser.is_system_admin) {
     const umEl = document.getElementById('nav-user-mgmt');
     if (umEl) umEl.style.display = 'flex';
