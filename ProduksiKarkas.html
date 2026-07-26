@@ -2115,7 +2115,7 @@ async function pkConfirmScan() {
   const isPartial = pkScanPartial || (qty < (scanResultBasket?.qty_sisa||0));
   const btn = document.getElementById('scan-confirm-btn');
   btn.disabled = true; btn.textContent = 'Memproses…';
-  const ok = await doSubmitPindah(scanResultBasket.id, pkScanDest, qty, kg, isPartial);
+  const ok = await doSubmitPindah(scanResultBasket.id, scanResultBasket.batch_id, pkScanDest, qty, kg, isPartial);
   btn.disabled = false; btn.textContent = '📤 Kirim';
   if (ok) {
     document.getElementById('scan-result').className = 'scan-result';
@@ -2294,7 +2294,7 @@ async function lookupBasket(code) {
   scanResultBasket = null;
 
   const { data, error } = await db.from('baskets')
-    .select('id, basket_code, qty_sisa, kg_sisa, lokasi, status, product:product_id(nama_produk, product_code, grade)')
+    .select('id, basket_code, qty_sisa, kg_sisa, lokasi, status, batch_id, product:product_id(nama_produk, product_code, grade)')
     .eq('basket_code', code)
     .maybeSingle();
 
@@ -2342,7 +2342,7 @@ async function lookupBasket(code) {
 }
 async function submitPindah(dest) {
   if (!scanResultBasket) return;
-  await doSubmitPindah(scanResultBasket.id, dest, scanResultBasket.qty_sisa, scanResultBasket.kg_sisa);
+  await doSubmitPindah(scanResultBasket.id, scanResultBasket.batch_id, dest, scanResultBasket.qty_sisa, scanResultBasket.kg_sisa);
   // Clear scan result
   document.getElementById('scan-result').className = 'scan-result';
   document.getElementById('scan-dest-btns').style.display = 'none';
@@ -2350,11 +2350,11 @@ async function submitPindah(dest) {
   loadLantai();
   updateSummaryCards();
 }
-async function doSubmitPindah(basketId, dest, qty, kg, isPartial=false) {
+async function doSubmitPindah(basketId, basketBatchId, dest, qty, kg, isPartial=false) {
   try {
     const { error } = await db.from('basket_movements').insert({
       basket_id:    basketId,
-      batch_id:     currentBatch.id,
+      batch_id:     basketBatchId,
       dari_lokasi:  'LANTAI',
       ke_lokasi:    dest,
       qty_pindah:   qty,
