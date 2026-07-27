@@ -227,6 +227,18 @@ a { text-decoration: none; }
 .tbl tbody tr:last-child td { border-bottom: none; }
 .tbl tbody tr:hover td { background: #fafafa; }
 
+/* Batch Hari Ini: fixed layout, kolom disesuaikan (total width tetap 100%) */
+#tbl-batch-hari-ini { table-layout: fixed; font-size: 12px; }
+#tbl-batch-hari-ini thead th { font-size: 9px; padding: 9px 10px; white-space: nowrap; line-height: 1.4; }
+#tbl-batch-hari-ini tbody td { padding: 10px 10px; white-space: nowrap; }
+#tbl-batch-hari-ini th:nth-child(1), #tbl-batch-hari-ini td:nth-child(1) { width: 16%; } /* Kode Batch (10 karakter) */
+#tbl-batch-hari-ini th:nth-child(2), #tbl-batch-hari-ini td:nth-child(2) { width: 9%; }  /* Status */
+#tbl-batch-hari-ini th:nth-child(3), #tbl-batch-hari-ini td:nth-child(3) { width: 20%; white-space: normal; } /* Sumber */
+#tbl-batch-hari-ini th:nth-child(4), #tbl-batch-hari-ini td:nth-child(4) { width: 11%; } /* ABW Kandang */
+#tbl-batch-hari-ini th:nth-child(5), #tbl-batch-hari-ini td:nth-child(5) { width: 14%; } /* Ekor Karkas */
+#tbl-batch-hari-ini th:nth-child(6), #tbl-batch-hari-ini td:nth-child(6) { width: 14%; } /* Kg Karkas */
+#tbl-batch-hari-ini th:nth-child(7), #tbl-batch-hari-ini td:nth-child(7) { width: 16%; } /* Yield */
+
 /* ===== BADGES ===== */
 .badge {
     display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 12px;
@@ -600,19 +612,20 @@ a { text-decoration: none; }
                         <span class="panel-pill" id="pill-batch">—</span>
                     </div>
                     <div class="tbl-wrap">
-                    <table class="tbl">
+                    <table class="tbl" id="tbl-batch-hari-ini">
                         <thead>
                             <tr>
                                 <th>Kode Batch</th>
                                 <th>Status</th>
                                 <th>Sumber</th>
-                                <th>Ekor</th>
-                                <th>Kg</th>
+                                <th>ABW<br>Kdg</th>
+                                <th>Ekor<br>Karkas</th>
+                                <th>Kg<br>Karkas</th>
                                 <th>Yield</th>
                             </tr>
                         </thead>
                         <tbody id="tbody-batch">
-                            <tr><td colspan="6"><div class="empty"><div class="e-icon">⏳</div>Memuat...</div></td></tr>
+                            <tr><td colspan="7"><div class="empty"><div class="e-icon">⏳</div>Memuat...</div></td></tr>
                         </tbody>
                     </table>
                     </div>
@@ -1123,20 +1136,24 @@ function renderBatch(rows) {
 
     const tbody = document.getElementById('tbody-batch');
     if (!rows.length) {
-        tbody.innerHTML = `<tr><td colspan="6"><div class="empty"><div class="e-icon">🐔</div>Belum ada batch hari ini</div></td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7"><div class="empty"><div class="e-icon">🐔</div>Belum ada batch hari ini</div></td></tr>`;
         return;
     }
 
-    tbody.innerHTML = rows.map(r => `
+    tbody.innerHTML = rows.map(r => {
+        const abwKandang = (r.ekor_kandang ? Number(r.kg_kandang) / Number(r.ekor_kandang) : null);
+        return `
         <tr>
             <td><strong>${r.batch_code || '—'}</strong></td>
             <td>${badgeStatus(r.status)}</td>
             <td>${r.nama_kandang || '<span style="color:#9ca3af">—</span>'}</td>
-            <td>${fmt(r.total_karkas_qty)} ekor</td>
-            <td><strong>${fmt(r.total_karkas_kg, 1)} kg</strong></td>
+            <td>${abwKandang != null ? fmt(abwKandang, 2) : '<span style="color:#9ca3af">—</span>'}</td>
+            <td>${fmt(r.total_karkas_qty)}</td>
+            <td><strong>${fmt(r.total_karkas_kg, 1)}</strong></td>
             <td>${r.pct_rendemen_kandang != null ? fmt(r.pct_rendemen_kandang, 1) + '%' : '<span style="color:#9ca3af">—</span>'}</td>
         </tr>
-    `).join('');
+    `;
+    }).join('');
 }
 
 // ============================================================
@@ -1163,7 +1180,7 @@ function renderChiller(rows) {
     });
 
     let html = `<table class="tbl"><thead><tr>
-        <th>Produk</th><th>Keranjang</th><th>Qty</th><th>Kg</th>
+        <th>Produk</th><th>Keranjang</th><th style="text-align:right">Qty</th><th style="text-align:right">Kg</th>
     </tr></thead><tbody>`;
 
     ORDER.forEach(kat => {
@@ -1173,8 +1190,8 @@ function renderChiller(rows) {
             html += `<tr>
                 <td>${r.nama_produk}</td>
                 <td>${fmt(r.jumlah_keranjang)}</td>
-                <td>${fmt(r.total_qty, 1)} ${r.satuan_qty}</td>
-                <td><strong>${fmt(r.total_kg, 2)} kg</strong></td>
+                <td style="text-align:right">${fmt(r.total_qty, 0)} ${r.satuan_qty}</td>
+                <td style="text-align:right"><strong>${fmt(r.total_kg, 2)} kg</strong></td>
             </tr>`;
         });
     });
@@ -1182,8 +1199,8 @@ function renderChiller(rows) {
     html += `<tr class="stok-total-row">
         <td><strong>TOTAL CHILLER</strong></td>
         <td><strong>${totalKeranjang}</strong></td>
-        <td>—</td>
-        <td><strong>${fmt(totalKg, 2)} kg</strong></td>
+        <td style="text-align:right">—</td>
+        <td style="text-align:right"><strong>${fmt(totalKg, 2)} kg</strong></td>
     </tr>`;
 
     html += '</tbody></table>';

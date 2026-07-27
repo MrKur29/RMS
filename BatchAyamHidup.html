@@ -685,6 +685,7 @@ a { text-decoration: none; }
                         </tbody>
                     </table>
                 </div>
+                <div style="padding:10px 16px;font-size:11px;color:#9ca3af;border-top:1px solid #f3f4f6">*Selisih negatif berarti selisih lebih (Ekor Timbang Ulang &gt; Ekor Kandang)</div>
             </div>
 
         </div><!-- end content-area -->
@@ -1283,7 +1284,7 @@ function renderTable(rows) {
     tbody.innerHTML = rows.map(r => {
         const selisih  = r.selisih_ekor;
         const sCls     = selisihClass(selisih);
-        const selisihTxt = selisih != null ? (selisih > 0 ? '+' + selisih : String(selisih)) : '—';
+        const selisihTxt = selisih != null ? String(selisih) : '—';
 
         // Jam gantung
         const durasi = durMenit(r.jam_gantung_mulai, r.jam_gantung_selesai);
@@ -1525,14 +1526,13 @@ function hitungSelisih() {
     if (ekorK != null && ekorT != null) {
         const selisih = ekorK - ekorM - ekorT;
         const cls = selisihClass(selisih);
-        const sign = selisih > 0 ? '+' : '';
         let note = '';
         if (selisih === 0) note = '✅ tidak ada selisih';
         else if (Math.abs(selisih) <= 3) note = '⚠️ selisih kecil, perlu dicatat';
         else note = '❌ selisih besar, perlu klarifikasi';
 
         document.getElementById('selisih-val').className  = cls;
-        document.getElementById('selisih-val').textContent = sign + selisih + ' ekor';
+        document.getElementById('selisih-val').textContent = selisih + ' ekor';
         document.getElementById('selisih-note').textContent = note;
         preview.style.display = '';
     } else {
