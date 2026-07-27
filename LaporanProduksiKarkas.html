@@ -152,8 +152,8 @@ a{text-decoration:none}
 .rekap-table td:last-child{text-align:right;font-weight:700}
 .rekap-table tr.rekap-strong td{font-weight:800;background:#f0fdfa}
 .rekap-table tr.rekap-sub td:first-child{padding-left:20px;color:#6b7280;font-weight:400}
-.rekap-table tr.rekap-section td{padding-top:12px;font-weight:800;color:#0d9488;text-transform:uppercase;font-size:11px;letter-spacing:.4px;border-bottom:none}
-.rekap-table tr.rekap-note td{padding-top:0;padding-bottom:8px;color:#9ca3af;font-size:10.5px;font-style:italic;font-weight:400;border-bottom:none}
+.rekap-table tr.rekap-section td{padding-top:12px;font-weight:800;color:#111827;text-transform:uppercase;font-size:11px;letter-spacing:.4px;border-bottom:none}
+.rekap-table tr.rekap-note td{padding-top:0;padding-bottom:8px;color:#6b7280;font-size:10.5px;font-style:italic;font-weight:400;border-bottom:none}
 
 /* RINCIAN KERANJANG (detail table, layar saja — tidak ikut print) */
 .rincian-toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:13px 16px;border-bottom:1px solid #f3f4f6}
@@ -367,10 +367,10 @@ a{text-decoration:none}
           </div>
           <table class="rpt-table" id="tbl-item-breakdown">
             <thead>
-              <tr><th>Barang</th><th>Ukuran</th><th>Grade</th><th class="num">Qty (ekor)</th><th class="num">Kg</th><th class="num">%</th></tr>
+              <tr><th>Barang</th><th class="num">Qty (ekor)</th><th class="num">Kg</th></tr>
             </thead>
             <tbody id="tbody-item-breakdown">
-              <tr><td colspan="6"><div class="empty">Memuat…</div></td></tr>
+              <tr><td colspan="3"><div class="empty">Memuat…</div></td></tr>
             </tbody>
           </table>
 
@@ -740,21 +740,17 @@ function renderItemBreakdown(groups){
   currentItemGroups = groups;
   const btnExcel=document.getElementById('btn-excel-item');
   const tbody=document.getElementById('tbody-item-breakdown');
-  if(!groups.length){tbody.innerHTML='<tr><td colspan="6"><div class="empty">Belum ada data timbang karkas untuk batch ini.</div></td></tr>';if(btnExcel)btnExcel.disabled=true;return}
+  if(!groups.length){tbody.innerHTML='<tr><td colspan="3"><div class="empty">Belum ada data timbang karkas untuk batch ini.</div></td></tr>';if(btnExcel)btnExcel.disabled=true;return}
   if(btnExcel)btnExcel.disabled=false;
   const totalKg=groups.reduce((s,g)=>s+g.kg,0)||1;
-  const gradeBadge=g=>g==='A'?'<span class="badge b-gradeA">A</span>':g==='B'?'<span class="badge b-gradeB">B</span>':g==='C'?'<span class="badge b-gradeC">C</span>':'—';
   let rows=groups.map(g=>`
     <tr>
       <td>${esc(g.nama_produk)}</td>
-      <td>${esc(g.sub_kategori) || (g.ukuran!=null?num(g.ukuran,1):'—')}</td>
-      <td>${gradeBadge(g.grade)}</td>
       <td class="num">${int(g.ek)}</td>
       <td class="num">${num(g.kg)}</td>
-      <td class="num">${pct(g.kg/totalKg*100)}</td>
     </tr>`).join('');
   const totEk=groups.reduce((s,g)=>s+g.ek,0);
-  rows+=`<tfoot><tr><td>TOTAL</td><td></td><td></td><td class="num">${int(totEk)}</td><td class="num">${num(totalKg)}</td><td class="num">100.00%</td></tr></tfoot>`;
+  rows+=`<tfoot><tr><td>TOTAL</td><td class="num">${int(totEk)}</td><td class="num">${num(totalKg)}</td></tr></tfoot>`;
   tbody.innerHTML=rows;
 }
 
@@ -936,7 +932,8 @@ function renderTransfer(basketRows){
 // ══════════════════════════════════════════════════════════════
 // RINCIAN KERANJANG — tabel detail per keranjang (layar saja) + export Excel
 // ══════════════════════════════════════════════════════════════
-const TIPE_RUSAK_MAP = {1:'Dari Kandang', 2:'Dari RPA (Proses)'};
+const TIPE_RUSAK_MAP = {1:'1 - KDG', 2:'2 - PROCESS'};
+function properCase(s){ if(!s) return ''; return String(s).toLowerCase().replace(/\b\w/g, c=>c.toUpperCase()); }
 
 function renderRincianKeranjang(rows){
   currentRincianRows = rows;
@@ -968,7 +965,7 @@ function renderRincianKeranjang(rows){
       <td class="num">${int(r.qty_timbang)}</td>
       <td class="num">${num(r.kg_timbang)}</td>
       <td>${TIPE_RUSAK_MAP[r.tipe_kerusakan]||'—'}</td>
-      <td>${esc(b.lokasi)||'—'}</td>
+      <td>${esc(properCase(b.lokasi))||'—'}</td>
       <td>${fmtDT(r.created_at)}</td>
       <td>${isVoid?'<span class="badge b-block">🗑️ VOID</span>':'<span class="badge b-ok">Aktif</span>'}</td>
     </tr>`;
@@ -988,7 +985,7 @@ function downloadRincianExcel(){
       'Qty (Ekor)':       Number(r.qty_timbang)||0,
       'Kg':               Number(r.kg_timbang)||0,
       'Tipe Rusak':       TIPE_RUSAK_MAP[r.tipe_kerusakan] || '',
-      'Tujuan Pindah':    b.lokasi || '',
+      'Tujuan Pindah':    properCase(b.lokasi) || '',
       'Waktu Timbang':    r.created_at ? new Date(r.created_at).toLocaleString('id-ID') : '',
       'Status':           b.status==='VOID' ? 'VOID (tidak dihitung)' : 'Aktif'
     };
@@ -1011,17 +1008,14 @@ function downloadItemBreakdownExcel(){
   const totalKg = currentItemGroups.reduce((s,g)=>s+g.kg,0)||1;
   const rows = currentItemGroups.map(g=>({
     'Barang':      g.nama_produk || '',
-    'Ukuran':      g.sub_kategori || (g.ukuran!=null ? g.ukuran : ''),
-    'Grade':       g.grade || '',
     'Qty (Ekor)':  Number(g.ek)||0,
-    'Kg':          Number(g.kg)||0,
-    '%':           Number((g.kg/totalKg*100).toFixed(2))
+    'Kg':          Number(g.kg)||0
   }));
   const totEk = currentItemGroups.reduce((s,g)=>s+g.ek,0);
-  rows.push({'Barang':'TOTAL','Ukuran':'','Grade':'','Qty (Ekor)':totEk,'Kg':totalKg,'%':100});
+  rows.push({'Barang':'TOTAL','Qty (Ekor)':totEk,'Kg':totalKg});
 
   const ws = XLSX.utils.json_to_sheet(rows);
-  ws['!cols'] = [{wch:24},{wch:10},{wch:8},{wch:12},{wch:12},{wch:8}];
+  ws['!cols'] = [{wch:24},{wch:12},{wch:12}];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Rincian Produk');
   const safeCode = (currentBatch?.batch_code || 'batch').replace(/[^a-zA-Z0-9_-]/g,'_');
