@@ -267,6 +267,9 @@ a{text-decoration:none}
       <div class="nav-item" onclick="navTo('MasterData.html')">
         <span class="nav-icon">🗂️</span><span class="nav-label-text">Master Data</span>
       </div>
+      <div class="nav-item" id="nav-revisi-batch" style="display:none" onclick="navTo('RevisiBatch.html')">
+          <span class="nav-icon">🔀</span><span class="nav-label-text">Revisi Batch Keranjang</span>
+      </div>
       <div class="nav-item" id="nav-user-mgmt" style="display:none" onclick="navTo('UserManagement.html')">
         <span class="nav-icon">👥</span><span class="nav-label-text">Manajemen User</span>
       </div>
@@ -497,6 +500,7 @@ function startApp(){
   document.getElementById('sidebar-name').textContent=currentUser.nama;
   document.getElementById('sidebar-role').textContent=currentUser.role+(currentUser.is_system_admin?' (Admin)':'');
   if(currentUser.is_system_admin){const el=document.getElementById('nav-user-mgmt');if(el)el.style.display='flex'}
+  if (RPA_PERM.getModuleRole(currentUser, 'revisi_batch') !== null) { const rbEl = document.getElementById('nav-revisi-batch'); if (rbEl) rbEl.style.display = 'flex'; }
   const restoredFilters=RPA_STATE.bindFilters('LaporanProduksiKarkas', ['#panel-picker']);
   if(!restoredFilters){
     document.getElementById('batch-date-filter').value=yesterdayISO();

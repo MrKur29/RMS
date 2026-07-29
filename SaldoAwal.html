@@ -220,6 +220,9 @@ tr.clickable{cursor:pointer}
         <div class="nav-item" onclick="navTo('Tracing.html')"><span class="nav-icon">🔍</span><span class="nav-label-text">Tracing Produk</span></div>
         <div class="nav-item active"><span class="nav-icon">📋</span><span class="nav-label-text">Saldo Awal Barang</span></div>
         <div class="nav-item" onclick="navTo('MasterData.html')"><span class="nav-icon">🗂️</span><span class="nav-label-text">Master Data</span></div>
+        <div class="nav-item" id="nav-revisi-batch" style="display:none" onclick="navTo('RevisiBatch.html')">
+            <span class="nav-icon">🔀</span><span class="nav-label-text">Revisi Batch Keranjang</span>
+        </div>
         <div class="nav-item" id="nav-user-mgmt" style="display:none" onclick="navTo('UserManagement.html')"><span class="nav-icon">👥</span><span class="nav-label-text">Manajemen User</span></div>
       </nav>
       <div class="sidebar-footer">
@@ -612,6 +615,7 @@ function startApp(){
     const bt = document.getElementById('btn-sesi-baru');
     if(bt){ bt.disabled = true; bt.textContent = '🔒 Hanya Lihat'; }
   }
+  if (RPA_PERM.getModuleRole(currentUser, 'revisi_batch') !== null) { const rbEl = document.getElementById('nav-revisi-batch'); if (rbEl) rbEl.style.display = 'flex'; }
 
   populateLokasiSelect();
   loadProduk();

@@ -476,6 +476,10 @@ input, select, textarea { font-family: inherit; }
                     <span class="nav-icon">🗂️</span>
                     <span class="nav-label-text">Master Data</span>
                 </div>
+                <div class="nav-item" onclick="navTo('RevisiBatch.html')">
+                    <span class="nav-icon">🔀</span>
+                    <span class="nav-label-text">Revisi Batch Keranjang</span>
+                </div>
                 <div class="nav-item active">
                     <span class="nav-icon">👥</span>
                     <span class="nav-label-text">Manajemen User</span>
@@ -631,6 +635,7 @@ input, select, textarea { font-family: inherit; }
                         <option value="koreksi">Koreksi & Approval</option>
                         <option value="laporan">Laporan</option>
                         <option value="saldo_awal">Saldo Awal Barang</option>
+                        <option value="revisi_batch">Revisi Batch Keranjang</option>
                     </select>
                     <select id="perm-add-role">
                         <option value="">— Pilih Role —</option>
@@ -718,6 +723,7 @@ const MODULE_LABELS = {
     koreksi:   'Koreksi',
     laporan:   'Laporan',
     saldo_awal:'Saldo Awal Barang',
+    revisi_batch:'Revisi Batch Keranjang',
 };
 const ROLE_LABELS = {
     supervisor: '👑 Supervisor',
@@ -1040,6 +1046,7 @@ function openCreateModal() {
 
     onAdminToggle();
     renderPermTable();
+    refreshModuleDropdown();
     hideModalAlert();
     checkPinVisibility();
 
@@ -1071,6 +1078,7 @@ async function openEditModal(userId) {
 
     onAdminToggle();
     renderPermTable();
+    refreshModuleDropdown();
     hideModalAlert();
     checkPinVisibility();
 

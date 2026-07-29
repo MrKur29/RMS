@@ -373,6 +373,9 @@ a{text-decoration:none}
       <div class="nav-item" onclick="navTo('Koreksi.html')"><span class="nav-icon">✅</span><span class="nav-label-text">Koreksi &amp; Approval</span></div>
       <div class="nav-item" onclick="navTo('Laporan.html')"><span class="nav-icon">📊</span><span class="nav-label-text">Laporan</span></div>
       <div class="nav-item" onclick="navTo('MasterData.html')"><span class="nav-icon">🗂️</span><span class="nav-label-text">Master Data</span></div>
+      <div class="nav-item" id="nav-revisi-batch" style="display:none" onclick="navTo('RevisiBatch.html')">
+          <span class="nav-icon">🔀</span><span class="nav-label-text">Revisi Batch Keranjang</span>
+      </div>
       <div class="nav-item" id="nav-user-mgmt" style="display:none" onclick="navTo('UserManagement.html')"><span class="nav-icon">👥</span><span class="nav-label-text">Manajemen User</span></div>
     </nav>
     <div class="sidebar-footer">
@@ -820,7 +823,7 @@ a{text-decoration:none}
 <div class="modal-overlay" id="modal-close">
   <div class="modal-box">
     <div class="modal-title">🔒 Tutup Sesi Produksi</div>
-    <div class="modal-desc">Rekonsiliasi ekor sebelum menutup sesi. Pastikan semua data sudah benar.</div>
+    <div class="modal-desc">Rekonsiliasi ekor sebelum menutup sesi. Pastikan semua data sudah benar. Batch ayam hidup akan otomatis ditandai <strong>Selesai</strong> mengikuti penutupan sesi ini.</div>
 
     <!-- REKON BOX -->
     <div class="rekon-box">
@@ -1037,6 +1040,7 @@ async function startApp() {
     const umEl = document.getElementById('nav-user-mgmt');
     if (umEl) umEl.style.display = 'flex';
   }
+  if (RPA_PERM.getModuleRole(currentUser, 'revisi_batch') !== null) { const rbEl = document.getElementById('nav-revisi-batch'); if (rbEl) rbEl.style.display = 'flex'; }
   // Clock
   updateClock();
   clockTimer = setInterval(updateClock, 1000);
@@ -2569,14 +2573,45 @@ async function submitClose() {
     };
     const { error } = await db.from('carcass_sessions').update(updateData).eq('id', currentSession.id);
     if (error) throw error;
+
+    // Tutup Sesi = 1 sesi per batch di alur normal → otomatis tandai batch
+    // Selesai juga, pakai PIN Supervisor yang sama (tidak perlu ke halaman
+    // Batch Ayam Hidup lagi). Jaga-jaga: kalau ternyata masih ada sesi lain
+    // yang masih OPEN untuk batch ini (harusnya tidak pernah terjadi di alur
+    // normal), batch TIDAK ditandai Selesai supaya sesi itu tidak ke-lock.
+    let batchAutoCompleted = false;
+    const { count: otherOpenCount } = await db.from('carcass_sessions')
+      .select('id', { count: 'exact', head: true })
+      .eq('batch_id', currentBatch.id)
+      .eq('status', 'OPEN');
+    if (!otherOpenCount) {
+      const { error: batchErr } = await db.from('live_chicken_batches')
+        .update({ status: 'COMPLETE', updated_by: sup.id, updated_at: new Date().toISOString() })
+        .eq('id', currentBatch.id);
+      if (batchErr) {
+        console.error('Gagal auto-selesai batch:', batchErr);
+      } else {
+        batchAutoCompleted = true;
+      }
+    }
+
     closeModal('modal-close');
-    showToast(`Sesi ${currentSession.session_code} berhasil ditutup`, 'success');
+    showToast(
+      batchAutoCompleted
+        ? `Sesi ${currentSession.session_code} ditutup & batch ${currentBatch.batch_code} ditandai Selesai ✅`
+        : `Sesi ${currentSession.session_code} berhasil ditutup`,
+      'success'
+    );
     currentSession = null;
     updateSessionBadge(null);
-    showEl('btn-buka-sesi', true);
+    showEl('btn-buka-sesi', !batchAutoCompleted);
     showState('no-session');
     const desc = document.getElementById('no-session-desc');
-    if (desc) desc.textContent = `Sesi produksi batch ${currentBatch.batch_code} telah ditutup.`;
+    if (desc) {
+      desc.textContent = batchAutoCompleted
+        ? `Sesi produksi batch ${currentBatch.batch_code} telah ditutup dan batch ditandai Selesai.`
+        : `Sesi produksi batch ${currentBatch.batch_code} telah ditutup.`;
+    }
   } catch(e) {
     console.error(e);
     errEl.textContent = 'Gagal menutup sesi: ' + e.message;

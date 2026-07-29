@@ -278,6 +278,8 @@ a { text-decoration: none; }
 .btn-aktif:hover { background: #16a34a; color: white; }
 .btn-done  { background: #dbeafe; color: #1e40af; }
 .btn-done:hover { background: #2563eb; color: white; }
+.btn-hapus { background: #fee2e2; color: #991b1b; }
+.btn-hapus:hover { background: #dc2626; color: white; }
 .btn-sm { padding: 5px 10px; font-size: 11px; min-height: 28px; }
 
 /* ===== EMPTY STATE ===== */
@@ -573,6 +575,9 @@ a { text-decoration: none; }
                 <span class="nav-icon">🗂️</span>
                 <span class="nav-label-text">Master Data</span>
             </div>
+            <div class="nav-item" id="nav-revisi-batch" style="display:none" onclick="navTo('RevisiBatch.html')">
+                <span class="nav-icon">🔀</span><span class="nav-label-text">Revisi Batch Keranjang</span>
+            </div>
             <div class="nav-item" id="nav-user-mgmt" style="display:none" onclick="navTo('UserManagement.html')">
                 <span class="nav-icon">👥</span>
                 <span class="nav-label-text">Manajemen User</span>
@@ -855,7 +860,30 @@ a { text-decoration: none; }
     </div>
 </div>
 
-<!-- ==================== MODAL KONFIRMASI HAPUS / VOID ==================== -->
+<!-- ==================== MODAL HAPUS BATCH (Supervisor PIN + Alasan) ==================== -->
+<div class="modal-overlay" id="modal-hapus">
+    <div class="modal-box modal-sm">
+        <div class="modal-title">🗑️ Hapus Batch Permanen</div>
+        <div class="modal-desc">
+            Batch: <strong id="mh-batch-code">—</strong><br>
+            Batch akan <strong>dihapus permanen</strong> (bukan dibatalkan/void) karena belum ada data produksi terkait.
+            Tindakan ini tidak dapat dibatalkan.
+        </div>
+        <div class="form-group modal-fg full" style="margin-top:10px">
+            <label>Alasan Hapus <span style="color:#dc2626">*</span></label>
+            <textarea id="mh-alasan" placeholder="cth: Batch dibuat dobel / salah input, tidak jadi dipakai…" maxlength="500" rows="2"></textarea>
+        </div>
+        <input type="password" class="pin-input" id="mh-pin" placeholder="● ● ● ● ● ●" maxlength="6" inputmode="numeric"
+               oninput="this.value=this.value.replace(/\D/g,'')">
+        <div class="pin-error" id="mh-pin-error">PIN salah atau bukan Supervisor.</div>
+        <div class="modal-actions">
+            <button class="btn-modal-cancel" onclick="closeModalHapus()">Batal</button>
+            <button class="btn-modal-danger" id="mh-btn-ok" onclick="submitHapusBatch()">🗑️ Hapus Permanen</button>
+        </div>
+    </div>
+</div>
+
+<!-- ==================== MODAL KONFIRMASI GENERIC ==================== -->
 <div class="modal-overlay" id="modal-konfirmasi">
     <div class="modal-box modal-sm">
         <div class="modal-title" id="mk-title">Konfirmasi</div>
@@ -952,6 +980,7 @@ let clockTimer     = null;
 let refreshTimer   = null;
 let editingBatchId = null;
 let selesaiBatchId = null;
+let hapusBatchId   = null;
 let modalKonfirmasiFn = null;
 let masterEkspedisi  = [];
 let masterSupir      = [];
@@ -1120,6 +1149,7 @@ function startApp() {
         const umEl = document.getElementById('nav-user-mgmt');
         if (umEl) umEl.style.display = 'flex';
     }
+    if (RPA_PERM.getModuleRole(currentUser, 'revisi_batch') !== null) { const rbEl = document.getElementById('nav-revisi-batch'); if (rbEl) rbEl.style.display = 'flex'; }
 
     if (currentUser.role === 'SUPERVISOR') {
         document.getElementById('app-screen').classList.add('is-supervisor');
@@ -1316,6 +1346,10 @@ function renderTable(rows) {
             aksiHtml += ` <button class="btn btn-aktif" onclick="konfirmasiAktifkan('${r.id}','${r.batch_code}')">▶ Aktifkan</button>`;
         } else if (r.status === 'ACTIVE' && isSup) {
             aksiHtml += ` <button class="btn btn-done" onclick="openModalSelesai('${r.id}','${r.batch_code}')">✅ Selesai</button>`;
+        }
+        // Hapus permanen — hanya batch DRAFT (belum dipakai produksi) & hanya Supervisor/Admin
+        if (r.status === 'DRAFT' && isSup) {
+            aksiHtml += ` <button class="btn btn-hapus" onclick="openModalHapus('${r.id}','${r.batch_code}')">🗑️ Hapus</button>`;
         }
 
         // Catatan medis — truncate jika panjang
@@ -2179,6 +2213,120 @@ async function submitSelesai() {
     } catch (e) {
         console.error(e);
         showToast('Gagal: ' + (e.message || 'Unknown'), 'error');
+    }
+}
+
+// ============================================================
+// HAPUS BATCH PERMANEN (Supervisor PIN + Alasan)
+// Hanya untuk batch DRAFT yang belum punya data produksi terkait
+// (belum ada keranjang karkas / sesi karkas yang dibuat dari batch ini).
+// ============================================================
+function openModalHapus(batchId, batchCode) {
+    hapusBatchId = batchId;
+    document.getElementById('mh-batch-code').textContent = batchCode;
+    document.getElementById('mh-alasan').value = '';
+    document.getElementById('mh-pin').value = '';
+    document.getElementById('mh-pin-error').style.display = 'none';
+    document.getElementById('modal-hapus').classList.add('open');
+    setTimeout(() => document.getElementById('mh-alasan').focus(), 100);
+}
+function closeModalHapus() {
+    document.getElementById('modal-hapus').classList.remove('open');
+    hapusBatchId = null;
+}
+
+async function submitHapusBatch() {
+    const alasan = document.getElementById('mh-alasan').value.trim();
+    const pin    = document.getElementById('mh-pin').value;
+    const pinErr = document.getElementById('mh-pin-error');
+    pinErr.style.display = 'none';
+
+    if (!alasan) {
+        pinErr.textContent   = 'Alasan hapus wajib diisi.';
+        pinErr.style.display = 'block';
+        return;
+    }
+    if (!pin || pin.length < 4) {
+        pinErr.textContent   = 'PIN harus minimal 4 digit.';
+        pinErr.style.display = 'block';
+        return;
+    }
+
+    // Verifikasi PIN — Supervisor, System Admin, atau user dengan permission
+    // modul 'batch' setara supervisor/admin (sama seperti gate Selesai)
+    const { data: pinUser } = await db.from('users')
+        .select('id, nama, role, is_system_admin')
+        .eq('pin', pin)
+        .eq('aktif', true)
+        .maybeSingle();
+
+    let sup = null;
+    if (pinUser) {
+        if (pinUser.role === 'SUPERVISOR' || pinUser.is_system_admin) {
+            sup = pinUser;
+        } else {
+            const pinUserPerms = await RPA_PERM.fetchPermissions(db, pinUser.id);
+            if (RPA_PERM.canApprove(pinUserPerms['batch'] || null)) {
+                sup = pinUser;
+            }
+        }
+    }
+    if (!sup) {
+        pinErr.textContent   = 'PIN salah atau bukan Supervisor.';
+        pinErr.style.display = 'block';
+        document.getElementById('mh-pin').value = '';
+        return;
+    }
+
+    const btn = document.getElementById('mh-btn-ok');
+    btn.disabled = true;
+    try {
+        // Ambil data batch dulu (utk audit log & re-cek status masih DRAFT)
+        const { data: batchRow, error: fetchErr } = await db
+            .from('live_chicken_batches')
+            .select('*')
+            .eq('id', hapusBatchId)
+            .single();
+        if (fetchErr) throw fetchErr;
+        if (!batchRow) throw new Error('Batch tidak ditemukan (mungkin sudah dihapus).');
+        if (batchRow.status !== 'DRAFT') {
+            throw new Error('Batch sudah bukan DRAFT — tidak bisa dihapus permanen. Gunakan Revisi Batch jika perlu koreksi.');
+        }
+
+        // Cek belum ada data produksi turunan (belum "dipakai")
+        const [{ count: cntBasket }, { count: cntSesi }] = await Promise.all([
+            db.from('baskets').select('id', { count: 'exact', head: true }).eq('batch_id', hapusBatchId),
+            db.from('carcass_sessions').select('id', { count: 'exact', head: true }).eq('batch_id', hapusBatchId)
+        ]);
+        if ((cntBasket || 0) > 0 || (cntSesi || 0) > 0) {
+            throw new Error(`Batch sudah punya data produksi (${cntBasket || 0} keranjang, ${cntSesi || 0} sesi karkas) — tidak bisa dihapus permanen. Gunakan Revisi Batch untuk memindahkan data.`);
+        }
+
+        const { error: delErr } = await db
+            .from('live_chicken_batches')
+            .delete()
+            .eq('id', hapusBatchId);
+        if (delErr) throw delErr;
+
+        // Audit trail — append-only, batch sudah tidak ada lagi di tabel utama
+        await db.from('audit_log').insert({
+            user_id: currentUser.id,
+            aksi: 'BATCH_DELETED',
+            tabel_terkait: 'live_chicken_batches',
+            record_id: hapusBatchId,
+            data_sebelum: batchRow,
+            data_sesudah: { deleted_by_pin_user: sup.id, deleted_by_pin_nama: sup.nama, alasan }
+        });
+
+        showToast(`Batch ${batchRow.batch_code} dihapus permanen ✅`, 'success');
+        closeModalHapus();
+        loadPage();
+    } catch (e) {
+        console.error(e);
+        pinErr.textContent   = 'Gagal: ' + (e.message || 'Unknown error');
+        pinErr.style.display = 'block';
+    } finally {
+        btn.disabled = false;
     }
 }
 
