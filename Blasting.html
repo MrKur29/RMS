@@ -807,6 +807,12 @@ function openModal(id){document.getElementById(id).classList.add('open')}
 function closeModal(id){document.getElementById(id).classList.remove('open')}
 function showErr(id,msg){const e=document.getElementById(id);if(e){e.textContent=msg;e.style.display=msg?'block':'none'}}
 function lokasiLabel(l){const m={CHILLER:'Chiller',PARTING:'Parting',BONELESS:'Boneless',MARINASI:'Marinasi',BLASTING:'Blasting',SOLD:'Sold',BYPRODUCT_DIRECT:'By-product',LANTAI:'Lantai'};return m[l]||l||'—'}
+// Ekor/kg keranjang yg SUDAH TERPAKAI (di rak menunggu ATAU sudah dibekukan) — tidak lagi "tersedia di lantai".
+// Sebelumnya perhitungan "tersedia" hanya mengurangi status ALLOCATED, sehingga keranjang yg sudah FROZEN
+// muncul lagi sebagai stok kosong/tersedia penuh di lantai blasting setelah batch dijalankan.
+function basketCommittedEkor(basketId){return rackAllocations.filter(a=>a.basket_id===basketId&&(a.status==='ALLOCATED'||a.status==='FROZEN')).reduce((s,a)=>s+(a.ekor||0),0)}
+function basketCommittedKg(basketId){return rackAllocations.filter(a=>a.basket_id===basketId&&(a.status==='ALLOCATED'||a.status==='FROZEN')).reduce((s,a)=>s+(Number(a.kg)||0),0)}
+function basketFrozenEkor(basketId){return rackAllocations.filter(a=>a.basket_id===basketId&&a.status==='FROZEN').reduce((s,a)=>s+(a.ekor||0),0)}
 
 // ── SIDEBAR ──
 function toggleSidebar(){const s=document.getElementById('sidebar'),o=document.getElementById('sidebar-overlay');s.classList.toggle('open');o.classList.toggle('visible')}
@@ -978,11 +984,15 @@ function renderPendingList(){
 }
 
 // ── TAB 1: STOK ──
+// Hanya keranjang yang MASIH PUNYA SISA belum dialokasikan (ke rak atau beku) yang tampil di sini.
+// Begitu seluruh isi keranjang sudah naik rak / beku, keranjang hilang dari daftar ini —
+// akan muncul lagi hanya jika alokasinya di-edit/dihapus dari tab Rak (selama belum "Jalankan Batch").
 function renderStok(){
+  const availList=blastingStock.filter(b=>(b.qty_sisa||0)-basketCommittedEkor(b.id)>0);
   const pill=document.getElementById('pill-stok-count');
-  if(pill)pill.textContent=`${blastingStock.length} item`;
+  if(pill)pill.textContent=`${availList.length} item`;
   const f=(document.getElementById('stok-search')?.value||'').trim().toLowerCase();
-  let list=blastingStock;
+  let list=availList;
   if(f)list=list.filter(b=>(b.basket_code||'').toLowerCase().includes(f)||(b.product_master?.nama_produk||'').toLowerCase().includes(f));
 
   const groups={};
@@ -1010,13 +1020,14 @@ function renderStok(){
     </tr>`;
     if(isExp){
       g.baskets.forEach((b,i)=>{
-        const alloc=rackAllocations.filter(a=>a.basket_id===b.id&&a.status==='ALLOCATED');
-        const allocEkor=alloc.reduce((s,a)=>s+(a.ekor||0),0);
-        const availEkor=(b.qty_sisa||0)-allocEkor;
+        const allocEkor=rackAllocations.filter(a=>a.basket_id===b.id&&a.status==='ALLOCATED').reduce((s,a)=>s+(a.ekor||0),0);
+        const frozenEkor=basketFrozenEkor(b.id);
+        const availEkor=(b.qty_sisa||0)-allocEkor-frozenEkor;
         html+=`<tr class="sub-row${i===g.baskets.length-1?' last-sub':''}">
           <td style="font-family:monospace;font-weight:700">${b.basket_code}</td>
           <td><span style="color:#111827">${fmt(b.qty_sisa)} ek / ${fmtKg(b.kg_sisa)}</span>
             ${allocEkor?`<span class="badge b-allocated" style="margin-left:4px">${fmt(allocEkor)} ek di rak</span>`:''}
+            ${frozenEkor?`<span class="badge b-frozen" style="margin-left:4px">${fmt(frozenEkor)} ek beku</span>`:''}
             ${availEkor>0?`<div class="tbl-sub">Tersedia: ${fmt(availEkor)} ek</div>`:'<div class="tbl-sub" style="color:#dc2626">Semua sudah dialokasikan</div>'}</td>
           <td style="display:flex;flex-wrap:wrap;gap:4px;padding:8px 14px">
             <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();goToRakTab('${b.id}')">🗂️ Alokasi ke Rak</button>
@@ -1142,8 +1153,8 @@ function openReturn(basketId){
   const b=blastingStock.find(x=>x.id===basketId);
   if(!b)return;
   const pm=b.product_master||{};
-  const allocEkor=rackAllocations.filter(a=>a.basket_id===basketId&&a.status==='ALLOCATED').reduce((s,a)=>s+(a.ekor||0),0);
-  const allocKg=rackAllocations.filter(a=>a.basket_id===basketId&&a.status==='ALLOCATED').reduce((s,a)=>s+(Number(a.kg)||0),0);
+  const allocEkor=basketCommittedEkor(basketId);
+  const allocKg=basketCommittedKg(basketId);
   const availEkor=Math.max(0,(b.qty_sisa||0)-allocEkor);
   const availKg=Math.max(0,(Number(b.kg_sisa)||0)-allocKg);
   setEl('mr-code',b.basket_code);
@@ -1241,10 +1252,7 @@ function renderRakDetail(rackId){
     ?`<span class="badge b-frozen" style="padding:5px 10px">Di Batch: ${inBatch.batch_code}</span>`:'';
 
   // Keranjang yang ada di lantai blasting dengan sisa belum dialokasikan penuh
-  const availBaskets=blastingStock.filter(b=>{
-    const allocEkor=rackAllocations.filter(a=>a.basket_id===b.id&&a.status==='ALLOCATED').reduce((s,a)=>s+(a.ekor||0),0);
-    return (b.qty_sisa||0)-allocEkor>0;
-  });
+  const availBaskets=blastingStock.filter(b=>(b.qty_sisa||0)-basketCommittedEkor(b.id)>0);
 
   let html='';
 
@@ -1271,8 +1279,8 @@ function renderRakDetail(rackId){
       <div id="rak-basket-list" style="max-height:200px;overflow-y:auto;border:1.5px solid #e5e7eb;border-radius:8px">
         ${availBaskets.length
           ? availBaskets.map(b=>{
-              const allocEkor=rackAllocations.filter(a=>a.basket_id===b.id&&a.status==='ALLOCATED').reduce((s,a)=>s+(a.ekor||0),0);
-              const allocKg=rackAllocations.filter(a=>a.basket_id===b.id&&a.status==='ALLOCATED').reduce((s,a)=>s+(Number(a.kg)||0),0);
+              const allocEkor=basketCommittedEkor(b.id);
+              const allocKg=basketCommittedKg(b.id);
               const availEkor=(b.qty_sisa||0)-allocEkor;
               const availKg=Math.max(0,(Number(b.kg_sisa)||0)-allocKg);
               const isPre=b.id===selectedBasketForRak;
@@ -1380,8 +1388,8 @@ function renderRakDetail(rackId){
   if(selectedBasketForRak){
     const b=blastingStock.find(x=>x.id===selectedBasketForRak);
     if(b){
-      const allocEkor=rackAllocations.filter(a=>a.basket_id===b.id&&a.status==='ALLOCATED').reduce((s,a)=>s+(a.ekor||0),0);
-      const allocKg=rackAllocations.filter(a=>a.basket_id===b.id&&a.status==='ALLOCATED').reduce((s,a)=>s+(Number(a.kg)||0),0);
+      const allocEkor=basketCommittedEkor(b.id);
+      const allocKg=basketCommittedKg(b.id);
       const availEkor=Math.max(0,(b.qty_sisa||0)-allocEkor);
       const availKg=Math.max(0,(Number(b.kg_sisa)||0)-allocKg);
       selectBasketForRak(b.id,availEkor,availKg,b.basket_code,b.product_master?.nama_produk||'—',b.product_master?.kg_min||null,b.product_master?.kg_max||null);
@@ -1395,15 +1403,10 @@ function doScanRak(rackId){
   const val=(document.getElementById('rak-scan-input')?.value||'').trim().toUpperCase();
   if(!val)return;
   // Cari basket yang match
-  const allocEkorMap={};
-  blastingStock.forEach(b=>{
-    const e=rackAllocations.filter(a=>a.basket_id===b.id&&a.status==='ALLOCATED').reduce((s,a)=>s+(a.ekor||0),0);
-    allocEkorMap[b.id]=e;
-  });
   const match=blastingStock.find(b=>(b.basket_code||'').toUpperCase()===val);
   if(match){
-    const allocEkor=allocEkorMap[match.id]||0;
-    const allocKg=rackAllocations.filter(a=>a.basket_id===match.id&&a.status==='ALLOCATED').reduce((s,a)=>s+(Number(a.kg)||0),0);
+    const allocEkor=basketCommittedEkor(match.id);
+    const allocKg=basketCommittedKg(match.id);
     const availEkor=Math.max(0,(match.qty_sisa||0)-allocEkor);
     const availKg=Math.max(0,(Number(match.kg_sisa)||0)-allocKg);
     if(availEkor<=0){
@@ -1486,6 +1489,67 @@ async function doAlokasiInline(rackId){
     renderRakDetail(rackId);
   }catch(e){showErr('raf-err','Gagal: '+(e.message||''));}
   finally{btn.disabled=false;const rack=racks.find(r=>r.id===rackId);btn.textContent=`💾 Simpan ke ${rack?.nomor_rak||'Rak'}`}
+}
+
+// ── EDIT / HAPUS ALOKASI ──
+// Hanya berlaku selama alokasi masih ALLOCATED (rak belum "Jalankan Batch").
+// Alokasi FROZEN tidak muncul di sini sama sekali (Section 2 "Alokasi Aktif" hanya list status ALLOCATED).
+function openEditAlokasi(allocId){
+  const a=rackAllocations.find(x=>x.id===allocId);
+  if(!a||a.status!=='ALLOCATED')return;
+  activeAllocId=allocId;
+  const b=a.baskets||{};
+  const rak=a.blasting_racks||{};
+  // Sisa maksimum = kapasitas keranjang dikurangi komitmen alokasi LAIN (di luar record ini sendiri)
+  const otherCommitted=Math.max(0,basketCommittedEkor(a.basket_id)-(a.ekor||0));
+  const maxEkor=Math.max(a.ekor||0,(b.qty_sisa||0)-otherCommitted);
+  setEl('ea-code',b.basket_code||'—');
+  setEl('ea-rak',rak.nomor_rak||'—');
+  setEl('ea-max',`${fmt(maxEkor)} ekor`);
+  document.getElementById('ea-ekor').value=a.ekor||'';
+  document.getElementById('ea-kg').value=a.kg!=null?Number(a.kg).toFixed(1):'';
+  document.getElementById('ea-btn-ok')._maxEkor=maxEkor;
+  showErr('ea-err','');
+  openModal('modal-edit-alokasi');
+}
+
+async function doEditAlokasi(){
+  if(!activeAllocId)return;
+  const btn=document.getElementById('ea-btn-ok');
+  const maxEkor=btn._maxEkor||0;
+  const ekor=parseInt(document.getElementById('ea-ekor').value)||0;
+  const kg=parseFloat(document.getElementById('ea-kg').value)||0;
+  if(ekor<=0){showErr('ea-err','Jumlah ekor harus diisi.');return}
+  if(kg<=0){showErr('ea-err','Berat harus diisi.');return}
+  if(ekor>maxEkor){showErr('ea-err',`Melebihi sisa tersedia (${fmt(maxEkor)} ekor).`);return}
+  btn.disabled=true;btn.textContent='Menyimpan…';
+  try{
+    const{error}=await db.from('blasting_rack_allocations')
+      .update({ekor,kg,updated_by:currentUser.id})
+      .eq('id',activeAllocId).eq('status','ALLOCATED');
+    if(error)throw error;
+    showToast('Alokasi berhasil diperbarui.','success');
+    closeModal('modal-edit-alokasi');
+    activeAllocId=null;
+    await loadAll();
+    if(selectedRackId)renderRakDetail(selectedRackId);
+  }catch(e){showErr('ea-err','Gagal: '+(e.message||''));}
+  finally{btn.disabled=false;btn.textContent='💾 Simpan'}
+}
+
+async function doHapusAlokasi(allocId){
+  const a=rackAllocations.find(x=>x.id===allocId);
+  if(!a)return;
+  if(a.status!=='ALLOCATED'){showToast('Alokasi ini sudah dibekukan, tidak bisa dihapus.','warning');return}
+  const kode=a.baskets?.basket_code||'—';
+  if(!confirm(`Hapus alokasi ${kode} (${fmt(a.ekor)} ekor) dari rak ini?\nKeranjang akan kembali muncul sebagai stok tersedia di lantai Blasting.`))return;
+  try{
+    const{error}=await db.from('blasting_rack_allocations').delete().eq('id',allocId).eq('status','ALLOCATED');
+    if(error)throw error;
+    showToast('Alokasi dihapus, keranjang kembali tersedia di lantai.','warning');
+    await loadAll();
+    if(selectedRackId)renderRakDetail(selectedRackId);
+  }catch(e){showToast('Gagal menghapus alokasi: '+(e.message||''),'error');}
 }
 
 // ── TAB 3: BATCH ──

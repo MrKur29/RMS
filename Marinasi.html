@@ -400,6 +400,11 @@ a{text-decoration:none}
           <div class="sc-value" id="sc-pending">—</div>
           <div class="sc-sub">keranjang antri</div>
         </div>
+        <div class="summary-card c-red">
+          <div class="sc-label">Pending Keluar</div>
+          <div class="sc-value" id="sc-pending-keluar">—</div>
+          <div class="sc-sub">menunggu konfirmasi</div>
+        </div>
         <div class="summary-card c-purple">
           <div class="sc-label">Stok Lantai</div>
           <div class="sc-value" id="sc-stok">—</div>
@@ -1134,6 +1139,7 @@ const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 // ============================================================
 let currentUser      = null;
 let pendingMovements = [];   // ke MARINASI, status PENDING
+let outgoingPending  = [];   // dari MARINASI, status PENDING (belum dikonfirmasi penerima)
 let marinasiStock     = [];   // baskets lokasi=MARINASI, status=AKTIF
 let activeWOs        = [];   // processing_orders tipe=MARINASI, IN_PROGRESS/OPEN
 let closedWOs        = [];   // processing_orders tipe=MARINASI, COMPLETED/CANCELLED
@@ -1267,6 +1273,7 @@ function startClock() {
 async function loadAll() {
   await Promise.all([
     loadPendingMovements(),
+    loadOutgoingPending(),
     loadMarinasiStock(),
     loadActiveWOs(),
     loadClosedWOs(),
@@ -1297,6 +1304,16 @@ async function loadPendingMovements() {
     .eq('status', 'PENDING')
     .order('created_at');
   if (!error) pendingMovements = data || [];
+}
+
+async function loadOutgoingPending() {
+  const { data, error } = await db
+    .from('basket_movements')
+    .select('id, basket_id, ke_lokasi, created_at')
+    .eq('dari_lokasi', 'MARINASI')
+    .eq('status', 'PENDING')
+    .order('created_at');
+  if (!error) outgoingPending = data || [];
 }
 
 async function loadMarinasiStock() {
@@ -1490,6 +1507,7 @@ async function loadProducts() {
 // ============================================================
 function renderSummaryCards() {
   setEl('sc-pending',  pendingMovements.length);
+  setEl('sc-pending-keluar', outgoingPending.length);
   setEl('sc-stok',     marinasiStock.length);
   setEl('sc-wo-aktif', activeWOs.filter(w=>w.status==='IN_PROGRESS').length);
 
@@ -1718,6 +1736,9 @@ function renderStok() {
   const pill = document.getElementById('pill-stok-count');
   if (pill) pill.textContent = `${marinasiStock.length} item`;
 
+  const pendingOutMap = {};
+  outgoingPending.forEach(m => { pendingOutMap[m.basket_id] = m.ke_lokasi; });
+
   const f = (document.getElementById('stok-search')?.value||'').trim().toLowerCase();
   let list = marinasiStock;
   if (f) {
@@ -1759,8 +1780,12 @@ function renderStok() {
     </tr>`;
     if (isExp) {
       g.baskets.forEach((b, i) => {
+        const pendingDest = pendingOutMap[b.id];
+        const pendingBadge = pendingDest
+          ? `<span class="badge" style="background:#fee2e2;color:#991b1b;margin-left:6px">⏳ Menunggu Konfirmasi → ${lokasiLabel(pendingDest)}</span>`
+          : '';
         html += `<tr class="sub-row${i===lastIdx?' last-sub':''}">
-          <td colspan="2" style="font-family:monospace;font-weight:700">${b.basket_code}</td>
+          <td colspan="2" style="font-family:monospace;font-weight:700">${b.basket_code}${pendingBadge}</td>
           <td>${fmt(b.qty_sisa)} ekor &nbsp;·&nbsp; ${fmtKg(b.kg_sisa)}</td>
           <td>
             <button class="btn btn-ghost btn-sm" title="Cetak ulang label" onclick="event.stopPropagation();reprintStokLabel('${b.id}')">🖨️</button>
@@ -2032,6 +2057,15 @@ async function doPindahKeluar() {
     }
 
     // ── CASE: Pindah keluar ke lokasi lain (PENDING movement) ──
+    // Pola disamakan dengan Produksi Karkas (doSubmitPindah): keranjang TIDAK
+    // disentuh saat kirim — biarkan konfirmasi_movement/tolak_movement (RPC
+    // yang sama dipakai semua modul) yang menuntaskan qty_sisa saat penerima
+    // benar-benar konfirmasi atau tolak. Sebelumnya kurangiBasket() dipanggil
+    // di sini sehingga keranjang langsung hilang dari daftar Lantai Marinasi
+    // begitu dikirim (status bisa langsung HABIS), padahal belum tentu
+    // dikonfirmasi — beda dari Karkas yang tetap menampilkannya sampai ada
+    // keputusan penerima.
+    const isPartial = qtyPindah < b.qty_sisa;
     const { error: mvErr } = await db.from('basket_movements').insert({
       basket_id:    activePindahId,
       batch_id:     null,
@@ -2039,13 +2073,13 @@ async function doPindahKeluar() {
       ke_lokasi:    selectedDest,
       qty_pindah:   qtyPindah,
       kg_pindah:    kgPindah,
+      is_partial:   isPartial,
       status:       'PENDING',
       catatan:      catatan || null,
       submitted_by: currentUser.id
     });
     if (mvErr) throw mvErr;
 
-    await kurangiBasket();
     showToast(`Keranjang dikirim ke ${lokasiLabel(selectedDest)} (PENDING konfirmasi penerima)`, 'success');
     closeModal('modal-pindah');
     await loadAll();
@@ -2430,7 +2464,7 @@ function renderAssignedInputs(wo) {
 function renderBasketList(filter) {
   const f   = (filter||'').trim().toLowerCase();
   // Input boleh dari KARKAS, PARTING, atau BONELESS (bahan baku marinasi) — MARINASI output tidak boleh
-  let list  = marinasiStock.filter(b => !b.basket_type || b.basket_type === 'KARKAS' || b.basket_type === 'PARTING');
+  let list  = marinasiStock.filter(b => !b.basket_type || b.basket_type === 'KARKAS' || b.basket_type === 'PARTING' || b.basket_type === 'THAWING');
   if (f) list = list.filter(b =>
     (b.basket_code||'').toLowerCase().includes(f) ||
     (b.product_master?.nama_produk||'').toLowerCase().includes(f)

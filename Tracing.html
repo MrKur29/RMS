@@ -122,8 +122,10 @@ a{text-decoration:none}
 .trace-node{border-radius:10px;background:#fafbfc;border:1px solid #eef0f2;padding:14px 16px;margin-bottom:10px}
 .trace-node.root{background:white;border:2px solid #0d9488;box-shadow:0 2px 10px rgba(13,148,136,.12)}
 .trace-node.origin-PROCESSING{border-left:5px solid #2563eb}
+.trace-node.origin-PROCESSING_MULTI{border-left:5px solid #9d174d}
 .trace-node.origin-KARKAS{border-left:5px solid #f59e0b}
 .trace-node.origin-SALDO_AWAL{border-left:5px solid #16a34a}
+.trace-node.origin-THAWING{border-left:5px solid #0891b2}
 .trace-node.origin-UNKNOWN{border-left:5px solid #9ca3af}
 .trace-node.origin-CYCLE{border-left:5px solid #dc2626}
 .tn-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:6px}
@@ -506,7 +508,7 @@ async function doTrace(){
     }
 
     const tree=await buildTraceNode(rootBasket.id,[],0);
-    const stats={levels:0,processing:0,karkas:0,saldoAwal:0,unknown:0};
+    const stats={levels:0,processing:0,karkas:0,saldoAwal:0,thawing:0,unknown:0};
     collectStats(tree,0,stats);
 
     area.innerHTML=`
@@ -515,6 +517,7 @@ async function doTrace(){
         <div class="schip"><b>${stats.processing}</b>Titik proses (WO)</div>
         <div class="schip"><b>${stats.karkas}</b>Sumber batch karkas</div>
         ${stats.saldoAwal?`<div class="schip"><b>${stats.saldoAwal}</b>Sumber saldo awal</div>`:''}
+        ${stats.thawing?`<div class="schip"><b>${stats.thawing}</b>Sumber thawing</div>`:''}
         ${stats.unknown?`<div class="schip"><b>${stats.unknown}</b>Sumber tidak diketahui</div>`:''}
       </div>
       <div class="panel"><div class="panel-body">${renderNode(tree,0,true)}</div></div>
@@ -528,9 +531,10 @@ async function doTrace(){
 function collectStats(node,depth,stats){
   if(!node)return;
   stats.levels=Math.max(stats.levels,depth+1);
-  if(node.origin==='PROCESSING')stats.processing++;
+  if(node.origin==='PROCESSING'||node.origin==='PROCESSING_MULTI')stats.processing++;
   if(node.origin==='KARKAS')stats.karkas++;
   if(node.origin==='SALDO_AWAL')stats.saldoAwal++;
+  if(node.origin==='THAWING')stats.thawing++;
   if(node.origin==='UNKNOWN')stats.unknown++;
   (node.sources||[]).forEach(s=>collectStats(s.node,depth+1,stats));
 }
@@ -546,6 +550,9 @@ function collectStats(node,depth,stats){
  * jadi output/byproduct WO manapun) -> tampilkan live_chicken_batches + carcass_baskets.
  * Berhenti juga di basket_type='SALDO_AWAL' (migration 49, stok opname cutover,
  * tidak terikat batch/WO sama sekali) -> tampilkan saldo_awal_sessions.
+ * Berhenti juga di basket_type='THAWING' (migration 54, output distribusi
+ * Thawing) -> tampilkan thawing_outputs + thawing_sessions asalnya. batch_id
+ * selalu NULL karena sumbernya Cold Storage/WMS, bukan ekor hidup.
  */
 async function buildTraceNode(basketId,path,depth){
   if(path.includes(basketId)){
@@ -581,17 +588,81 @@ async function buildTraceNode(basketId,path,depth){
     return node;
   }
 
-  // 1) Apakah basket ini output PRIMARY dari sebuah WO?
-  let{data:outRow,error:outErr}=await db.from('processing_outputs')
+  // 0b) Keranjang hasil distribusi Thawing (migration 54) juga tidak pernah
+  //     jadi output/byproduct WO manapun — root/leaf dari sisi rantai basket,
+  //     asalnya karung WMS di sesi Thawing (thawing_karung), bukan batch ayam.
+  if(basket.basket_type==='THAWING'){
+    node.origin='THAWING';
+    const{data:tOut,error:tErr}=await db.from('thawing_outputs')
+      .select('destinasi,kg,qty,tanggal_produksi,thawing_sessions(session_code,tanggal,jam_mulai,jam_selesai,catatan,created_by,users!created_by(nama))')
+      .eq('basket_id',basketId).maybeSingle();
+    if(tErr)console.error('[Tracing] thawing_outputs lookup gagal:',tErr);
+    node.thawing={output:tOut,session:tOut?.thawing_sessions};
+    return node;
+  }
+
+  // 0c) Keranjang by-product hasil "Timbang By-Product Hari Ini" (migration
+  //     56+57) — ditautkan lewat byproduct_collection_sessions, BUKAN lewat
+  //     processing_outputs. By-product tidak pernah ditimbang per WO di
+  //     lapangan (hanya sekali di akhir), jadi basket ini TIDAK PERNAH punya
+  //     baris processing_outputs sama sekali — cek di sini duluan sebelum
+  //     jatuh ke pengecekan processing_outputs di bawah.
+  const{data:byprodSession,error:byprodErr}=await db.from('byproduct_collection_sessions')
+    .select(`id,session_code,tanggal,tipe,total_qty,total_kg,
+      byproduct_session_contributions(order_id,processing_orders(order_code,tipe,tanggal,status))`)
+    .eq('basket_id',basketId).maybeSingle();
+  if(byprodErr)console.error('[Tracing] byproduct_collection_sessions lookup gagal:',byprodErr);
+
+  if(byprodSession){
+    node.origin='PROCESSING_MULTI';
+    node.byprodMeta={session_code:byprodSession.session_code,tanggal:byprodSession.tanggal};
+    node.processingList=(byprodSession.byproduct_session_contributions||[]).map(c=>({
+      order_code:c.processing_orders?.order_code,
+      tipe:c.processing_orders?.tipe,
+      tanggal:c.processing_orders?.tanggal,
+      status:c.processing_orders?.status,
+      qty:null,
+      kg:null,
+      workstations:[],
+      operator_nama:null
+    }));
+
+    // Basket sumber = gabungan input dari semua WO yang tertaut sesi ini
+    // (WO yang benar dikerjakan pada tanggal itu — lihat migration 57).
+    const orderIds=[...new Set((byprodSession.byproduct_session_contributions||[]).map(c=>c.order_id).filter(Boolean))];
+    const inputsByOrder=await Promise.all(orderIds.map(orderId=>
+      db.from('processing_inputs')
+        .select(`id,basket_id,qty_input,kg_input,kg_diambil,workstation_id,workstations(kode,nama),product_master(nama_produk)`)
+        .eq('order_id',orderId)
+        .then(({data,error})=>{
+          if(error)console.error('[Tracing] processing_inputs lookup gagal:',error);
+          return data||[];
+        })
+    ));
+    const allInputs=inputsByOrder.flat();
+    node.sources=await Promise.all(allInputs.map(async inp=>{
+      const childNode=await buildTraceNode(inp.basket_id,myPath,depth+1);
+      return{input:inp,node:childNode};
+    }));
+    return node;
+  }
+
+  // 1) Apakah basket ini output PRIMARY (atau BYPRODUCT lama) dari WO? Baris
+  //    processing_outputs dengan >1 order_id per basket_id di bawah ini
+  //    adalah jalur LAMA (migration 56, sebelum migration 57) — dipertahankan
+  //    sebagai fallback saja, alur saat ini (migration 57) selalu lewat
+  //    pengecekan byproduct_collection_sessions di atas.
+  let{data:outRows,error:outErr}=await db.from('processing_outputs')
     .select(`id,order_id,qty_output,kg_output,output_type,tanggal_produksi,workstation_id,worker_id,
       workstations(kode,nama),users!worker_id(nama),
       processing_orders(order_code,tipe,tanggal,status)`)
-    .eq('basket_id',basketId).maybeSingle();
+    .eq('basket_id',basketId);
   if(outErr)console.error('[Tracing] processing_outputs lookup gagal:',outErr);
+  outRows=outRows||[];
 
   let isByproduct=false;
-  let prod=outRow;
-  if(!prod){
+  let prod=outRows.length===1?outRows[0]:null;
+  if(!outRows.length){
     const{data:byRow,error:byErr}=await db.from('processing_byproducts')
       .select(`id,order_id,qty_byproduct,kg_byproduct,tanggal_produksi,workstation_id,worker_id,
         workstations(kode,nama),users!worker_id(nama),
@@ -601,7 +672,45 @@ async function buildTraceNode(basketId,path,depth){
     if(byRow){prod=byRow;isByproduct=true;}
   }
 
-  if(prod && prod.order_id){
+  if(outRows.length>1){
+    // Keranjang lahir dari sesi pengumpulan by-product (migration 56) —
+    // banyak WO menyumbang ke basket yang sama.
+    node.origin='PROCESSING_MULTI';
+    node.processingList=await Promise.all(outRows.map(async row=>{
+      let workstations=row.workstations?[row.workstations]:[];
+      if(!workstations.length){
+        const{data:woWs}=await db.from('wo_workstations').select('workstations(kode,nama)').eq('order_id',row.order_id);
+        workstations=(woWs||[]).map(w=>w.workstations).filter(Boolean);
+      }
+      return{
+        order_code:row.processing_orders?.order_code,
+        tipe:row.processing_orders?.tipe,
+        tanggal:row.processing_orders?.tanggal,
+        status:row.processing_orders?.status,
+        tanggal_produksi:row.tanggal_produksi,
+        qty:row.qty_output,
+        kg:row.kg_output,
+        workstations,
+        operator_nama:row.users?.nama||null
+      };
+    }));
+
+    // Basket sumber = gabungan (union) input dari SEMUA WO penyumbang.
+    const inputsByOrder=await Promise.all(outRows.map(row=>
+      db.from('processing_inputs')
+        .select(`id,basket_id,qty_input,kg_input,kg_diambil,workstation_id,workstations(kode,nama),product_master(nama_produk)`)
+        .eq('order_id',row.order_id)
+        .then(({data,error})=>{
+          if(error)console.error('[Tracing] processing_inputs lookup gagal:',error);
+          return data||[];
+        })
+    ));
+    const allInputs=inputsByOrder.flat();
+    node.sources=await Promise.all(allInputs.map(async inp=>{
+      const childNode=await buildTraceNode(inp.basket_id,myPath,depth+1);
+      return{input:inp,node:childNode};
+    }));
+  } else if(prod && prod.order_id){
     node.origin='PROCESSING';
     let workstations=prod.workstations?[prod.workstations]:[];
     if(!workstations.length){
@@ -697,6 +806,27 @@ function renderNode(node,depth,isRoot,inputInfo){
       </div>`;
   }
 
+  if(node.origin==='PROCESSING_MULTI'){
+    const list=node.processingList||[];
+    const bm=node.byprodMeta;
+    html+=`<div class="tn-wo-box">
+        <span class="badge b-lokasi">By-product — ditimbang sekali, terkait ${list.length} Work Order</span><br>
+        ${bm?`<b>Sesi Timbang:</b> ${esc(bm.session_code||'—')} &nbsp; <b>Tanggal:</b> ${fmtDate(bm.tanggal)}<br>
+        <span style="color:#6b7280;font-size:11.5px">Total qty/kg ditimbang sekaligus untuk seluruh wadah (lihat "Qty Awal"/"Kg Awal" di atas) — bukan per WO, karena memang tidak diukur per WO.</span>`:''}
+        ${list.map(p=>{
+          const tl=tipeLabel(p.tipe);
+          const wsText=(p.workstations||[]).map(w=>`${esc(w.kode)} — ${esc(w.nama)}`).join(', ');
+          return `<div style="margin-top:8px;padding-top:8px;border-top:1px dashed #e5e7eb">
+              <span class="badge ${tl.cls}">${tl.icon} ${esc(tl.label)}</span><br>
+              <b>WO:</b> ${esc(p.order_code||'—')} &nbsp; <b>Tanggal:</b> ${fmtDate(p.tanggal||p.tanggal_produksi)}
+              ${wsText?`<br><b>Workstation:</b> ${wsText}`:''}
+              ${p.operator_nama?`<br><b>Operator:</b> ${esc(p.operator_nama)}`:''}
+              ${(p.qty!=null||p.kg!=null)?`<br><b>Kontribusi:</b> ${fmt(p.qty)} · ${fmtKg(p.kg)}`:''}
+            </div>`;
+        }).join('')}
+      </div>`;
+  }
+
   if(node.origin==='KARKAS'){
     const k=node.karkas;
     const batch=k.batch;
@@ -725,8 +855,21 @@ function renderNode(node,depth,isRoot,inputInfo){
       </div>`;
   }
 
+  if(node.origin==='THAWING'){
+    const t=node.thawing||{};
+    const out=t.output;
+    const sess=t.session;
+    html+=`<div class="tn-karkas-box">
+        🧊 <b>Sumber Asal — Distribusi Thawing</b><br>
+        <b>Sesi:</b> ${esc(sess?.session_code||'—')} &nbsp; <b>Tanggal:</b> ${fmtDate(sess?.tanggal)}<br>
+        <b>Destinasi:</b> ${esc(out?.destinasi||'—')} &nbsp; <b>Qty/Kg Output:</b> ${fmt(out?.qty)} ${esc(b.product_master?.satuan_qty||'')} · ${fmtKg(out?.kg)}<br>
+        ${sess?.catatan?`<b>Catatan Sesi:</b> ${esc(sess.catatan)}<br>`:''}
+        <b>Dicatat oleh:</b> ${esc(sess?.users?.nama||'— (belum tercatat)')}
+      </div>`;
+  }
+
   if(node.origin==='UNKNOWN' && b.id){
-    html+=`<div class="tn-unknown-box">❓ Tidak ada data produksi (WO) atau batch karkas untuk keranjang ini — kemungkinan input manual / data lama, atau berasal dari modul yang tidak terhubung ke rantai basket (mis. By-product Karkas langsung, Thawing).</div>`;
+    html+=`<div class="tn-unknown-box">❓ Tidak ada data produksi (WO) atau batch karkas untuk keranjang ini — kemungkinan input manual / data lama, atau berasal dari modul yang tidak terhubung ke rantai basket (mis. By-product Karkas langsung).</div>`;
   }
 
   if(node.depthCut){
@@ -734,7 +877,7 @@ function renderNode(node,depth,isRoot,inputInfo){
   }
 
   if(node.sources && node.sources.length){
-    html+=`<div class="tn-sources-label">📥 Basket Sumber (${node.sources.length}) — seluruh input Work Order ini, relasi tercatat per-WO bukan per-basket individual</div>`;
+    html+=`<div class="tn-sources-label">📥 Basket Sumber (${node.sources.length}) — ${node.origin==='PROCESSING_MULTI'?'gabungan input dari seluruh Work Order penyumbang sesi ini':'seluruh input Work Order ini'}, relasi tercatat per-WO bukan per-basket individual</div>`;
     html+=`<div class="tn-children">`;
     node.sources.forEach(s=>{
       html+=renderNode(s.node,depth+1,false,s.input);

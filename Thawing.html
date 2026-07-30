@@ -509,13 +509,22 @@ tr:hover td{background:#f9fafb}
                     </select>
                   </div>
                   <div class="form-field">
+                    <label>Qty (<span id="unit-output-qty">satuan</span>)</label>
+                    <input type="number" id="inp-output-qty" placeholder="0" min="0" step="1">
+                  </div>
+                  <div class="form-field">
                     <label>Kg</label>
                     <input type="number" id="inp-output-kg" placeholder="0.00" min="0" step="0.01">
+                  </div>
+                  <div class="form-field">
+                    <label>Tgl Produksi</label>
+                    <input type="date" id="inp-output-tgl">
                   </div>
                   <div class="form-field btn-col" style="display:flex;align-items:flex-end">
                     <button class="btn btn-success rpa-edit-action" onclick="tambahOutput()">＋ Tambah</button>
                   </div>
                 </div>
+                <div class="item-warn" id="warn-output-item" style="display:none">⚠️ Item output wajib dipilih dari master produk (untuk generate basket). Ketik dan pilih dari daftar saran.</div>
               </div>
             </div>
 
@@ -808,7 +817,7 @@ function switchTab(tab) {
 async function loadProductMaster() {
   try {
     const { data } = await db.from('product_master')
-      .select('id,nama_produk,product_code,kategori')
+      .select('id,nama_produk,product_code,kategori,satuan_qty')
       .not('kategori', 'in', '("BYPRODUCT_KARKAS","BYPRODUCT_PARTING","BYPRODUCT_BONELESS")')
       .eq('aktif', true)
       .order('nama_produk');
@@ -1189,7 +1198,10 @@ function renderOutputs() {
         <tr>
           <th style="text-align:left;padding:7px 10px;font-size:11px;font-weight:700;color:#374151;background:#f8fafc;border-bottom:2px solid #e5e7eb">Item Output</th>
           <th style="text-align:left;padding:7px 10px;font-size:11px;font-weight:700;color:#374151;background:#f8fafc;border-bottom:2px solid #e5e7eb">Destinasi</th>
+          <th style="text-align:right;padding:7px 10px;font-size:11px;font-weight:700;color:#374151;background:#f8fafc;border-bottom:2px solid #e5e7eb">Qty</th>
           <th style="text-align:right;padding:7px 10px;font-size:11px;font-weight:700;color:#374151;background:#f8fafc;border-bottom:2px solid #e5e7eb">Kg</th>
+          <th style="text-align:left;padding:7px 10px;font-size:11px;font-weight:700;color:#374151;background:#f8fafc;border-bottom:2px solid #e5e7eb">Tgl Produksi</th>
+          <th style="text-align:left;padding:7px 10px;font-size:11px;font-weight:700;color:#374151;background:#f8fafc;border-bottom:2px solid #e5e7eb">Basket</th>
           <th style="width:40px;background:#f8fafc;border-bottom:2px solid #e5e7eb"></th>
         </tr>
       </thead>
@@ -1197,13 +1209,16 @@ function renderOutputs() {
         ${outputList.map(o => `<tr>
           <td style="padding:8px 10px;border-bottom:1px solid #f3f4f6">${o.item_name ? `<strong>${o.item_name}</strong>` : '<span style="color:#9ca3af;font-style:italic">—</span>'}</td>
           <td style="padding:8px 10px;border-bottom:1px solid #f3f4f6"><span class="dest-badge dest-${o.destinasi}">${destLabel(o.destinasi)}</span>${o.catatan?`<span style="font-size:11px;color:#9ca3af;margin-left:8px">${o.catatan}</span>`:''}</td>
+          <td style="padding:8px 10px;border-bottom:1px solid #f3f4f6;text-align:right">${o.qty!=null ? o.qty : '—'}</td>
           <td style="padding:8px 10px;border-bottom:1px solid #f3f4f6;text-align:right;font-weight:800">${fmtKg(o.kg)} kg</td>
+          <td style="padding:8px 10px;border-bottom:1px solid #f3f4f6">${o.tanggal_produksi ? fmtDate(o.tanggal_produksi) : '—'}</td>
+          <td style="padding:8px 10px;border-bottom:1px solid #f3f4f6"><code style="font-size:11px">${o.basket_id ? '🧺' : '—'}</code></td>
           <td style="padding:8px 10px;border-bottom:1px solid #f3f4f6;text-align:center"><button class="btn btn-ghost btn-sm" style="color:#dc2626;padding:4px 8px" onclick="hapusOutput('${o.id}')">🗑️</button></td>
         </tr>`).join('')}
         <tr>
-          <td style="padding:8px 10px;font-weight:800;color:#374151" colspan="2">Total Output</td>
+          <td style="padding:8px 10px;font-weight:800;color:#374151" colspan="3">Total Output</td>
           <td style="padding:8px 10px;text-align:right;font-weight:900;font-size:15px;color:#2563eb">${fmtKg(total)} kg</td>
-          <td></td>
+          <td colspan="3"></td>
         </tr>
       </tbody>
     </table>`;
@@ -1224,14 +1239,35 @@ function updateProgressBar() {
   fill.className = 'prog-fill' + (outputKg > inputKg ? ' warn' : '') + (outputKg > maxKg ? ' danger' : '');
 }
 
+async function generateThawingBasketCode() {
+  // Format: BT-YYMMDD-XXXX via DB function (WIB) — prefix Basket Thawing
+  const { data, error } = await db.rpc('generate_basket_code', { p_prefix: 'BT' });
+  if (error) throw error;
+  return data;
+}
+
 async function tambahOutput() {
-  const itemName = document.getElementById('inp-output-item').value.trim();
-  const dest     = document.getElementById('inp-dest').value;
-  const kg       = parseFloat(document.getElementById('inp-output-kg').value) || 0;
+  const itemName    = document.getElementById('inp-output-item').value.trim();
+  const dest        = document.getElementById('inp-dest').value;
+  const qty         = parseFloat(document.getElementById('inp-output-qty').value) || 0;
+  const kg          = parseFloat(document.getElementById('inp-output-kg').value) || 0;
+  const tglProduksi = document.getElementById('inp-output-tgl').value;
+  const warnEl      = document.getElementById('warn-output-item');
+  warnEl.style.display = 'none';
 
   if (!activeSession) { toast('Tidak ada sesi aktif.', 'error'); return; }
   if (!dest)   { toast('Pilih destinasi terlebih dahulu.', 'error'); return; }
+  if (qty <= 0) { toast('Qty output harus lebih dari 0.', 'error'); return; }
   if (kg <= 0) { toast('Kg output harus lebih dari 0.', 'error'); return; }
+  if (!tglProduksi) { toast('Tanggal produksi wajib diisi.', 'error'); return; }
+
+  // Resolve product_id dari item name — wajib match master, karena basket butuh product_id NOT NULL
+  const matchProd = outputItemSelected || (itemName ? findProduct(itemName) : null);
+  if (!matchProd) {
+    warnEl.style.display = '';
+    toast('Item output wajib dipilih dari master produk.', 'error');
+    return;
+  }
 
   // Validasi toleransi
   const inputKg   = parseFloat(activeSession.total_input_kg || 0);
@@ -1245,36 +1281,78 @@ async function tambahOutput() {
     return;
   }
 
-  // Resolve product_id dari item name
-  const matchProd = itemName ? findProduct(itemName) : null;
-
   try {
+    // 1. Generate basket code & buat basket baru (basket_type=THAWING)
+    const basketCode = await generateThawingBasketCode();
+    const { data: newBasket, error: bErr } = await db.from('baskets').insert({
+      basket_code:      basketCode,
+      basket_type:      'THAWING',
+      product_id:       matchProd.id,
+      batch_id:         null,          // asal Cold Storage/WMS, bukan ekor hidup
+      tanggal_produksi: tglProduksi,
+      lokasi:           dest,
+      status:           'AKTIF',
+      qty_awal:         qty,
+      qty_sisa:         qty,
+      kg_awal:          roundKg(kg),
+      kg_sisa:          roundKg(kg),
+      created_by:       currentUser.id
+    }).select('id,basket_code').single();
+    if (bErr) throw bErr;
+
+    // 2. Catat baris output, ditautkan ke basket
     const { error } = await db.from('thawing_outputs').insert({
-      session_id:  activeSession.id,
-      destinasi:   dest,
-      kg:          roundKg(kg),
-      item_name:   itemName || null,
-      product_id:  matchProd ? matchProd.id : null
+      session_id:       activeSession.id,
+      destinasi:        dest,
+      kg:                roundKg(kg),
+      qty,
+      tanggal_produksi:  tglProduksi,
+      item_name:         itemName || matchProd.nama_produk,
+      product_id:        matchProd.id,
+      basket_id:         newBasket.id
     });
     if (error) throw error;
+
     document.getElementById('inp-output-item').value = '';
     document.getElementById('inp-dest').value = '';
+    document.getElementById('inp-output-qty').value = '';
     document.getElementById('inp-output-kg').value = '';
+    document.getElementById('inp-output-tgl').value = '';
+    document.getElementById('unit-output-qty').textContent = 'satuan';
     outputItemSelected = null;
-    toast(`✅ Output ${itemName ? itemName + ' → ' : ''}${destLabel(dest)} ${fmtKg(kg)} kg ditambahkan.`, 'success');
+    toast(`✅ Output ${itemName} → ${destLabel(dest)} ${fmtKg(kg)} kg (${basketCode}) ditambahkan.`, 'success');
     await loadOutputs();
     await loadSummaryCards();
   } catch(e) {
     console.error(e);
-    toast('Gagal menambahkan output.', 'error');
+    toast('Gagal menambahkan output: ' + (e.message||e), 'error');
   }
 }
 
 async function hapusOutput(id) {
+  const o = outputList.find(x => x.id === id);
   if (!confirm('Hapus data output ini?')) return;
   try {
+    // Kalau baris ini sudah punya basket, pastikan basket-nya belum "disentuh"
+    // (belum diambil sebagai bahan baku di Parting/Boneless/Marinasi lain)
+    // sebelum ikut dihapus, supaya tidak menghapus basket yang sudah terpakai.
+    if (o?.basket_id) {
+      const { data: bsk } = await db.from('baskets')
+        .select('basket_code,qty_awal,qty_sisa,kg_awal,kg_sisa')
+        .eq('id', o.basket_id).maybeSingle();
+      if (bsk && (Number(bsk.qty_sisa) !== Number(bsk.qty_awal) || Number(bsk.kg_sisa) !== Number(bsk.kg_awal))) {
+        toast(`Basket ${bsk.basket_code} sudah terpakai sebagian di proses lain, tidak bisa dihapus.`, 'error', 4000);
+        return;
+      }
+    }
+
     const { error } = await db.from('thawing_outputs').delete().eq('id', id);
     if (error) throw error;
+
+    if (o?.basket_id) {
+      await db.from('baskets').delete().eq('id', o.basket_id);
+    }
+
     toast('Output dihapus.', 'info');
     await loadOutputs();
     await loadSummaryCards();
@@ -1488,17 +1566,22 @@ async function lihatDetailSesi(sessionId, sessionCode) {
           <thead><tr>
             <th style="text-align:left;padding:6px 8px;background:#f8fafc;border-bottom:1px solid #e5e7eb">Item Output</th>
             <th style="text-align:left;padding:6px 8px;background:#f8fafc;border-bottom:1px solid #e5e7eb">Destinasi</th>
+            <th style="text-align:right;padding:6px 8px;background:#f8fafc;border-bottom:1px solid #e5e7eb">Qty</th>
             <th style="text-align:right;padding:6px 8px;background:#f8fafc;border-bottom:1px solid #e5e7eb">Kg</th>
+            <th style="text-align:left;padding:6px 8px;background:#f8fafc;border-bottom:1px solid #e5e7eb">Tgl Produksi</th>
           </tr></thead>
           <tbody>
             ${outputs.map(o => `<tr>
               <td style="padding:6px 8px;border-bottom:1px solid #f3f4f6">${o.item_name ? `<strong>${o.item_name}</strong>` : '<span style="color:#9ca3af">—</span>'}</td>
               <td style="padding:6px 8px;border-bottom:1px solid #f3f4f6"><span class="dest-badge dest-${o.destinasi}">${destLabel(o.destinasi)}</span></td>
+              <td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;text-align:right">${o.qty!=null ? o.qty : '—'}</td>
               <td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;text-align:right;font-weight:700">${fmtKg(o.kg)} kg</td>
+              <td style="padding:6px 8px;border-bottom:1px solid #f3f4f6">${o.tanggal_produksi ? fmtDate(o.tanggal_produksi) : '—'}</td>
             </tr>`).join('')}
             <tr>
-              <td style="padding:6px 8px;font-weight:800" colspan="2">Total</td>
+              <td style="padding:6px 8px;font-weight:800" colspan="3">Total</td>
               <td style="padding:6px 8px;text-align:right;font-weight:900;color:#2563eb">${fmtKg(outputKg)} kg</td>
+              <td></td>
             </tr>
           </tbody>
         </table>` :
@@ -1609,6 +1692,7 @@ let acFocusIdx = -1;            // index item yang di-highlight dengan keyboard
 
 function onOutputItemInput(val) {
   outputItemSelected = null;    // reset pilihan saat user ketik ulang
+  document.getElementById('unit-output-qty').textContent = 'satuan';
   const q = val.trim().toLowerCase();
   const dd = document.getElementById('ac-output-dropdown');
 
@@ -1653,6 +1737,7 @@ function selectOutputItem(productId, productName) {
   const p = productMaster.find(x => x.id === productId);
   outputItemSelected = p || null;
   document.getElementById('inp-output-item').value = productName;
+  document.getElementById('unit-output-qty').textContent = p?.satuan_qty || 'satuan';
   closeOutputItemDropdown();
   // Pindah fokus ke destinasi
   setTimeout(() => document.getElementById('inp-dest').focus(), 50);

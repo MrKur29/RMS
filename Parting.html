@@ -402,6 +402,11 @@ a{text-decoration:none}
           <div class="sc-value" id="sc-pending">—</div>
           <div class="sc-sub">keranjang antri</div>
         </div>
+        <div class="summary-card c-red">
+          <div class="sc-label">Pending Keluar</div>
+          <div class="sc-value" id="sc-pending-keluar">—</div>
+          <div class="sc-sub">menunggu konfirmasi</div>
+        </div>
         <div class="summary-card c-purple">
           <div class="sc-label">Stok Lantai</div>
           <div class="sc-value" id="sc-stok">—</div>
@@ -624,6 +629,22 @@ a{text-decoration:none}
                 style="width:100%;padding:9px 12px;border:1.5px solid #d1d5db;border-radius:7px;font-size:13px;font-family:inherit;background:white;color:#111827">
                 <option value="">— Pilih Workstation —</option>
               </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- By-Product — ditimbang SEKALI di akhir per lini, bukan per WO/workstation (migration 56+57) -->
+        <div class="panel" id="byprod-sessions-panel" style="margin-bottom:14px">
+          <div class="panel-head">
+            <div class="panel-title">🧺 By-Product Parting</div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <span class="panel-pill info" id="byprod-sessions-pill">—</span>
+              <button class="btn btn-primary btn-sm" onclick="openTimbangByproduct()">⚖️ Timbang By-Product</button>
+            </div>
+          </div>
+          <div id="byprod-sessions-body">
+            <div class="empty" style="padding:20px">
+              <div class="e-icon">🧺</div>Belum ada by-product ditimbang hari ini.
             </div>
           </div>
         </div>
@@ -997,7 +1018,7 @@ a{text-decoration:none}
 <div class="modal-overlay" id="modal-record-output">
   <div class="modal-box">
     <div class="modal-title">📦 Catat Output Keranjang</div>
-    <div class="modal-desc">Catat hasil produksi untuk Work Order ini. Keranjang baru akan otomatis dibuat.</div>
+    <div class="modal-desc">Catat hasil produksi untuk Work Order ini. Keranjang baru akan otomatis dibuat. (By-product tidak dicatat di sini — lihat panel "⚖️ Timbang By-Product" di bawah.)</div>
     <div class="modal-info-box">
       <div class="modal-info-row"><span class="modal-info-label">WO</span><span class="modal-info-val" id="ro-wo-code">—</span></div>
       <div class="modal-info-row"><span class="modal-info-label">Workstation</span><span class="modal-info-val" id="ro-ws-name">—</span></div>
@@ -1030,6 +1051,89 @@ a{text-decoration:none}
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('modal-record-output')">Batal</button>
       <button class="btn btn-primary" id="ro-btn-ok" onclick="doRecordOutput()">💾 Simpan &amp; Generate Keranjang</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ==================== MODAL: TIMBANG BY-PRODUCT (migration 56+57) ==================== -->
+<div class="modal-overlay" id="modal-timbang-byproduct">
+  <div class="modal-box">
+    <div class="modal-title">⚖️ Timbang By-Product Hari Ini</div>
+    <div class="modal-desc">By-product ditumpuk campur sepanjang hari dari banyak WO dan ditimbang SEKALI di akhir. Isi total qty &amp; kg hasil timbangan wadah ini — sistem otomatis menautkan semua WO yang dikerjakan di lini Parting pada tanggal ini (tanpa rincian berat per WO).</div>
+    <div class="form-group">
+      <label>Produk By-Product <span style="color:#dc2626">*</span></label>
+      <select id="tby-produk">
+        <option value="">— Pilih Produk —</option>
+      </select>
+    </div>
+    <div class="form-group" style="margin-top:12px;margin-bottom:0">
+      <label>Tanggal <span style="color:#dc2626">*</span></label>
+      <input type="date" id="tby-tanggal">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px">
+      <div class="form-group" style="margin-bottom:0">
+        <label>Qty Total <span style="color:#dc2626">*</span></label>
+        <input type="number" id="tby-qty" placeholder="ekor/pcs" min="0.001" step="0.001">
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label>Kg Total <span style="color:#dc2626">*</span></label>
+        <input type="number" id="tby-kg" placeholder="kg" min="0.1" step="0.1">
+      </div>
+    </div>
+    <div id="tby-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-top:8px;display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-timbang-byproduct')">Batal</button>
+      <button class="btn btn-primary" id="tby-btn-ok" onclick="submitTimbangByproduct()">⚖️ Catat Timbangan &amp; Buat Keranjang</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ==================== MODAL: CATAT DAGING REJECT ==================== -->
+<div class="modal-overlay" id="modal-catat-reject">
+  <div class="modal-box">
+    <div class="modal-title">🗑️ Catat Daging Reject</div>
+    <div class="modal-desc">Daging yang dibuang/dimusnahkan — bukan produk jual. Tercatat permanen setelah PIN Supervisor dikonfirmasi.</div>
+    <div class="modal-info-box">
+      <div class="modal-info-row"><span class="modal-info-label">WO</span><span class="modal-info-val" id="rj-wo-code">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Workstation</span><span class="modal-info-val" id="rj-ws-name">—</span></div>
+    </div>
+    <div class="form-group">
+      <label>Produk (Opsional)</label>
+      <select id="rj-produk">
+        <option value="">— Umum / Tidak Spesifik —</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Jumlah Kg <span style="color:#dc2626">*</span></label>
+      <input type="number" id="rj-kg" placeholder="kg" min="0.1" step="0.1">
+    </div>
+    <div class="form-group">
+      <label>Alasan <span style="color:#dc2626">*</span></label>
+      <select id="rj-alasan">
+        <option value="">— Pilih Alasan —</option>
+        <option value="CACAT_FISIK">Cacat Fisik</option>
+        <option value="KONTAMINASI">Kontaminasi</option>
+        <option value="BUSUK">Busuk</option>
+        <option value="BENDA_ASING">Benda Asing</option>
+        <option value="LAIN_LAIN">Lain-lain</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Catatan (Opsional)</label>
+      <input type="text" id="rj-catatan" placeholder="Catatan tambahan…">
+    </div>
+    <div class="form-group" style="margin-bottom:0">
+      <label>PIN Supervisor <span style="color:#dc2626">*</span></label>
+      <input type="password" class="pin-input" id="rj-pin" placeholder="••••••" maxlength="6"
+             onkeydown="if(event.key==='Enter')doCatatReject()">
+      <div class="pin-error" id="rj-pin-err">PIN salah atau bukan Supervisor.</div>
+    </div>
+    <div id="rj-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-top:8px;display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-catat-reject')">Batal</button>
+      <button class="btn btn-red" id="rj-btn-ok" onclick="doCatatReject()">🗑️ Catat Reject</button>
     </div>
   </div>
 </div>
@@ -1138,6 +1242,7 @@ const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 // ============================================================
 let currentUser      = null;
 let pendingMovements = [];   // ke PARTING, status PENDING
+let outgoingPending  = [];   // dari PARTING, status PENDING (belum dikonfirmasi penerima)
 let partingStock     = [];   // baskets lokasi=PARTING, status=AKTIF
 let activeWOs        = [];   // processing_orders tipe=PARTING, IN_PROGRESS/OPEN
 let closedWOs        = [];   // processing_orders tipe=PARTING, COMPLETED/CANCELLED
@@ -1273,13 +1378,15 @@ function startClock() {
 async function loadAll() {
   await Promise.all([
     loadPendingMovements(),
+    loadOutgoingPending(),
     loadPartingStock(),
     loadActiveWOs(),
     loadClosedWOs(),
     loadWorkstations(),
     loadProducts(),
     loadWSWorkers(),
-    loadWSOutputsToday()
+    loadWSOutputsToday(),
+    loadByproductSessions()
   ]);
   renderSummaryCards();
   renderPendingList();
@@ -1287,6 +1394,7 @@ async function loadAll() {
   if (typeof renderWOTab === 'function') renderWOTab();
   if (typeof renderWSTab === 'function') renderWSTab();
   renderClosedWOs();
+  if (typeof renderByproductSessions === 'function') renderByproductSessions();
 }
 
 async function loadPendingMovements() {
@@ -1303,6 +1411,16 @@ async function loadPendingMovements() {
     .eq('status', 'PENDING')
     .order('created_at');
   if (!error) pendingMovements = data || [];
+}
+
+async function loadOutgoingPending() {
+  const { data, error } = await db
+    .from('basket_movements')
+    .select('id, basket_id, ke_lokasi, created_at')
+    .eq('dari_lokasi', 'PARTING')
+    .eq('status', 'PENDING')
+    .order('created_at');
+  if (!error) outgoingPending = data || [];
 }
 
 async function loadPartingStock() {
@@ -1549,6 +1667,7 @@ async function loadProducts() {
 // ============================================================
 function renderSummaryCards() {
   setEl('sc-pending',  pendingMovements.length);
+  setEl('sc-pending-keluar', outgoingPending.length);
   setEl('sc-stok',     partingStock.length);
   setEl('sc-wo-aktif', activeWOs.filter(w=>w.status==='IN_PROGRESS').length);
 
@@ -1777,6 +1896,9 @@ function renderStok() {
   const pill = document.getElementById('pill-stok-count');
   if (pill) pill.textContent = `${partingStock.length} item`;
 
+  const pendingOutMap = {};
+  outgoingPending.forEach(m => { pendingOutMap[m.basket_id] = m.ke_lokasi; });
+
   const f = (document.getElementById('stok-search')?.value||'').trim().toLowerCase();
   let list = partingStock;
   if (f) {
@@ -1818,8 +1940,12 @@ function renderStok() {
     </tr>`;
     if (isExp) {
       g.baskets.forEach((b, i) => {
+        const pendingDest = pendingOutMap[b.id];
+        const pendingBadge = pendingDest
+          ? `<span class="badge" style="background:#fee2e2;color:#991b1b;margin-left:6px">⏳ Menunggu Konfirmasi → ${lokasiLabel(pendingDest)}</span>`
+          : '';
         html += `<tr class="sub-row${i===lastIdx?' last-sub':''}">
-          <td colspan="2" style="font-family:monospace;font-weight:700">${b.basket_code}</td>
+          <td colspan="2" style="font-family:monospace;font-weight:700">${b.basket_code}${pendingBadge}</td>
           <td>${fmt(b.qty_sisa)} ekor &nbsp;·&nbsp; ${fmtKg(b.kg_sisa)}</td>
           <td>
             <button class="btn btn-ghost btn-sm" title="Cetak ulang label" onclick="event.stopPropagation();reprintStokLabel('${b.id}')">🖨️</button>
@@ -2091,6 +2217,15 @@ async function doPindahKeluar() {
     }
 
     // ── CASE: Pindah keluar ke lokasi lain (PENDING movement) ──
+    // Pola disamakan dengan Produksi Karkas (doSubmitPindah): keranjang TIDAK
+    // disentuh saat kirim — biarkan konfirmasi_movement/tolak_movement (RPC
+    // yang sama dipakai semua modul) yang menuntaskan qty_sisa saat penerima
+    // benar-benar konfirmasi atau tolak. Sebelumnya kurangiBasket() dipanggil
+    // di sini sehingga keranjang langsung hilang dari daftar Lantai Parting
+    // begitu dikirim (status bisa langsung HABIS), padahal belum tentu
+    // dikonfirmasi — beda dari Karkas yang tetap menampilkannya sampai ada
+    // keputusan penerima.
+    const isPartial = qtyPindah < b.qty_sisa;
     const { error: mvErr } = await db.from('basket_movements').insert({
       basket_id:    activePindahId,
       batch_id:     null,
@@ -2098,13 +2233,13 @@ async function doPindahKeluar() {
       ke_lokasi:    selectedDest,
       qty_pindah:   qtyPindah,
       kg_pindah:    kgPindah,
+      is_partial:   isPartial,
       status:       'PENDING',
       catatan:      catatan || null,
       submitted_by: currentUser.id
     });
     if (mvErr) throw mvErr;
 
-    await kurangiBasket();
     showToast(`Keranjang dikirim ke ${lokasiLabel(selectedDest)} (PENDING konfirmasi penerima)`, 'success');
     closeModal('modal-pindah');
     await loadAll();
@@ -2547,7 +2682,7 @@ function renderAssignedInputs(wo) {
 function renderBasketList(filter) {
   const f   = (filter||'').trim().toLowerCase();
   // Hanya KARKAS yang boleh jadi bahan baku input — PARTING/BONELESS output tidak boleh
-  let list  = partingStock.filter(b => !b.basket_type || b.basket_type === 'KARKAS');
+  let list  = partingStock.filter(b => !b.basket_type || b.basket_type === 'KARKAS' || b.basket_type === 'THAWING');
   if (f) list = list.filter(b =>
     (b.basket_code||'').toLowerCase().includes(f) ||
     (b.product_master?.nama_produk||'').toLowerCase().includes(f)
@@ -2918,6 +3053,7 @@ let selesaiWOId        = null;    // WO yang sedang dikonfirmasi "Selesai di WS 
 let currentOutputWOId  = null;
 let selectedOutputType = 'PRIMARY';
 let lastPrintBasket    = null;     // data for print modal
+let byproductSessions  = [];       // byproduct_collection_sessions tipe=PARTING, tanggal=hari ini
 
 // ============================================================
 // TAB 3 — DATA LOADERS
@@ -2950,6 +3086,27 @@ async function loadWSOutputsToday() {
     .eq('tanggal_produksi', todayStr)
     .order('created_at', { ascending: false });
   wsOutputsToday = data || [];
+}
+
+// Sesi pengumpulan by-product hari ini (per lini, bukan per workstation —
+// lihat migration 56). Tetap ambil sesi kemarin yg masih OPEN juga (jarang,
+// tapi kalau kelupaan ditutup, jangan sampai hilang dari layar).
+async function loadByproductSessions() {
+  const todayStr = todayISO();
+  const { data, error } = await db
+    .from('byproduct_collection_sessions')
+    .select(`
+      id, session_code, product_id, tanggal, status, total_qty, total_kg,
+      basket_id, revisi_count, closed_at,
+      product_master ( nama_produk, product_code ),
+      baskets ( basket_code, status, qty_awal, qty_sisa ),
+      byproduct_session_contributions ( order_id, processing_orders ( order_code ) )
+    `)
+    .eq('tipe', 'PARTING')
+    .or(`tanggal.eq.${todayStr},status.eq.OPEN`)
+    .order('tanggal', { ascending: false });
+  if (error) { console.error('[ByproductSessions] load gagal:', error); byproductSessions = []; return; }
+  byproductSessions = data || [];
 }
 
 // ============================================================
@@ -3073,6 +3230,7 @@ function renderWSWOList() {
         '<td>' + statusBadge(wo.status) + '</td>' +
         '<td><div style="display:flex;gap:4px;flex-wrap:wrap">' +
           (canRecord && !sudahSelesai ? '<button class="btn btn-primary btn-sm" onclick="openRecordOutput(\'' + wo.id + '\')">📦 Catat</button>' : '') +
+          (canRecord && !sudahSelesai ? '<button class="btn btn-outline btn-sm" style="color:#dc2626;border-color:#fca5a5" onclick="openCatatReject(\'' + wo.id + '\')">🗑️ Reject</button>' : '') +
           (!sudahSelesai && canRecord
             ? '<button class="btn btn-green btn-sm" onclick="openSelesaiDiWS(\'' + wo.id + '\')">✅ Selesai</button>'
             : selesaiLabel) +
@@ -3186,9 +3344,12 @@ function openRecordOutput(woId) {
     : '—';
   setEl('ro-progress', `${fmtKg(actualKg)} / ${fmtKg(wo.target_kg)} (${pct}%)`);
 
-  // Produk dropdown — CU, EXT, PART, BYPRODUCT_PARTING, BYPRODUCT_BONELESS
+  // Produk dropdown — CU, EXT, PART. Kategori BYPRODUCT_* SENGAJA dikeluarkan
+  // (migration 57): by-product tidak pernah ditimbang per WO di lapangan,
+  // jadi tidak boleh dipilih di sini. Pencatatannya lewat panel "Timbang
+  // By-Product Hari Ini" (sekali di akhir, per lini, bukan per WO).
   const prodList = allProducts.filter(p =>
-    ['CU', 'EXT', 'PART', 'BYPRODUCT_PARTING', 'BYPRODUCT_BONELESS'].includes(p.kategori)
+    ['CU', 'EXT', 'PART'].includes(p.kategori)
   );
   const prodSel = document.getElementById('ro-produk');
   prodSel.innerHTML = '<option value="">— Pilih Produk —</option>'
@@ -3212,6 +3373,103 @@ function selectOutputType(type) {
   const btnB = document.getElementById('ro-type-byproduct');
   if (btnP) { btnP.className = (type === 'PRIMARY')   ? 'btn btn-primary' : 'btn btn-outline'; btnP.style.flex='1'; }
   if (btnB) { btnB.className = (type === 'BYPRODUCT') ? 'btn btn-primary' : 'btn btn-outline'; btnB.style.flex='1'; }
+}
+
+// ============================================================
+// DAGING REJECT — catat langsung, PIN Supervisor embedded
+// ============================================================
+let currentRejectWOId = null;
+
+function openCatatReject(woId) {
+  currentRejectWOId = woId;
+  const wo = activeWOs.find(w => w.id === woId);
+  if (!wo) return;
+
+  setEl('rj-wo-code', wo.order_code);
+  const ws = allWorkstations.find(w => w.id === selectedWSId);
+  setEl('rj-ws-name', ws ? `${ws.kode} — ${ws.nama}` : '—');
+
+  const prodSel = document.getElementById('rj-produk');
+  prodSel.innerHTML = '<option value="">— Umum / Tidak Spesifik —</option>'
+    + allProducts.map(p => `<option value="${p.id}">${p.nama_produk} (${p.product_code})</option>`).join('');
+
+  document.getElementById('rj-kg').value      = '';
+  document.getElementById('rj-alasan').value  = '';
+  document.getElementById('rj-catatan').value = '';
+  document.getElementById('rj-pin').value     = '';
+  document.getElementById('rj-pin-err').style.display = 'none';
+  showErr('rj-err', '');
+  openModal('modal-catat-reject');
+}
+
+async function doCatatReject() {
+  const produkId = document.getElementById('rj-produk').value || null;
+  const kg       = parseFloat(document.getElementById('rj-kg').value);
+  const alasan   = document.getElementById('rj-alasan').value;
+  const catatan  = document.getElementById('rj-catatan').value.trim();
+  const pin      = document.getElementById('rj-pin').value.trim();
+  const pinErr   = document.getElementById('rj-pin-err');
+  pinErr.style.display = 'none';
+  showErr('rj-err', '');
+
+  if (!kg || kg <= 0)   { showErr('rj-err', 'Jumlah kg harus lebih dari 0.'); return; }
+  if (!alasan)          { showErr('rj-err', 'Alasan wajib dipilih.'); return; }
+  if (!pin || pin.length < 4) { pinErr.textContent = 'PIN minimal 4 digit.'; pinErr.style.display = 'block'; return; }
+  if (!currentRejectWOId) { showErr('rj-err', 'WO tidak valid.'); return; }
+
+  const btn = document.getElementById('rj-btn-ok');
+  btn.disabled = true; btn.textContent = 'Menyimpan…';
+
+  try {
+    const sup = await verifySupervisorPinRevisi(pin);
+    if (!sup) { pinErr.textContent = 'PIN salah atau bukan Supervisor.'; pinErr.style.display = 'block'; return; }
+
+    const nowIso = new Date().toISOString();
+    const { error } = await db.from('processing_rusak').insert({
+      order_id:        currentRejectWOId,
+      workstation_id:  selectedWSId,
+      product_id:      produkId,
+      jumlah_kg:       Number(kg.toFixed(2)),
+      alasan,
+      catatan:         catatan || null,
+      created_by:      currentUser.id,
+      approved_by:     sup.id,
+      approved_at:     nowIso
+    });
+    if (error) throw error;
+
+    showToast(`✅ Reject ${fmtKg(kg)} dicatat & dikonfirmasi ${sup.nama}.`, 'success');
+    closeModal('modal-catat-reject');
+    if (wsDetailWOId === currentRejectWOId) await renderWSDetailContent(currentRejectWOId);
+  } catch(e) {
+    console.error(e);
+    showErr('rj-err', 'Gagal menyimpan: ' + (e.message || e));
+  } finally {
+    btn.disabled = false; btn.textContent = '🗑️ Catat Reject';
+  }
+}
+
+function hapusReject(id) {
+  showRevisiPin({
+    title: '🗑️ Hapus Catatan Reject',
+    desc: 'Baris reject ini akan dihapus permanen dari rekap. Alasan wajib diisi.',
+    requireAlasan: true,
+    onConfirm: async (sup, alasan) => {
+      try {
+        const { error } = await db.from('processing_rusak').delete().eq('id', id);
+        if (error) throw error;
+        showToast(`Catatan reject dihapus oleh ${sup.nama}.`, 'info');
+        if (wsDetailWOId) await renderWSDetailContent(wsDetailWOId);
+      } catch(e) {
+        console.error(e);
+        showToast('Gagal hapus: ' + (e.message || e), 'error');
+      }
+    }
+  });
+}
+
+function rejectAlasanLabel(a) {
+  return { CACAT_FISIK:'Cacat Fisik', KONTAMINASI:'Kontaminasi', BUSUK:'Busuk', BENDA_ASING:'Benda Asing', LAIN_LAIN:'Lain-lain' }[a] || (a || '—');
 }
 
 // ============================================================
@@ -3254,12 +3512,20 @@ async function doRecordOutput() {
   btn.disabled = true; btn.textContent = 'Menyimpan…';
 
   try {
-    // 1. Generate basket code
-    const basketCode = await generatePRTBasketCode();
-
-    // 2. Get product info for label; auto-derive output_type from kategori
+    // Auto-derive output_type dari kategori produk
     const produk = allProducts.find(p => p.id === produkId) || {};
     const autoOutputType = ['BYPRODUCT_KARKAS','BYPRODUCT_PARTING','BYPRODUCT_BONELESS'].includes(produk.kategori) ? 'BYPRODUCT' : 'PRIMARY';
+
+    // By-product tidak pernah ditimbang per WO di lapangan (migration 57) —
+    // dropdown produk di atas sudah menyaring kategori BYPRODUCT_* keluar,
+    // jadi cabang ini seharusnya tidak pernah kena. Jaga-jaga saja.
+    if (autoOutputType === 'BYPRODUCT') {
+      showErr('ro-err', 'Produk by-product tidak dicatat per WO. Gunakan panel "⚖️ Timbang By-Product Hari Ini".');
+      return;
+    }
+
+    // 1. Generate basket code
+    const basketCode = await generatePRTBasketCode();
 
     // 3. Insert basket baru (lokasi PARTING, status AKTIF)
     const { data: newBasket, error: bErr } = await db
@@ -3337,6 +3603,270 @@ async function doRecordOutput() {
   } finally {
     btn.disabled = false;
     btn.textContent = '💾 Simpan & Generate Keranjang';
+  }
+}
+
+// ============================================================
+// TAB 3 — BY-PRODUCT: TIMBANG SEKALI DI AKHIR (migration 56 + 57)
+// By-product Parting ditumpuk campur ke 1 wadah fisik per lini sepanjang
+// hari — TIDAK ditimbang per WO. Operator/kepala produksi menimbang total
+// SEKALI di akhir (saat wadah selesai/penuh) lewat panel ini. Sistem
+// otomatis menautkan SEMUA WO yang benar dikerjakan di lini Parting pada
+// tanggal itu sebagai kemungkinan sumber — tidak ada rincian berat per WO
+// karena memang tidak pernah diukur segitunya.
+// ============================================================
+
+// WO (tipe=PARTING) yang benar dikerjakan pada tanggal tertentu, diambil
+// dari processing_inputs & processing_outputs yang tanggal_produksi =
+// tanggal itu (bukan tanggal nominal WO — WO bisa berjalan lintas hari).
+async function findActiveWOsOnDate(tanggal) {
+  const [{ data: inpRows, error: inpErr }, { data: outRows, error: outErr }] = await Promise.all([
+    db.from('processing_inputs')
+      .select('order_id, processing_orders!inner(order_code, tipe)')
+      .eq('tanggal_produksi', tanggal).eq('processing_orders.tipe', 'PARTING'),
+    db.from('processing_outputs')
+      .select('order_id, processing_orders!inner(order_code, tipe)')
+      .eq('tanggal_produksi', tanggal).eq('processing_orders.tipe', 'PARTING')
+  ]);
+  if (inpErr) console.error('[Byproduct] findActiveWOsOnDate inputs gagal:', inpErr);
+  if (outErr) console.error('[Byproduct] findActiveWOsOnDate outputs gagal:', outErr);
+  const map = new Map();
+  [...(inpRows || []), ...(outRows || [])].forEach(r => {
+    if (r.order_id && !map.has(r.order_id)) map.set(r.order_id, r.processing_orders?.order_code);
+  });
+  return Array.from(map.entries()).map(([order_id, order_code]) => ({ order_id, order_code }));
+}
+
+function openTimbangByproduct() {
+  const sel = document.getElementById('tby-produk');
+  if (sel) {
+    const prodList = allProducts.filter(p => ['BYPRODUCT_PARTING', 'BYPRODUCT_BONELESS'].includes(p.kategori));
+    sel.innerHTML = '<option value="">— Pilih Produk —</option>'
+      + prodList.map(p => `<option value="${p.id}">${p.nama_produk} (${p.product_code})</option>`).join('');
+  }
+  const tglEl = document.getElementById('tby-tanggal');
+  if (tglEl) tglEl.value = todayISO();
+  document.getElementById('tby-qty').value = '';
+  document.getElementById('tby-kg').value  = '';
+  showErr('tby-err', '');
+  openModal('modal-timbang-byproduct');
+}
+
+async function submitTimbangByproduct() {
+  const produkId = document.getElementById('tby-produk').value;
+  const tanggal  = document.getElementById('tby-tanggal').value;
+  const qty      = parseFloat(document.getElementById('tby-qty').value);
+  const kg       = parseFloat(document.getElementById('tby-kg').value);
+  showErr('tby-err', '');
+
+  if (!produkId)      { showErr('tby-err', 'Pilih produk by-product.');        return; }
+  if (!tanggal)        { showErr('tby-err', 'Tanggal wajib diisi.');            return; }
+  if (!qty || qty<=0)  { showErr('tby-err', 'Qty total harus lebih dari 0.');   return; }
+  if (!kg  || kg<=0)   { showErr('tby-err', 'Kg total harus lebih dari 0.');    return; }
+
+  const btn = document.getElementById('tby-btn-ok');
+  btn.disabled = true; btn.textContent = 'Menyimpan…';
+  try {
+    const produk = allProducts.find(p => p.id === produkId) || {};
+
+    // Sudah pernah ditimbang & ditutup utk (produk,tanggal) ini?
+    const { data: existing, error: exErr } = await db
+      .from('byproduct_collection_sessions')
+      .select('id, status, session_code')
+      .eq('tipe', 'PARTING').eq('product_id', produkId).eq('tanggal', tanggal)
+      .maybeSingle();
+    if (exErr) throw exErr;
+    if (existing && existing.status === 'CLOSED') {
+      showErr('tby-err', `${produk.nama_produk || 'Produk ini'} tanggal ${tanggal} sudah ditimbang (${existing.session_code}). Gunakan "Revisi" di daftar bawah kalau perlu koreksi.`);
+      return;
+    }
+
+    const sources = await findActiveWOsOnDate(tanggal);
+
+    const basketCode = await generatePRTBasketCode();
+    const { data: newBasket, error: bErr } = await db
+      .from('baskets')
+      .insert({
+        basket_code:      basketCode,
+        basket_type:      'PARTING',
+        product_id:       produkId,
+        batch_id:         null,
+        tanggal_produksi: tanggal,
+        lokasi:           'PARTING',
+        status:           'AKTIF',
+        qty_awal:         qty,
+        qty_sisa:         qty,
+        kg_awal:          Number(kg.toFixed(1)),
+        kg_sisa:          Number(kg.toFixed(1)),
+        created_by:       currentUser.id
+      })
+      .select('id').single();
+    if (bErr) throw bErr;
+
+    let sessionId;
+    if (existing) {
+      // Reuse baris dari revisi sebelumnya (status OPEN, tinggal ditutup ulang)
+      sessionId = existing.id;
+      const { error: updErr } = await db.from('byproduct_collection_sessions').update({
+        total_qty: qty, total_kg: Number(kg.toFixed(1)),
+        status: 'CLOSED', basket_id: newBasket.id,
+        closed_by: currentUser.id, closed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }).eq('id', sessionId);
+      if (updErr) throw updErr;
+      await db.from('byproduct_session_contributions').delete().eq('session_id', sessionId);
+    } else {
+      const { data: code, error: codeErr } = await db.rpc('generate_byproduct_session_code', { p_tipe: 'PARTING' });
+      if (codeErr) throw codeErr;
+      const { data: created, error: insErr } = await db
+        .from('byproduct_collection_sessions')
+        .insert({
+          session_code: code, tipe: 'PARTING', product_id: produkId, tanggal,
+          status: 'CLOSED', total_qty: qty, total_kg: Number(kg.toFixed(1)),
+          basket_id: newBasket.id, opened_by: currentUser.id,
+          closed_by: currentUser.id, closed_at: new Date().toISOString()
+        })
+        .select('id').single();
+      if (insErr) throw insErr;
+      sessionId = created.id;
+    }
+
+    // Tautkan semua WO yang benar dikerjakan tanggal itu — penanda saja,
+    // tidak ada rincian berat per WO (memang tidak pernah diukur).
+    if (sources.length) {
+      await db.from('byproduct_session_contributions').insert(sources.map(s => ({
+        session_id:       sessionId,
+        order_id:         s.order_id,
+        tanggal_produksi: tanggal,
+        created_by:       currentUser.id
+      })));
+    }
+
+    lastPrintBasket = {
+      basket_code:  basketCode,
+      produk_name:  produk.nama_produk || '—',
+      produk_code:  produk.product_code || '—',
+      qty, kg: Number(kg.toFixed(1)),
+      wo_code:      sources.length ? `${sources.length} WO (${sources.map(s=>s.order_code).filter(Boolean).join(', ')})` : 'Tidak ada WO terkait tanggal ini',
+      wo_catatan:   '',
+      ws_kode:      '—',
+      tanggal,
+      output_type:  'BYPRODUCT',
+      worker_name:  currentUser.nama
+    };
+
+    showToast(`Keranjang ${basketCode} dibuat dari timbangan by-product ${tanggal}.`, 'success');
+    closeModal('modal-timbang-byproduct');
+    await loadAll();
+    showPrintModal(lastPrintBasket);
+  } catch (e) {
+    console.error(e);
+    showErr('tby-err', 'Gagal: ' + (e.message || ''));
+  } finally {
+    btn.disabled = false; btn.textContent = '⚖️ Catat Timbangan & Buat Keranjang';
+  }
+}
+
+function renderByproductSessions() {
+  const body = document.getElementById('byprod-sessions-body');
+  const pill = document.getElementById('byprod-sessions-pill');
+  if (!body) return;
+
+  if (!byproductSessions.length) {
+    body.innerHTML = '<div class="empty" style="padding:20px"><div class="e-icon">🧺</div>Belum ada by-product ditimbang hari ini.</div>';
+    if (pill) pill.textContent = '0';
+    return;
+  }
+
+  const closedCount = byproductSessions.filter(s => s.status === 'CLOSED').length;
+  if (pill) pill.textContent = `${closedCount} tercatat`;
+
+  const canRevisi = RPA_PERM.canApprove(currentUser?.moduleRole) || currentUser?.role === 'SUPERVISOR' || currentUser?.is_system_admin;
+
+  body.innerHTML = byproductSessions.map(s => {
+    const woCodesSet = new Set((s.byproduct_session_contributions || []).map(c => c.processing_orders?.order_code).filter(Boolean));
+    const woCount = woCodesSet.size;
+    const woList = Array.from(woCodesSet).join(', ') || '—';
+    const isOpen = s.status === 'OPEN';
+    return `
+      <div style="padding:12px 16px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <div>
+          <div style="font-weight:700;font-size:13px;color:#111827">${s.product_master?.nama_produk || '—'}
+            <span class="panel-pill ${isOpen ? 'info' : 'ok'}" style="margin-left:6px">${isOpen ? 'MENUNGGU TIMBANG ULANG' : 'CLOSED'}</span>
+          </div>
+          <div style="font-size:11px;color:#6b7280;margin-top:2px">
+            ${s.session_code} (${fmtDate(s.tanggal)}) · ${fmt(s.total_qty)} ekor / ${fmtKg(s.total_kg)} · terkait ${woCount} WO (${woList}) — tidak diukur per WO
+            ${!isOpen && s.baskets ? ` · Keranjang <strong style="font-family:monospace">${s.baskets.basket_code}</strong>` : ''}
+          </div>
+        </div>
+        <div style="display:flex;gap:8px">
+          ${isOpen ? `<span style="font-size:11px;color:#9ca3af">Isi ulang lewat form "Timbang By-Product" di atas</span>` : ''}
+          ${!isOpen && canRevisi
+            ? `<button class="btn btn-outline btn-sm" onclick="openRevisiSesiByproduct('${s.id}')">🔑 Revisi</button>`
+            : ''}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+async function openRevisiSesiByproduct(sessionId) {
+  const session = byproductSessions.find(s => s.id === sessionId);
+  if (!session) return;
+  if (session.status !== 'CLOSED') { showToast('Sesi ini masih menunggu timbang ulang.', 'error'); return; }
+  const b = session.baskets;
+  if (!b || b.status !== 'AKTIF' || Number(b.qty_sisa) !== Number(b.qty_awal)) {
+    showToast('Keranjang hasil timbangan ini sudah bergerak/berkurang — tidak bisa direvisi.', 'error');
+    return;
+  }
+  showRevisiPin({
+    title: '🔑 Revisi Timbangan By-Product',
+    desc: `Timbangan ${session.session_code} akan dibatalkan. Keranjang ${b.basket_code} akan dihapus. Setelah ini, isi ulang lewat form "Timbang By-Product Hari Ini" dengan produk & tanggal yang sama.`,
+    requireAlasan: true,
+    onConfirm: (sup, alasan) => doRevisiSesiByproduct(sessionId, sup, alasan)
+  });
+}
+
+async function doRevisiSesiByproduct(sessionId, sup, alasan) {
+  try {
+    const { data: session, error: sErr } = await db
+      .from('byproduct_collection_sessions')
+      .select('id, session_code, status, basket_id, revisi_count, baskets(id, basket_code, status, qty_awal, qty_sisa)')
+      .eq('id', sessionId).single();
+    if (sErr) throw sErr;
+    if (session.status !== 'CLOSED' || !session.basket_id) { showToast('Sesi ini sudah menunggu timbang ulang.', 'error'); return; }
+    const b = session.baskets;
+    if (!b || b.status !== 'AKTIF' || Number(b.qty_sisa) !== Number(b.qty_awal)) {
+      showToast('Keranjang hasil timbangan ini sudah bergerak/berkurang — tidak bisa direvisi.', 'error');
+      return;
+    }
+
+    await db.from('baskets').delete().eq('id', session.basket_id);
+    // Kontribusi lama (link WO) dihapus juga — akan di-derive ulang saat
+    // timbang ulang lewat submitTimbangByproduct().
+    await db.from('byproduct_session_contributions').delete().eq('session_id', sessionId);
+
+    await db.from('byproduct_session_revisi_log').insert({
+      session_id:       sessionId,
+      basket_id_lama:   session.basket_id,
+      basket_code_lama: b.basket_code,
+      revisi_by:        sup.id,
+      alasan
+    });
+
+    await db.from('byproduct_collection_sessions').update({
+      status:       'OPEN',
+      basket_id:    null,
+      closed_by:    null,
+      closed_at:    null,
+      revisi_count: (session.revisi_count || 0) + 1
+    }).eq('id', sessionId);
+
+    showToast(`Timbangan ${session.session_code} dibatalkan — isi ulang di form "Timbang By-Product".`, 'success');
+    closeModal('modal-revisi-pin');
+    await loadAll();
+  } catch (e) {
+    console.error(e);
+    showToast('Gagal revisi: ' + (e.message || ''), 'error');
   }
 }
 
@@ -3457,8 +3987,19 @@ async function renderWSDetailContent(woId) {
       .eq('order_id', woId)
       .order('created_at', { ascending: false });
 
+    // Fetch reject segar
+    const { data: rejects } = await db.from('processing_rusak')
+      .select(`
+        id, jumlah_kg, alasan, catatan, created_at,
+        product_master ( nama_produk, product_code ),
+        users!approved_by ( nama )
+      `)
+      .eq('order_id', woId)
+      .order('created_at', { ascending: false });
+
     const iList = inputs  || [];
     const oList = outputs || [];
+    const rList = rejects || [];
 
     // ── Cek kaitan basket via basket_movements ──
     const basketIds = [
@@ -3597,6 +4138,30 @@ async function renderWSDetailContent(woId) {
         }).join('') +
         '</tbody></table></div>'
       : '<div class="empty" style="padding:14px 0"><div class="e-icon" style="font-size:20px">📦</div>Belum ada output produksi untuk WO ini.</div>') +
+    '</div>' +
+    // ── DAGING REJECT ──
+    '<div style="border-top:1px solid #e5e7eb;padding:12px 16px 12px">' +
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">' +
+        '<div style="font-size:12px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:.5px">🗑️ Daging Reject</div>' +
+        (rList.length ? '<span class="panel-pill alert">' + rList.length + ' catatan · ' + fmtKg(rList.reduce((s,r)=>s+(Number(r.jumlah_kg)||0),0)) + '</span>' : '') +
+      '</div>' +
+      (rList.length ?
+        '<div class="tbl-wrap"><table class="tbl"><thead><tr>' +
+          '<th>Produk</th><th>Kg</th><th>Alasan</th><th>Catatan</th><th>Dikonfirmasi Oleh</th><th>Aksi</th>' +
+        '</tr></thead><tbody>' +
+        rList.map(function(r) {
+          const pm2 = r.product_master || {};
+          return '<tr>' +
+            '<td>' + (pm2.nama_produk || '<span style="color:#9ca3af;font-style:italic">Umum</span>') + '</td>' +
+            '<td><strong style="color:#dc2626">' + fmtKg(r.jumlah_kg) + '</strong></td>' +
+            '<td>' + rejectAlasanLabel(r.alasan) + '</td>' +
+            '<td style="font-size:12px;color:#6b7280">' + (r.catatan || '—') + '</td>' +
+            '<td style="font-size:12px">' + (r.users ? r.users.nama : '—') + '</td>' +
+            '<td><button class="btn btn-red btn-sm" onclick="hapusReject(\'' + r.id + '\')">🗑️</button></td>' +
+          '</tr>';
+        }).join('') +
+        '</tbody></table></div>'
+      : '<div class="empty" style="padding:14px 0"><div class="e-icon" style="font-size:20px">🗑️</div>Belum ada daging reject tercatat untuk WO ini.</div>') +
     '</div>';
 
 
