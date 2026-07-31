@@ -1024,7 +1024,7 @@ a{text-decoration:none}
 <div class="modal-overlay" id="modal-record-output">
   <div class="modal-box">
     <div class="modal-title">📦 Catat Output Keranjang</div>
-    <div class="modal-desc">Catat hasil produksi untuk Work Order ini. Keranjang baru akan otomatis dibuat. (By-product tidak dicatat di sini — lihat panel "⚖️ Timbang By-Product" di bawah.)</div>
+    <div class="modal-desc">Catat hasil produksi untuk Work Order ini. Keranjang baru akan otomatis dibuat. (By-product juga bisa dicatat di sini per WO/WS — terpisah dan tidak dijumlahkan dengan panel "⚖️ Timbang By-Product" di bawah, yang merupakan agregat timbangan harian per lini.)</div>
     <div class="modal-info-box">
       <div class="modal-info-row"><span class="modal-info-label">WO</span><span class="modal-info-val" id="ro-wo-code">—</span></div>
       <div class="modal-info-row"><span class="modal-info-label">Workstation</span><span class="modal-info-val" id="ro-ws-name">—</span></div>
@@ -3389,12 +3389,14 @@ function openRecordOutput(woId) {
     : '—';
   setEl('ro-progress', `${fmtKg(actualKg)} / ${fmtKg(wo.target_kg)} (${pct}%)`);
 
-  // Produk dropdown — CU, EXT, PART. Kategori BYPRODUCT_* SENGAJA dikeluarkan
-  // (migration 57): by-product tidak pernah ditimbang per WO di lapangan,
-  // jadi tidak boleh dipilih di sini. Pencatatannya lewat panel "Timbang
-  // By-Product Hari Ini" (sekali di akhir, per lini, bukan per WO).
+  // Produk dropdown — CU, EXT, PART, + BYPRODUCT_PARTING/BYPRODUCT_BONELESS.
+  // Sejak 2026-07-31: by-product BOLEH lagi dicatat di sini per WO/WS (mis.
+  // WO yang target produknya sendiri produk by-product), sebagai jalur
+  // TAMBAHAN yang independen dari panel "⚖️ Timbang By-Product Hari Ini"
+  // (agregat harian per lini). Dua jalur ini sengaja TIDAK saling dijumlahkan
+  // — sama seperti Boneless.html, lihat [[project_byproduct_ws_input_reenabled_2026_07_31]].
   const prodList = allProducts.filter(p =>
-    ['CU', 'EXT', 'PART'].includes(p.kategori)
+    ['CU', 'EXT', 'PART', 'BYPRODUCT_PARTING', 'BYPRODUCT_BONELESS'].includes(p.kategori)
   );
   const prodSel = document.getElementById('ro-produk');
   prodSel.innerHTML = '<option value="">— Pilih Produk —</option>'
@@ -3560,14 +3562,8 @@ async function doRecordOutput() {
     // Auto-derive output_type dari kategori produk
     const produk = allProducts.find(p => p.id === produkId) || {};
     const autoOutputType = ['BYPRODUCT_KARKAS','BYPRODUCT_PARTING','BYPRODUCT_BONELESS'].includes(produk.kategori) ? 'BYPRODUCT' : 'PRIMARY';
-
-    // By-product tidak pernah ditimbang per WO di lapangan (migration 57) —
-    // dropdown produk di atas sudah menyaring kategori BYPRODUCT_* keluar,
-    // jadi cabang ini seharusnya tidak pernah kena. Jaga-jaga saja.
-    if (autoOutputType === 'BYPRODUCT') {
-      showErr('ro-err', 'Produk by-product tidak dicatat per WO. Gunakan panel "⚖️ Timbang By-Product Hari Ini".');
-      return;
-    }
+    // Sejak 2026-07-31 by-product BOLEH dicatat lewat sini (jalur tambahan,
+    // independen dari agregat harian "Timbang By-Product") — tidak diblok lagi.
 
     // 1. Generate basket code
     const basketCode = await generatePRTBasketCode();
@@ -3885,28 +3881,52 @@ async function doRevisiSesiByproduct(sessionId, sup, alasan) {
       return;
     }
 
-    await db.from('baskets').delete().eq('id', session.basket_id);
-    // Kontribusi lama (link WO) dihapus juga — akan di-derive ulang saat
-    // timbang ulang lewat submitTimbangByproduct().
-    await db.from('byproduct_session_contributions').delete().eq('session_id', sessionId);
+    const basketIdLama   = session.basket_id;
+    const basketCodeLama = b.basket_code;
 
-    await db.from('byproduct_session_revisi_log').insert({
-      session_id:       sessionId,
-      basket_id_lama:   session.basket_id,
-      basket_code_lama: b.basket_code,
-      revisi_by:        sup.id,
-      alasan
-    });
-
-    await db.from('byproduct_collection_sessions').update({
+    // PENTING (fix 2026-07-31): byproduct_collection_sessions.basket_id adalah
+    // FK ke baskets TANPA ON DELETE CASCADE/SET NULL. Kalau baskets.delete()
+    // dipanggil SELAGI sesi ini masih menunjuk ke basket itu, Postgres akan
+    // menolak (FK violation) — sebelumnya error ini tidak dicek sama sekali,
+    // jadi delete diam-diam gagal tapi kode lanjut seolah berhasil (sesi
+    // dibuka ulang, log revisi dicatat, tapi keranjang LAMA tetap ada di DB).
+    // Fix: lepas dulu referensi FK-nya (basket_id -> NULL di sesi) SEBELUM
+    // hapus baris basket-nya, dan cek {error} di setiap langkah.
+    const { error: updErr } = await db.from('byproduct_collection_sessions').update({
       status:       'OPEN',
       basket_id:    null,
       closed_by:    null,
       closed_at:    null,
       revisi_count: (session.revisi_count || 0) + 1
     }).eq('id', sessionId);
+    if (updErr) throw updErr;
 
-    showToast(`Timbangan ${session.session_code} dibatalkan — isi ulang di form "Timbang By-Product".`, 'success');
+    // Kontribusi lama (link WO) dihapus juga — akan di-derive ulang saat
+    // timbang ulang lewat submitTimbangByproduct().
+    const { error: contribErr } = await db.from('byproduct_session_contributions').delete().eq('session_id', sessionId);
+    if (contribErr) throw contribErr;
+
+    const { error: delErr } = await db.from('baskets').delete().eq('id', basketIdLama);
+    if (delErr) {
+      await db.from('byproduct_session_revisi_log').insert({
+        session_id: sessionId, basket_id_lama: basketIdLama, basket_code_lama: basketCodeLama,
+        revisi_by: sup.id, alasan: alasan + ' [PERINGATAN: gagal hapus keranjang lama — ' + delErr.message + ']'
+      });
+      showToast(`Sesi dibuka ulang, tapi keranjang lama ${basketCodeLama} GAGAL dihapus (${delErr.message}). Hapus manual lewat SQL/admin.`, 'error');
+      closeModal('modal-revisi-pin');
+      await loadAll();
+      return;
+    }
+
+    await db.from('byproduct_session_revisi_log').insert({
+      session_id:       sessionId,
+      basket_id_lama:   basketIdLama,
+      basket_code_lama: basketCodeLama,
+      revisi_by:        sup.id,
+      alasan
+    });
+
+    showToast(`Timbangan ${session.session_code} dibatalkan, keranjang lama ${basketCodeLama} dihapus — isi ulang di form "Timbang By-Product".`, 'success');
     closeModal('modal-revisi-pin');
     await loadAll();
   } catch (e) {

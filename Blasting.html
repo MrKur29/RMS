@@ -124,6 +124,25 @@ a{text-decoration:none}
 .search-inp{width:100%;padding:6px 10px 6px 28px;border:1.5px solid #e5e7eb;border-radius:7px;font-size:13px;color:#111827;font-family:inherit;background:white;transition:border-color .2s}
 .search-inp:focus{outline:none;border-color:#0d9488;box-shadow:0 0 0 2px rgba(13,148,136,.1)}
 
+/* SCAN AREA */
+.scan-area{padding:12px 14px;border-bottom:1px solid #f3f4f6;background:#f8faff}
+.scan-field-wrap{position:relative;margin-bottom:6px}
+.scan-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:16px;pointer-events:none}
+.scan-input{width:100%;padding:10px 10px 10px 38px;border:2px solid #2563eb;border-radius:8px;font-size:14px;font-weight:700;letter-spacing:1px;color:#111827;background:#f0f7ff;font-family:inherit;transition:box-shadow .2s}
+.scan-input:focus{outline:none;box-shadow:0 0 0 3px rgba(37,99,235,.2)}
+.scan-input::placeholder{font-weight:400;letter-spacing:0;color:#9ca3af}
+.scan-hint{font-size:11px;color:#6b7280}
+.scan-result{background:white;border-radius:8px;padding:10px 12px;border:1.5px solid #e5e7eb;margin-top:8px;display:none}
+.scan-result.visible{display:block}
+.scan-result.scan-ok{border-color:#a7f3d0}
+.scan-result.scan-err{border-color:#fecaca;background:#fff5f5}
+.scan-result.scan-warn{border-color:#fde68a;background:#fffbeb}
+.scan-basket-code{font-size:13px;font-weight:800;color:#111827;margin-bottom:4px;font-family:monospace}
+.scan-basket-detail{font-size:12px;color:#374151;line-height:1.7}
+.scan-action-row{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+.tbl-row-flash{animation:row-flash 1.6s ease}
+@keyframes row-flash{0%{background:#fef3c7}100%{background:transparent}}
+
 /* GROUPED STOK */
 .grp-row{cursor:pointer;user-select:none}
 .grp-row td{background:#f0fdfa;padding:10px 14px;border-bottom:1px solid #99f6e4;font-weight:700;font-size:13px}
@@ -396,6 +415,22 @@ a{text-decoration:none}
               <div class="panel-actions">
                 <span class="panel-pill alert" id="pill-pending-count">0 item</span>
                 <button class="btn btn-green btn-sm" id="btn-konfirm-semua" onclick="openKonfirmSemua()" style="display:none">✅ Konfirmasi Semua</button>
+              </div>
+            </div>
+            <div class="scan-area">
+              <div class="scan-field-wrap">
+                <span class="scan-icon">📷</span>
+                <input type="text" class="scan-input" id="scan-pending-input"
+                       placeholder="Scan QR / ketik kode keranjang…"
+                       autocomplete="off"
+                       onkeydown="if(event.key==='Enter'){clearTimeout(scanPendingTimer);doScanPending();}"
+                       oninput="onScanPendingInput(this.value)">
+              </div>
+              <div class="scan-hint">Cari keranjang di antrian pending masuk — otomatis terbaca, atau tekan Enter</div>
+              <div class="scan-result" id="scan-pending-result">
+                <div class="scan-basket-code" id="spr-code">—</div>
+                <div class="scan-basket-detail" id="spr-detail">—</div>
+                <div class="scan-action-row" id="spr-actions"></div>
               </div>
             </div>
             <div class="tbl-wrap">
@@ -970,7 +1005,7 @@ function renderPendingList(){
   }
   tbody.innerHTML=pendingMovements.map(mv=>{
     const b=mv.baskets||{};const pm=b.product_master||{};
-    return `<tr>
+    return `<tr id="pend-row-${mv.id}">
       <td><span style="font-family:monospace;font-weight:700">${b.basket_code||'—'}</span>
           <div class="tbl-sub">${lokasiLabel(mv.dari_lokasi)}</div></td>
       <td>${pm.nama_produk||'—'}</td>
@@ -981,6 +1016,66 @@ function renderPendingList(){
       </td>
     </tr>`;
   }).join('');
+}
+
+// ── TAB 1: SCAN CARI PENDING ──
+function clearScanResult(resultId){const el=document.getElementById(resultId);if(el){el.className='scan-result';el.style.display='none'}}
+
+// Sebagian barcode reader tablet (mode IME/keyboard-wedge) tidak memicu event keydown asli —
+// hanya mengubah value lewat event input. Jadi selain tombol Enter, kita juga auto-trigger
+// pencarian setelah jeda singkat (scanner mengetik jauh lebih cepat daripada manusia).
+let scanPendingTimer=null;
+function onScanPendingInput(val){
+  clearScanResult('scan-pending-result');
+  clearTimeout(scanPendingTimer);
+  if(!val||!val.trim())return;
+  scanPendingTimer=setTimeout(()=>doScanPending(),200);
+}
+
+function doScanPending(){
+  const inp=document.getElementById('scan-pending-input');
+  const code=inp.value.trim().toUpperCase();
+  if(!code)return;
+
+  const resEl=document.getElementById('scan-pending-result');
+  const codeEl=document.getElementById('spr-code');
+  const detailEl=document.getElementById('spr-detail');
+  const actEl=document.getElementById('spr-actions');
+  resEl.style.display='block';
+  codeEl.textContent=code;
+  actEl.innerHTML='';
+
+  const matches=pendingMovements.filter(mv=>(mv.baskets?.basket_code||'').toUpperCase().includes(code));
+
+  if(!matches.length){
+    resEl.className='scan-result scan-err';
+    detailEl.innerHTML='❌ Tidak ditemukan di antrian pending masuk dari Chiller.';
+    return;
+  }
+
+  // Highlight semua baris yang cocok di tabel
+  pendingMovements.forEach(mv=>{
+    const row=document.getElementById(`pend-row-${mv.id}`);
+    if(row)row.classList.remove('tbl-row-flash');
+  });
+  matches.forEach(mv=>{
+    const row=document.getElementById(`pend-row-${mv.id}`);
+    if(row){row.scrollIntoView({behavior:'smooth',block:'center'});void row.offsetWidth;row.classList.add('tbl-row-flash');}
+  });
+
+  if(matches.length>1){
+    resEl.className='scan-result scan-warn';
+    detailEl.innerHTML=`⚠️ ${matches.length} keranjang cocok dengan "${code}" — baris disorot di tabel. Perjelas kode untuk aksi cepat.`;
+    return;
+  }
+
+  const mv=matches[0];const b=mv.baskets||{};const pm=b.product_master||{};
+  resEl.className='scan-result scan-ok';
+  codeEl.textContent=b.basket_code||code;
+  detailEl.innerHTML=`Produk: <strong>${pm.nama_produk||'—'}</strong><br>Qty: <strong>${fmt(mv.qty_pindah)} ekor / ${fmtKg(mv.kg_pindah)}</strong><br>Dari: <strong>${lokasiLabel(mv.dari_lokasi)}</strong><br><span style="color:#16a34a">✅ Ditemukan di antrian — siap dikonfirmasi</span>`;
+  actEl.innerHTML=`
+    <button class="btn btn-green" onclick="openKonfirmasi('${mv.id}');clearScanResult('scan-pending-result');document.getElementById('scan-pending-input').value=''">✅ Terima</button>
+    <button class="btn btn-red" onclick="openTolak('${mv.id}','${b.basket_code||''}');clearScanResult('scan-pending-result');document.getElementById('scan-pending-input').value=''">✗ Tolak</button>`;
 }
 
 // ── TAB 1: STOK ──

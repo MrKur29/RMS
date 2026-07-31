@@ -99,6 +99,12 @@ a{text-decoration:none}
 .btn-ghost:hover{background:#e5e7eb}
 .btn:disabled{opacity:.5;cursor:not-allowed}
 
+/* MODE TOGGLE */
+.mode-toggle{display:flex;gap:6px;flex-wrap:wrap}
+.btn-mode{padding:8px 14px;border-radius:6px;border:1.5px solid #e5e7eb;background:#f9fafb;color:#6b7280;font-size:12px;font-weight:700;transition:all .15s;white-space:nowrap}
+.btn-mode:hover{background:#f3f4f6}
+.btn-mode.active{background:#0d9488;border-color:#0d9488;color:white}
+
 /* BADGES */
 .badge{display:inline-flex;align-items:center;padding:3px 9px;border-radius:12px;font-size:11px;font-weight:700;white-space:nowrap}
 .b-aktif{background:#d1fae5;color:#065f46}
@@ -128,6 +134,10 @@ a{text-decoration:none}
 .trace-node.origin-THAWING{border-left:5px solid #0891b2}
 .trace-node.origin-UNKNOWN{border-left:5px solid #9ca3af}
 .trace-node.origin-CYCLE{border-left:5px solid #dc2626}
+.trace-node.origin-USED{border-left:5px solid #16a34a}
+.trace-node.origin-UNUSED{border-left:5px solid #9ca3af}
+.trace-node.origin-BLASTING{border-left:5px solid #0891b2}
+.trace-node.origin-SOLD{border-left:5px solid #7c3aed}
 .tn-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:6px}
 .tn-code{font-family:monospace;font-weight:800;font-size:14px;color:#111827;letter-spacing:.5px}
 .tn-product{font-size:13px;font-weight:700;color:#111827}
@@ -304,6 +314,10 @@ a{text-decoration:none}
       <div class="panel">
         <div class="panel-head">
           <span class="panel-title">🔎 Telusuri Riwayat Basket</span>
+          <div class="mode-toggle">
+            <button class="btn-mode active" id="mode-backward" onclick="setTraceMode('backward')">⬅️ Asal (Ke Belakang)</button>
+            <button class="btn-mode" id="mode-forward" onclick="setTraceMode('forward')">➡️ Dipakai Kemana (Ke Depan)</button>
+          </div>
         </div>
         <div class="panel-body">
           <div class="lookup-box">
@@ -318,7 +332,7 @@ a{text-decoration:none}
             <button class="btn btn-primary" onclick="doTrace()">🔍 Telusuri</button>
             <button class="btn btn-camera" onclick="openScanModal()">📷 Scan Kamera</button>
           </div>
-          <div class="hint">Masukkan / scan kode keranjang produk jadi (Parting, Boneless, atau Marinasi) untuk melihat riwayat lengkap: workstation, operator, keranjang sumber, sampai ke batch ayam karkas asal. Kode juga bisa dibaca dari alat scanner USB/Bluetooth yang berfungsi seperti keyboard — cukup arahkan lalu tekan Enter.</div>
+          <div class="hint" id="trace-hint">Masukkan / scan kode keranjang produk jadi (Parting, Boneless, atau Marinasi) untuk melihat riwayat lengkap: workstation, operator, keranjang sumber, sampai ke batch ayam karkas asal. Kode juga bisa dibaca dari alat scanner USB/Bluetooth yang berfungsi seperti keyboard — cukup arahkan lalu tekan Enter.</div>
         </div>
       </div>
 
@@ -353,6 +367,7 @@ const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 // ── STATE ──
 let currentUser  = null;
 let html5QrCode  = null;
+let traceMode    = 'backward'; // 'backward' = asal (upstream), 'forward' = dipakai kemana (downstream)
 const MAX_DEPTH  = 15; // guard rail — realistic chains are 3-5 levels deep
 
 // ── UTILS ──
@@ -416,9 +431,22 @@ function startApp(){
   RPA_STATE.bindScroll('Tracing');
   const fields=RPA_STATE.getFields('Tracing');
   if(fields['trace-input']) document.getElementById('trace-input').value=fields['trace-input'];
+  if(fields['trace-mode']) setTraceMode(fields['trace-mode']);
   document.getElementById('trace-input').addEventListener('change',e=>RPA_STATE.saveField('Tracing','trace-input',e.target.value));
   startClock();
   document.getElementById('trace-input').focus();
+}
+
+// ── MODE TOGGLE (asal / dipakai kemana) ──
+function setTraceMode(mode){
+  traceMode=mode;
+  document.getElementById('mode-backward').classList.toggle('active',mode==='backward');
+  document.getElementById('mode-forward').classList.toggle('active',mode==='forward');
+  document.getElementById('trace-hint').textContent = mode==='backward'
+    ? 'Masukkan / scan kode keranjang produk jadi (Parting, Boneless, atau Marinasi) untuk melihat riwayat lengkap: workstation, operator, keranjang sumber, sampai ke batch ayam karkas asal. Kode juga bisa dibaca dari alat scanner USB/Bluetooth yang berfungsi seperti keyboard — cukup arahkan lalu tekan Enter.'
+    : 'Masukkan / scan kode keranjang apa pun (karkas, Parting, Boneless, Marinasi, dst) untuk melihat kemana isinya dipakai: WO tujuan berikutnya, keranjang hasil/turunan yang lahir dari WO itu, sampai berhenti di Blasting atau Penjualan.';
+  RPA_STATE.saveField('Tracing','trace-mode',mode);
+  document.getElementById('trace-result-area').innerHTML='';
 }
 
 function startClock(){
@@ -507,21 +535,38 @@ async function doTrace(){
       return;
     }
 
-    const tree=await buildTraceNode(rootBasket.id,[],0);
-    const stats={levels:0,processing:0,karkas:0,saldoAwal:0,thawing:0,unknown:0};
-    collectStats(tree,0,stats);
+    if(traceMode==='backward'){
+      const tree=await buildTraceNode(rootBasket.id,[],0);
+      const stats={levels:0,processing:0,karkas:0,saldoAwal:0,thawing:0,unknown:0};
+      collectStats(tree,0,stats);
 
-    area.innerHTML=`
-      <div class="trace-summary">
-        <div class="schip"><b>${stats.levels}</b>Tingkat rantai</div>
-        <div class="schip"><b>${stats.processing}</b>Titik proses (WO)</div>
-        <div class="schip"><b>${stats.karkas}</b>Sumber batch karkas</div>
-        ${stats.saldoAwal?`<div class="schip"><b>${stats.saldoAwal}</b>Sumber saldo awal</div>`:''}
-        ${stats.thawing?`<div class="schip"><b>${stats.thawing}</b>Sumber thawing</div>`:''}
-        ${stats.unknown?`<div class="schip"><b>${stats.unknown}</b>Sumber tidak diketahui</div>`:''}
-      </div>
-      <div class="panel"><div class="panel-body">${renderNode(tree,0,true)}</div></div>
-    `;
+      area.innerHTML=`
+        <div class="trace-summary">
+          <div class="schip"><b>${stats.levels}</b>Tingkat rantai</div>
+          <div class="schip"><b>${stats.processing}</b>Titik proses (WO)</div>
+          <div class="schip"><b>${stats.karkas}</b>Sumber batch karkas</div>
+          ${stats.saldoAwal?`<div class="schip"><b>${stats.saldoAwal}</b>Sumber saldo awal</div>`:''}
+          ${stats.thawing?`<div class="schip"><b>${stats.thawing}</b>Sumber thawing</div>`:''}
+          ${stats.unknown?`<div class="schip"><b>${stats.unknown}</b>Sumber tidak diketahui</div>`:''}
+        </div>
+        <div class="panel"><div class="panel-body">${renderNode(tree,0,true)}</div></div>
+      `;
+    } else {
+      const tree=await buildForwardTraceNode(rootBasket.id,[],0);
+      const stats={levels:0,woCount:0,blasting:0,sold:0,unused:0};
+      collectForwardStats(tree,0,stats);
+
+      area.innerHTML=`
+        <div class="trace-summary">
+          <div class="schip"><b>${stats.levels}</b>Tingkat rantai</div>
+          <div class="schip"><b>${stats.woCount}</b>WO tujuan</div>
+          ${stats.blasting?`<div class="schip"><b>${stats.blasting}</b>Berhenti di Blasting</div>`:''}
+          ${stats.sold?`<div class="schip"><b>${stats.sold}</b>Berhenti di Penjualan</div>`:''}
+          ${stats.unused?`<div class="schip"><b>${stats.unused}</b>Keranjang belum dipakai</div>`:''}
+        </div>
+        <div class="panel"><div class="panel-body">${renderForwardNode(tree,0,true)}</div></div>
+      `;
+    }
   }catch(e){
     console.error(e);
     area.innerHTML=`<div class="panel"><div class="panel-body"><div class="empty">⚠️ Gagal memuat riwayat. Coba lagi.</div></div></div>`;
@@ -537,6 +582,178 @@ function collectStats(node,depth,stats){
   if(node.origin==='THAWING')stats.thawing++;
   if(node.origin==='UNKNOWN')stats.unknown++;
   (node.sources||[]).forEach(s=>collectStats(s.node,depth+1,stats));
+}
+
+function collectForwardStats(node,depth,stats){
+  if(!node)return;
+  stats.levels=Math.max(stats.levels,depth+1);
+  if(node.origin==='UNUSED')stats.unused++;
+  (node.uses||[]).forEach(u=>{
+    if(u.type==='WO'){stats.woCount++;(u.children||[]).forEach(c=>collectForwardStats(c,depth+1,stats));}
+    if(u.type==='BLASTING')stats.blasting++;
+    if(u.type==='SOLD')stats.sold++;
+  });
+}
+
+/**
+ * Telusuri satu basket ke depan (forward/downstream) — kebalikan dari
+ * buildTraceNode. Jawab pertanyaan "keranjang ini dipakai kemana saja?".
+ *   processing_inputs.basket_id = basket ini -> WO (processing_orders) yang MEMAKAI basket ini
+ *   Untuk tiap WO itu, keranjang TURUNAN yang lahir bisa dari 3 jalur:
+ *     - processing_outputs.basket_id (order_id sama)      -> jalur lama & primary output
+ *     - processing_byproducts.basket_id (order_id sama)   -> jalur lama (sebelum migration 57)
+ *     - byproduct_session_contributions.order_id -> byproduct_collection_sessions.basket_id
+ *       (jalur baru, migration 56/57 — by-product ditimbang sekali per hari, bukan per WO)
+ *   Sama seperti backward: relasi input<->output N:M di level order_id, jadi SEMUA
+ *   keranjang turunan WO tsb ditampilkan, bukan pasangan 1:1.
+ * Berhenti (leaf) di 2 titik relabel 1:1 yang tidak melahirkan basket baru:
+ *   blasting_rack_allocations.basket_id (masuk Blasting) dan
+ *   picking_slip_items.basket_id (terjual/Penjualan).
+ * Kalau basket tidak muncul di processing_inputs maupun kedua tabel relabel itu,
+ * berarti belum dipakai kemana-mana (origin UNUSED) — masih di lokasi saat ini.
+ */
+async function buildForwardTraceNode(basketId,path,depth){
+  if(path.includes(basketId)){
+    return{origin:'CYCLE',basket:{basket_code:'(basket sama terdeteksi berulang)'}};
+  }
+  const myPath=[...path,basketId];
+
+  const{data:basket}=await db.from('baskets')
+    .select(`id,basket_code,basket_type,qty_awal,qty_sisa,kg_awal,kg_sisa,lokasi,status,tanggal_produksi,needs_review,override,
+      product_master(nama_produk,product_code,kategori,satuan_qty)`)
+    .eq('id',basketId).maybeSingle();
+
+  if(!basket){
+    return{origin:'UNKNOWN',basket:{basket_code:'(data keranjang tidak ditemukan)'}};
+  }
+
+  const node={origin:'UNUSED',basket,uses:[]};
+
+  if(depth>=MAX_DEPTH){
+    node.depthCut=true;
+    return node;
+  }
+
+  const{data:inputRows,error:inpErr}=await db.from('processing_inputs')
+    .select(`id,order_id,qty_input,kg_input,kg_diambil,workstation_id,workstations(kode,nama),
+      processing_orders(order_code,tipe,tanggal,status)`)
+    .eq('basket_id',basketId);
+  if(inpErr)console.error('[Tracing] processing_inputs (forward) lookup gagal:',inpErr);
+
+  for(const inp of (inputRows||[])){
+    const orderId=inp.order_id;
+    const[outsRes,byprodsRes,byprodSessRes]=await Promise.all([
+      db.from('processing_outputs').select('basket_id').eq('order_id',orderId),
+      db.from('processing_byproducts').select('basket_id').eq('order_id',orderId),
+      db.from('byproduct_session_contributions').select('byproduct_collection_sessions(basket_id,status)').eq('order_id',orderId)
+    ]);
+    if(outsRes.error)console.error('[Tracing] processing_outputs (forward) lookup gagal:',outsRes.error);
+    if(byprodsRes.error)console.error('[Tracing] processing_byproducts (forward) lookup gagal:',byprodsRes.error);
+    if(byprodSessRes.error)console.error('[Tracing] byproduct_session_contributions (forward) lookup gagal:',byprodSessRes.error);
+
+    const childIds=new Set();
+    (outsRes.data||[]).forEach(r=>{if(r.basket_id)childIds.add(r.basket_id)});
+    (byprodsRes.data||[]).forEach(r=>{if(r.basket_id)childIds.add(r.basket_id)});
+    (byprodSessRes.data||[]).forEach(r=>{const bId=r.byproduct_collection_sessions?.basket_id;if(bId)childIds.add(bId)});
+    childIds.delete(basketId); // guard rail, seharusnya tidak pernah terjadi
+
+    const children=await Promise.all([...childIds].map(cid=>buildForwardTraceNode(cid,myPath,depth+1)));
+    node.uses.push({type:'WO',input:inp,order:inp.processing_orders,children});
+  }
+
+  const{data:blastRows,error:blastErr}=await db.from('blasting_rack_allocations')
+    .select('id,ekor,kg,status,blasting_racks(nomor_rak),blasting_batches(batch_code)')
+    .eq('basket_id',basketId);
+  if(blastErr)console.error('[Tracing] blasting_rack_allocations (forward) lookup gagal:',blastErr);
+  (blastRows||[]).forEach(r=>node.uses.push({type:'BLASTING',data:r}));
+
+  const{data:pickRows,error:pickErr}=await db.from('picking_slip_items')
+    .select('id,qty_ekor,berat_kg,picking_slips(ps_code,tanggal,status,nama_pelanggan)')
+    .eq('basket_id',basketId);
+  if(pickErr)console.error('[Tracing] picking_slip_items (forward) lookup gagal:',pickErr);
+  (pickRows||[]).forEach(r=>node.uses.push({type:'SOLD',data:r}));
+
+  node.origin=node.uses.length?'USED':'UNUSED';
+  return node;
+}
+
+function renderForwardNode(node,depth,isRoot){
+  if(!node)return'';
+  const b=node.basket||{};
+
+  if(node.origin==='CYCLE'){
+    return `<div class="trace-node origin-CYCLE"><div class="tn-code">🔁 Loop terdeteksi — dihentikan untuk mencegah rantai tak terhingga.</div></div>`;
+  }
+  if(!b.id){
+    return `<div class="trace-node origin-UNKNOWN"><div class="tn-code">${esc(b.basket_code||'—')}</div></div>`;
+  }
+
+  let html=`<div class="trace-node ${isRoot?'root':''} origin-${node.origin}">`;
+  html+=`<div class="tn-head">
+      <div>
+        <div class="tn-code">${isRoot?'📍 ':''}${esc(b.basket_code)}</div>
+        <div class="tn-product">${esc(b.product_master?.nama_produk||'—')} <span style="font-weight:400;color:#9ca3af">(${esc(b.product_master?.kategori||'—')})</span></div>
+      </div>
+      <div class="tn-badges">${statusBadges(b)}</div>
+    </div>`;
+
+  html+=`<div class="tn-grid">
+      <div class="g-item"><div class="g-label">Qty Awal</div><div class="g-val">${fmt(b.qty_awal)} ${esc(b.product_master?.satuan_qty||'')}</div></div>
+      <div class="g-item"><div class="g-label">Qty Sisa</div><div class="g-val">${fmt(b.qty_sisa)} ${esc(b.product_master?.satuan_qty||'')}</div></div>
+      <div class="g-item"><div class="g-label">Kg Awal</div><div class="g-val">${fmtKg(b.kg_awal)}</div></div>
+      <div class="g-item"><div class="g-label">Kg Sisa</div><div class="g-val">${fmtKg(b.kg_sisa)}</div></div>
+      <div class="g-item"><div class="g-label">Tgl Produksi</div><div class="g-val">${fmtDate(b.tanggal_produksi)}</div></div>
+    </div>`;
+
+  if(node.origin==='UNUSED'){
+    html+=`<div class="tn-unknown-box">📭 Belum dipakai ke WO lain, belum masuk Blasting, dan belum terjual — kemungkinan masih menunggu di lokasi saat ini (<b>${esc(lokasiLabel(b.lokasi))}</b>).</div>`;
+  }
+
+  if(node.depthCut){
+    html+=`<div class="tn-unknown-box">⏸️ Kedalaman rantai maksimum tercapai (${MAX_DEPTH} tingkat) — penelusuran dihentikan di sini.</div>`;
+  }
+
+  const blastingUses=(node.uses||[]).filter(u=>u.type==='BLASTING');
+  if(blastingUses.length){
+    const totalAlokasi=blastingUses.reduce((s,u)=>s+(u.data.ekor||0),0);
+    const belumAlokasi=Math.max(0,(b.qty_sisa||0)-totalAlokasi);
+    html+=`<div class="hint" style="margin:8px 0 0">ℹ️ <b>Qty Sisa</b> di atas (${fmt(b.qty_sisa)}) belum dikurangi alokasi rak Blasting — alokasi ke rak tidak mengurangi saldo keranjang ini (bisa dipecah ke banyak rak). Dari ${fmt(b.qty_sisa)} ekor: <b>${fmt(totalAlokasi)}</b> sudah dialokasikan/dibekukan (rincian di bawah), sisanya <b>${fmt(belumAlokasi)}</b> ekor kemungkinan masih menunggu dialokasikan ke rak.</div>`;
+  }
+
+  if(node.uses && node.uses.length){
+    html+=`<div class="tn-sources-label">📤 Dipakai Untuk (${node.uses.length})</div><div class="tn-children">`;
+    node.uses.forEach(u=>{
+      if(u.type==='WO'){
+        const p=u.order||{};
+        const tl=tipeLabel(p.tipe);
+        html+=`<div class="trace-node origin-USED">
+            <div class="tn-wo-box" style="margin:0 0 8px">
+              <span class="badge ${tl.cls}">${tl.icon} ${esc(tl.label)}</span><br>
+              <b>WO:</b> ${esc(p.order_code||'—')} &nbsp; <b>Tanggal:</b> ${fmtDate(p.tanggal)}<br>
+              <b>Dipakai dari keranjang ini:</b> ${fmt(u.input.qty_input)} ${esc(b.product_master?.satuan_qty||'')} · ${fmtKg(u.input.kg_diambil??u.input.kg_input)}${u.input.workstations?` · WS ${esc(u.input.workstations.kode)}`:''}
+            </div>
+            ${u.children.length
+              ? u.children.map(c=>renderForwardNode(c,depth+1,false)).join('')
+              : `<div class="tn-unknown-box">⚠️ WO ini belum menghasilkan keranjang output yang tercatat (kemungkinan sesi belum ditutup / belum ditimbang).</div>`}
+          </div>`;
+      } else if(u.type==='BLASTING'){
+        html+=`<div class="trace-node origin-BLASTING"><div class="tn-karkas-box">
+            🧊 <b>Blasting</b> — Rak ${esc(u.data.blasting_racks?.nomor_rak||'—')}, Batch ${esc(u.data.blasting_batches?.batch_code||'(belum diassign batch)')}<br>
+            <b>Status:</b> ${esc(u.data.status||'—')} &nbsp; <b>Qty/Kg:</b> ${fmt(u.data.ekor)} ekor · ${fmtKg(u.data.kg)}
+          </div></div>`;
+      } else if(u.type==='SOLD'){
+        html+=`<div class="trace-node origin-SOLD"><div class="tn-karkas-box">
+            🛒 <b>Terjual</b> — Picking Slip ${esc(u.data.picking_slips?.ps_code||'—')}<br>
+            <b>Tanggal:</b> ${fmtDate(u.data.picking_slips?.tanggal)} &nbsp; <b>Status:</b> ${esc(u.data.picking_slips?.status||'—')} &nbsp; <b>Pelanggan:</b> ${esc(u.data.picking_slips?.nama_pelanggan||'—')}<br>
+            <b>Qty/Kg:</b> ${fmt(u.data.qty_ekor)} · ${fmtKg(u.data.berat_kg)}
+          </div></div>`;
+      }
+    });
+    html+=`</div>`;
+  }
+
+  html+=`</div>`;
+  return html;
 }
 
 /**

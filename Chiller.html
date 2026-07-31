@@ -830,11 +830,11 @@ a{text-decoration:none}
       <div class="partial-input-row">
         <div>
           <label>Jumlah Ekor yang Dikirim <span style="color:#dc2626">*</span></label>
-          <input type="number" id="mp-qty-kirim" min="1" placeholder="ekor" oninput="checkPartialRatio()">
+          <input type="text" inputmode="numeric" pattern="[0-9]*" id="mp-qty-kirim" placeholder="ekor" oninput="sanitizeIntInput(this);checkPartialRatio()">
         </div>
         <div>
           <label>Berat yang Dikirim (kg) <span style="color:#dc2626">*</span></label>
-          <input type="number" id="mp-kg-kirim" min="0.01" step="0.01" placeholder="kg" oninput="checkPartialRatio()">
+          <input type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" id="mp-kg-kirim" placeholder="kg" oninput="sanitizeDecimalInput(this);checkPartialRatio()">
         </div>
       </div>
       <div class="partial-max-hint" id="mp-partial-hint">Maks: — ekor / — kg</div>
@@ -1242,6 +1242,19 @@ async function sha256(str) {
   const buf  = new TextEncoder().encode(str);
   const hash = await crypto.subtle.digest('SHA-256', buf);
   return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+// Field angka pakai type="text" + inputmode (bukan type="number") karena di beberapa
+// tablet/WebView Android, type="number" kadang gagal memunculkan keyboard numerik.
+// Sanitasi manual di sini menjaga agar isinya tetap cuma angka (dan titik desimal utk kg).
+function sanitizeIntInput(el) {
+  const v = el.value.replace(/[^0-9]/g, '');
+  if (v !== el.value) el.value = v;
+}
+function sanitizeDecimalInput(el) {
+  let v = el.value.replace(',', '.').replace(/[^0-9.]/g, '');
+  const firstDot = v.indexOf('.');
+  if (firstDot !== -1) v = v.slice(0, firstDot+1) + v.slice(firstDot+1).replace(/\./g, '');
+  if (v !== el.value) el.value = v;
 }
 function fmt(n, d=0) {
   if (n == null || n === '') return '—';
