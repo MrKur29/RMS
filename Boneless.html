@@ -1019,7 +1019,7 @@ a{text-decoration:none}
 <div class="modal-overlay" id="modal-record-output">
   <div class="modal-box">
     <div class="modal-title">📦 Catat Output Keranjang</div>
-    <div class="modal-desc">Catat hasil produksi untuk Work Order ini. Keranjang baru akan otomatis dibuat. (By-product tidak dicatat di sini — lihat panel "⚖️ Timbang By-Product" di bawah.)</div>
+    <div class="modal-desc">Catat hasil produksi untuk Work Order ini. Keranjang baru akan otomatis dibuat. (By-product juga bisa dicatat di sini per WO/WS — terpisah dan tidak dijumlahkan dengan panel "⚖️ Timbang By-Product" di bawah, yang merupakan agregat timbangan harian per lini.)</div>
     <div class="modal-info-box">
       <div class="modal-info-row"><span class="modal-info-label">WO</span><span class="modal-info-val" id="ro-wo-code">—</span></div>
       <div class="modal-info-row"><span class="modal-info-label">Workstation</span><span class="modal-info-val" id="ro-ws-name">—</span></div>
@@ -1440,7 +1440,7 @@ async function loadActiveWOs() {
     .from('processing_orders')
     .select(`
       id, order_code, status, tipe, target_kg, target_qty_ekor, catatan, tanggal, created_at, produk_id,
-      product_master ( nama_produk, product_code ),
+      product_master ( nama_produk, product_code, kategori ),
       wo_workstations (
         workstation_id, target_kg, target_qty_ekor, selesai_at, selesai_by,
         workstations ( id, kode, nama ),
@@ -1523,7 +1523,7 @@ async function loadClosedWOs() {
   let q = db.from('processing_orders')
     .select(`
       id, order_code, status, tipe, target_kg, target_qty_ekor, tanggal, updated_at, produk_id,
-      product_master ( nama_produk, product_code ),
+      product_master ( nama_produk, product_code, kategori ),
       wo_workstations ( workstation_id, selesai_at, workstations ( kode ) ),
       processing_outputs ( id, product_id, output_type, kg_output, qty_output, product_master ( kategori ) )
     `)
@@ -1611,8 +1611,9 @@ async function toggleClosedWODetail(woId) {
     const iList  = inputs  || [];
     const oList  = outputs || [];
     // Fetch produk_id WO untuk klasifikasi output
-    const { data: woData } = await db.from('processing_orders').select('produk_id').eq('id', woId).maybeSingle();
+    const { data: woData } = await db.from('processing_orders').select('produk_id, product_master(nama_produk, kategori)').eq('id', woId).maybeSingle();
     const woProdukId = woData?.produk_id || null;
+    const byprodSessions = await fetchByproductForWO(woId);
 
     const totalInKg  = iList.reduce((s, i) => s + (Number(i.kg_diambil) || 0), 0);
     const totalOutKg = oList.filter(o => o.product_id === woProdukId).reduce((s, o) => s + (Number(o.kg_output) || 0), 0);
@@ -1654,6 +1655,8 @@ async function toggleClosedWODetail(woId) {
         '</tbody></table></div>';
     } else { html += '<div style="color:#9ca3af;padding:8px 0">Tidak ada data output.</div>'; }
     html += '</div></div>';
+
+    html += renderByproductForWOBox(byprodSessions, { product_master: woData?.product_master });
 
     body.innerHTML = html;
   } catch(e) {
@@ -2452,6 +2455,7 @@ async function renderWODetailContent(woId) {
   const { data: outputs } = await db.from('processing_outputs')
     .select('id, workstation_id, kg_output, qty_output, output_type, product_id, product_master ( kategori )')
     .eq('order_id', woId);
+  const byprodSessions = await fetchByproductForWO(woId);
 
   const iList = inputs  || [];
   const oList = outputs || [];
@@ -2481,6 +2485,8 @@ async function renderWODetailContent(woId) {
     '📥 <strong>Input Bahan Baku WO (shared):</strong> ' +
     iList.length + ' keranjang &nbsp;|&nbsp; ' + fmt(totalInQty) + ' ekor &nbsp;|&nbsp; <strong>' + fmtKg(totalInKg) + '</strong>' +
   '</div>';
+
+  html += renderByproductForWOBox(byprodSessions, wo);
 
   html += '<div class="tbl-wrap"><table class="tbl"><thead><tr>' +
       '<th>Workstation</th>' +
@@ -3111,6 +3117,80 @@ async function loadByproductSessions() {
   byproductSessions = data || [];
 }
 
+// Cari sesi timbang by-product yang WO ini pernah jadi kontributornya
+// (arah kebalikan dari renderByproductSessions: dari WO -> sesi, dipakai
+// di panel Detail WO / Detail WS supaya byproduct yg dulunya tercatat via
+// processing_outputs — sekarang selalu kosong sejak migration 57 — tetap
+// kelihatan lewat jalur byproduct_collection_sessions).
+async function fetchByproductForWO(woId) {
+  if (!woId) return [];
+  const { data: contribs, error: e1 } = await db
+    .from('byproduct_session_contributions')
+    .select('session_id')
+    .eq('order_id', woId);
+  if (e1 || !contribs?.length) { if (e1) console.error('[ByproductForWO] gagal:', e1); return []; }
+  const sessionIds = [...new Set(contribs.map(c => c.session_id))];
+  const { data: sessions, error: e2 } = await db
+    .from('byproduct_collection_sessions')
+    .select(`
+      id, session_code, tanggal, status, total_qty, total_kg,
+      product_master ( nama_produk, product_code ),
+      byproduct_session_contributions ( order_id, processing_orders ( order_code ) )
+    `)
+    .in('id', sessionIds)
+    .order('tanggal', { ascending: false });
+  if (e2) { console.error('[ByproductForWO] gagal:', e2); return []; }
+  return sessions || [];
+}
+
+// Render kotak "Byproduct Terkait (Timbang Harian)" — dipakai di Detail WO
+// (tab-wo), Detail WO selesai (riwayat), dan Detail WO di dalam tab
+// Workstation. Melaporkan sesi agregat "⚖️ Timbang By-Product Hari Ini" yang
+// WO ini pernah jadi kontributornya (jalur terpisah dari "Catat Output" biasa
+// di atas, yang sejak 2026-07-31 juga sudah bisa dipakai utk kategori
+// BYPRODUCT_* per WO/WS — lihat [[project_byproduct_ws_input_reenabled_2026_07_31]]).
+// `wo` (opsional) dipakai untuk memberi konteks kalau produk target WO ini
+// sendiri kategori by-product.
+function renderByproductForWOBox(sessions, wo) {
+  const pm = wo?.product_master || {};
+  const isTargetByproduct = String(pm.kategori || '').startsWith('BYPRODUCT');
+
+  if (!sessions || !sessions.length) {
+    if (!isTargetByproduct) return '';
+    return '<div style="border-top:1px solid #e5e7eb;padding:12px 16px 12px">' +
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">' +
+        '<div style="font-size:12px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:.5px">🧺 Byproduct Terkait (Timbang Harian)</div>' +
+        '<span class="panel-pill" style="background:#f3f4f6;color:#6b7280">belum ada sesi</span>' +
+      '</div>' +
+      '<div style="font-size:12px;color:#6b7280;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px">' +
+        'Produk target WO ini (<strong>' + (pm.nama_produk || '—') + '</strong>) adalah kategori by-product. Belum ada sesi "⚖️ Timbang By-Product Hari Ini" (agregat harian per lini) yang menyertakan WO ini — output per-WO/WS lewat "Catat Output" di atas tidak terpengaruh oleh ini, keduanya jalur independen.' +
+      '</div>' +
+    '</div>';
+  }
+  const rows = sessions.map(s => {
+    const woCodesSet  = new Set((s.byproduct_session_contributions || []).map(c => c.processing_orders?.order_code).filter(Boolean));
+    const otherCount  = Math.max(woCodesSet.size - 1, 0);
+    const statusBadge = s.status === 'OPEN'
+      ? '<span class="panel-pill info">MENUNGGU TIMBANG ULANG</span>'
+      : '<span class="panel-pill ok">CLOSED</span>';
+    return '<tr>' +
+      '<td>' + (s.product_master?.nama_produk || '—') + '<div class="tbl-sub">' + (s.product_master?.product_code || '') + '</div></td>' +
+      '<td><strong>' + fmt(s.total_qty) + ' ekor</strong><div class="tbl-sub">' + fmtKg(s.total_kg) + '</div></td>' +
+      '<td style="font-size:12px">' + fmtDate(s.tanggal) + '</td>' +
+      '<td>' + statusBadge + '</td>' +
+      '<td style="font-size:11px;color:#6b7280">' + (otherCount > 0 ? 'gabungan dgn ' + otherCount + ' WO lain' : 'khusus WO ini') + '</td>' +
+    '</tr>';
+  }).join('');
+  return '<div style="border-top:1px solid #e5e7eb;padding:12px 16px 12px">' +
+    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">' +
+      '<div style="font-size:12px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:.5px">🧺 Byproduct Terkait (Timbang Harian)</div>' +
+      '<span class="panel-pill" style="background:#fce7f3;color:#9d174d">' + sessions.length + ' sesi</span>' +
+    '</div>' +
+    '<div style="font-size:11px;color:#6b7280;margin-bottom:6px">Ditimbang sekali per hari untuk seluruh lini, bukan per WO — qty/kg di bawah adalah total gabungan sesi, bukan porsi WO ini saja.</div>' +
+    '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Produk</th><th>Qty / Kg Sesi</th><th>Tanggal</th><th>Status</th><th>Ket.</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+  '</div>';
+}
+
 // ============================================================
 // TAB 3 — RENDER
 // ============================================================
@@ -3345,12 +3425,14 @@ function openRecordOutput(woId) {
     : '—';
   setEl('ro-progress', `${fmtKg(actualKg)} / ${fmtKg(wo.target_kg)} (${pct}%)`);
 
-  // Produk dropdown — BONELESS, EXT, PART. Kategori BYPRODUCT_* SENGAJA
-  // dikeluarkan (migration 57): by-product tidak pernah ditimbang per WO di
-  // lapangan, jadi tidak boleh dipilih di sini. Pencatatannya lewat panel
-  // "Timbang By-Product Hari Ini" (sekali di akhir, per lini, bukan per WO).
+  // Produk dropdown — BONELESS, EXT, PART, + BYPRODUCT_BONELESS/BYPRODUCT_PARTING.
+  // Sejak 2026-07-31: by-product BOLEH lagi dicatat di sini per WO/WS (mis.
+  // WO yang target produknya sendiri produk by-product, spt "Kulit 1kg"),
+  // sebagai jalur TAMBAHAN yang independen dari panel "⚖️ Timbang By-Product
+  // Hari Ini" (agregat harian per lini). Dua jalur ini sengaja TIDAK saling
+  // dijumlahkan/direkonsiliasi — lihat [[project_byproduct_ws_input_reenabled_2026_07_31]].
   const prodList = allProducts.filter(p =>
-    ['BONELESS', 'EXT', 'PART'].includes(p.kategori)
+    ['BONELESS', 'EXT', 'PART', 'BYPRODUCT_BONELESS', 'BYPRODUCT_PARTING'].includes(p.kategori)
   );
   const prodSel = document.getElementById('ro-produk');
   prodSel.innerHTML = '<option value="">— Pilih Produk —</option>'
@@ -3512,14 +3594,8 @@ async function doRecordOutput() {
     // Auto-derive output_type dari kategori produk
     const produk = allProducts.find(p => p.id === produkId) || {};
     const autoOutputType = BYPRODUCT_KATEGORI.includes(produk.kategori) ? 'BYPRODUCT' : 'PRIMARY';
-
-    // By-product tidak pernah ditimbang per WO di lapangan (migration 57) —
-    // dropdown produk di atas sudah menyaring kategori BYPRODUCT_* keluar,
-    // jadi cabang ini seharusnya tidak pernah kena. Jaga-jaga saja.
-    if (autoOutputType === 'BYPRODUCT') {
-      showErr('ro-err', 'Produk by-product tidak dicatat per WO. Gunakan panel "⚖️ Timbang By-Product Hari Ini".');
-      return;
-    }
+    // Sejak 2026-07-31 by-product BOLEH dicatat lewat sini (jalur tambahan,
+    // independen dari agregat harian "Timbang By-Product") — tidak diblok lagi.
 
     // 1. Generate basket code
     const basketCode = await generatePRTBasketCode();
@@ -3992,6 +4068,9 @@ async function renderWSDetailContent(woId) {
       .eq('order_id', woId)
       .order('created_at', { ascending: false });
 
+    // Fetch sesi timbang by-product yang WO ini ikut berkontribusi
+    const byprodSessions = await fetchByproductForWO(woId);
+
     // Fetch reject segar
     const { data: rejects } = await db.from('processing_rusak')
       .select(`
@@ -4151,6 +4230,8 @@ async function renderWSDetailContent(woId) {
         '</tbody></table></div>'
       : '<div class="empty" style="padding:14px 0"><div class="e-icon" style="font-size:20px">📦</div>Belum ada output produksi untuk WO ini.</div>') +
     '</div>' +
+    // ── BYPRODUCT TERKAIT ──
+    renderByproductForWOBox(byprodSessions, wo) +
     // ── DAGING REJECT ──
     '<div style="border-top:1px solid #e5e7eb;padding:12px 16px 12px">' +
       '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">' +
