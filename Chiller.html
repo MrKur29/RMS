@@ -477,10 +477,10 @@ a{text-decoration:none}
               <input type="text" class="scan-input" id="scan-masuk-input"
                      placeholder="Scan QR / ketik kode keranjang…"
                      autocomplete="off"
-                     onkeydown="if(event.key==='Enter')doScanMasuk()"
-                     oninput="clearScanResult('scan-masuk-result')">
+                     onkeydown="if(event.key==='Enter'){clearTimeout(scanMasukTimer);doScanMasuk();}"
+                     oninput="onScanMasukInput(this.value)">
             </div>
-            <div class="scan-hint">Arahkan barcode reader ke QR label, lalu tekan Enter</div>
+            <div class="scan-hint">Arahkan barcode reader ke QR label — otomatis terbaca, atau tekan Enter</div>
             <div class="scan-result" id="scan-masuk-result">
               <div class="scan-basket-code" id="smr-code">—</div>
               <div class="scan-basket-detail" id="smr-detail">—</div>
@@ -500,10 +500,10 @@ a{text-decoration:none}
               <input type="text" class="scan-input" id="scan-keluar-input"
                      placeholder="Scan QR keranjang yang akan dipindah…"
                      autocomplete="off"
-                     onkeydown="if(event.key==='Enter')doScanKeluar()"
-                     oninput="clearScanResult('scan-keluar-result')">
+                     onkeydown="if(event.key==='Enter'){clearTimeout(scanKeluarTimer);doScanKeluar();}"
+                     oninput="onScanKeluarInput(this.value)">
             </div>
-            <div class="scan-hint">Scan keranjang di Chiller → pilih tujuan Parting / Boneless / Blasting</div>
+            <div class="scan-hint">Scan keranjang di Chiller — otomatis terbaca, atau tekan Enter, lalu pilih tujuan Parting / Boneless / Blasting</div>
             <div class="scan-result" id="scan-keluar-result">
               <div class="scan-basket-code" id="skr-code">—</div>
               <div class="scan-basket-detail" id="skr-detail">—</div>
@@ -1992,6 +1992,26 @@ function updateSummaryCards() {
 function clearScanResult(resultId) {
   const el = document.getElementById(resultId);
   if (el) { el.className = 'scan-result'; el.style.display = 'none'; }
+}
+
+// Sebagian barcode reader tablet (mode IME/keyboard-wedge) tidak memicu
+// event keydown asli — hanya mengubah value lewat event input. Jadi selain
+// tombol Enter, kita juga auto-trigger scan setelah jeda singkat (scanner
+// mengetik jauh lebih cepat daripada manusia).
+let scanMasukTimer = null;
+function onScanMasukInput(val) {
+  clearScanResult('scan-masuk-result');
+  clearTimeout(scanMasukTimer);
+  if (!val || !val.trim()) return;
+  scanMasukTimer = setTimeout(() => doScanMasuk(), 200);
+}
+
+let scanKeluarTimer = null;
+function onScanKeluarInput(val) {
+  clearScanResult('scan-keluar-result');
+  clearTimeout(scanKeluarTimer);
+  if (!val || !val.trim()) return;
+  scanKeluarTimer = setTimeout(() => doScanKeluar(), 200);
 }
 
 async function doScanMasuk() {
