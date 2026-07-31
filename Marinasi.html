@@ -1641,9 +1641,11 @@ function clearScanMasukResult() {
 // mengetik jauh lebih cepat daripada manusia).
 let scanMasukTimer = null;
 function onScanMasukInput(val) {
-  clearScanMasukResult();
   clearTimeout(scanMasukTimer);
+  // Abaikan event input kosong (mis. sisa 'Enter' penutup dari scanner
+  // IME-mode Android) — jangan sampai menghapus hasil scan yang baru tampil.
   if (!val || !val.trim()) return;
+  clearScanMasukResult();
   scanMasukTimer = setTimeout(() => doScanMasuk(), 200);
 }
 

@@ -2013,17 +2013,19 @@ function clearScanResult(resultId) {
 // mengetik jauh lebih cepat daripada manusia).
 let scanMasukTimer = null;
 function onScanMasukInput(val) {
-  clearScanResult('scan-masuk-result');
   clearTimeout(scanMasukTimer);
+  // Abaikan event input kosong (mis. sisa 'Enter' penutup dari scanner
+  // IME-mode Android) — jangan sampai menghapus hasil scan yang baru tampil.
   if (!val || !val.trim()) return;
+  clearScanResult('scan-masuk-result');
   scanMasukTimer = setTimeout(() => doScanMasuk(), 200);
 }
 
 let scanKeluarTimer = null;
 function onScanKeluarInput(val) {
-  clearScanResult('scan-keluar-result');
   clearTimeout(scanKeluarTimer);
   if (!val || !val.trim()) return;
+  clearScanResult('scan-keluar-result');
   scanKeluarTimer = setTimeout(() => doScanKeluar(), 200);
 }
 
