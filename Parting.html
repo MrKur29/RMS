@@ -809,7 +809,13 @@ a{text-decoration:none}
     <div id="mp-ws-panel" style="display:none;margin-top:12px">
 
       <!-- Step 1: Pilih WO -->
-      <div style="font-size:11px;font-weight:700;color:#2563eb;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">① Pilih Work Order</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div style="font-size:11px;font-weight:700;color:#2563eb;text-transform:uppercase;letter-spacing:.5px">① Pilih Work Order</div>
+        <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:#6b7280;font-weight:600;cursor:pointer">
+          <input type="checkbox" id="mp-wo-show-all" onchange="populateWOSelect()" style="cursor:pointer">
+          Tampilkan Semua
+        </label>
+      </div>
       <select id="mp-wo-select" style="width:100%;padding:8px 10px;border:1.5px solid #d1d5db;border-radius:6px;font-size:13px;margin-bottom:8px" onchange="onWOSelectChange()">
         <option value="">— Pilih Work Order —</option>
       </select>
@@ -2021,6 +2027,7 @@ function openPindahKeluar(basketId) {
   document.getElementById('mp-ws-panel').style.display    = 'none';
   document.getElementById('mp-wo-info').style.display     = 'none';
   document.getElementById('mp-wo-select').value           = '';
+  document.getElementById('mp-wo-show-all').checked       = false;
   document.getElementById('mp-ws-cards').innerHTML =
     '<div style="text-align:center;padding:12px;color:#9ca3af;font-size:12px">Pilih Work Order dulu.</div>';
   document.getElementById('mp-alloc-success').style.display = 'none';
@@ -2039,22 +2046,43 @@ function selectDest(dest) {
   const panel = document.getElementById('mp-ws-panel');
   if (dest === 'WORKSTATION') {
     panel.style.display = 'block';
-    // Populate WO dropdown: WO OPEN/IN_PROGRESS
-    const woSel = document.getElementById('mp-wo-select');
-    woSel.innerHTML = '<option value="">— Pilih Work Order —</option>';
-    (activeWOs||[]).filter(wo => ['OPEN','IN_PROGRESS'].includes(wo.status)).forEach(wo => {
-      const pm  = wo.product_master || {};
-      const opt = document.createElement('option');
-      opt.value = wo.id;
-      opt.textContent = `${wo.order_code} — ${pm.nama_produk || ''} (${fmt(wo.target_qty_ekor)} ek / ${fmtKg(wo.target_kg)})`;
-      woSel.appendChild(opt);
-    });
+    populateWOSelect();
     // Reset info + cards
     document.getElementById('mp-wo-info').style.display = 'none';
     document.getElementById('mp-ws-cards').innerHTML =
       '<div style="text-align:center;padding:12px;color:#9ca3af;font-size:12px">Pilih Work Order dulu.</div>';
   } else {
     panel.style.display = 'none';
+  }
+}
+
+// Isi dropdown "① Pilih Work Order". Default: sembunyikan WO yang bahan
+// bakunya (qty ekor) sudah terkirim/teralokasi penuh ke workstation
+// (total processing_inputs.qty_input >= target_qty_ekor). Checkbox
+// "Tampilkan Semua" membuka kembali WO yang sudah penuh, untuk jaga-jaga.
+function populateWOSelect() {
+  const woSel   = document.getElementById('mp-wo-select');
+  const showAll = document.getElementById('mp-wo-show-all')?.checked;
+  const prevVal = woSel.value;
+  woSel.innerHTML = '<option value="">— Pilih Work Order —</option>';
+
+  (activeWOs||[]).filter(wo => ['OPEN','IN_PROGRESS'].includes(wo.status)).forEach(wo => {
+    const target   = Number(wo.target_qty_ekor) || 0;
+    const teralok  = (wo.processing_inputs||[]).reduce((s,i) => s + (Number(i.qty_input)||0), 0);
+    const fullySent = target > 0 && teralok >= target;
+    if (fullySent && !showAll) return; // hide — sudah terkirim semua
+
+    const pm  = wo.product_master || {};
+    const opt = document.createElement('option');
+    opt.value = wo.id;
+    opt.textContent = `${wo.order_code} — ${pm.nama_produk || ''} (${fmt(wo.target_qty_ekor)} ek / ${fmtKg(wo.target_kg)})`
+      + (fullySent ? ' ✅ terkirim penuh' : '');
+    woSel.appendChild(opt);
+  });
+
+  // Pertahankan pilihan sebelumnya kalau masih ada di list
+  if (prevVal && [...woSel.options].some(o => o.value === prevVal)) {
+    woSel.value = prevVal;
   }
 }
 
