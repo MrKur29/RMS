@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Laporan Blasting — Kurnia's Food</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="permissions.js"></script>
+<script src="viewstate.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f2f5;color:#111827;font-size:14px}
+button{cursor:pointer;font-family:inherit}
+a{text-decoration:none}
+
+/* LOGIN */
+#login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(135deg,#0f172a 0%,#134e4a 60%,#0d9488 100%)}
+.login-card{background:white;border-radius:16px;padding:44px 40px;width:400px;box-shadow:0 25px 60px rgba(0,0,0,.4)}
+.login-logo{text-align:center;margin-bottom:36px}
+.login-logo .icon{font-size:48px;display:block;margin-bottom:12px}
+.login-logo h1{font-size:22px;font-weight:800;color:#111827}
+.login-logo p{font-size:13px;color:#6b7280;margin-top:4px}
+.form-group{margin-bottom:20px}
+.form-group label{display:block;font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
+.form-group input,.form-group select{width:100%;padding:11px 14px;border:1.5px solid #d1d5db;border-radius:8px;font-size:15px;transition:border-color .2s,box-shadow .2s;color:#111827;background:white;font-family:inherit}
+.form-group input:focus,.form-group select:focus{outline:none;border-color:#0d9488;box-shadow:0 0 0 3px rgba(13,148,136,.12)}
+.btn-login{width:100%;padding:13px;background:#0d9488;color:white;border:none;border-radius:8px;font-size:15px;font-weight:700;transition:background .2s}
+.btn-login:hover{background:#0f766e}
+.btn-login:disabled{background:#5eead4;cursor:not-allowed}
+.login-error{background:#fee2e2;color:#dc2626;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:18px;border:1px solid #fecaca;display:none}
+.login-version{text-align:center;margin-top:20px;font-size:11px;color:#9ca3af}
+
+/* APP LAYOUT */
+#app-screen{display:none;height:100vh;overflow:hidden}
+.app-layout{display:flex;height:100%}
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:90}
+.sidebar-overlay.visible{display:block}
+
+/* SIDEBAR */
+.sidebar{width:230px;flex-shrink:0;background:#0f172a;color:white;display:flex;flex-direction:column;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.1) transparent;transition:transform .28s cubic-bezier(.4,0,.2,1);z-index:100}
+.sidebar-brand{padding:20px 18px 16px;border-bottom:1px solid rgba(255,255,255,.08)}
+.sidebar-nav{flex:1;padding:10px 0}
+.nav-section-label{font-size:10px;font-weight:700;color:rgba(255,255,255,.3);text-transform:uppercase;letter-spacing:1px;padding:12px 18px 4px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 18px;font-size:13px;color:rgba(255,255,255,.65);cursor:pointer;transition:all .15s;border-left:3px solid transparent}
+.nav-item:hover:not(.disabled){background:rgba(255,255,255,.07);color:white}
+.nav-item.active{background:rgba(13,148,136,.2);color:#5eead4;border-left-color:#0d9488}
+.nav-item.disabled{opacity:.3;cursor:not-allowed}
+.nav-icon{font-size:15px;width:22px;text-align:center;flex-shrink:0}
+.nav-label-text{flex:1}
+.sidebar-footer{padding:14px 18px;border-top:1px solid rgba(255,255,255,.08)}
+.user-card{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.user-avatar{width:34px;height:34px;border-radius:50%;background:#0d9488;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:white;flex-shrink:0}
+.user-info-text .user-name{font-size:13px;font-weight:700;color:#f8fafc}
+.user-info-text .user-role{font-size:11px;color:rgba(255,255,255,.45);margin-top:1px}
+.btn-logout{width:100%;padding:8px 12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.6);border-radius:6px;font-size:12px;font-weight:600;transition:all .15s}
+.btn-logout:hover{background:rgba(220,38,38,.25);border-color:rgba(220,38,38,.5);color:#fca5a5}
+
+/* MAIN */
+.main-area{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.topbar{background:white;height:58px;padding:0 20px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e5e7eb;box-shadow:0 1px 4px rgba(0,0,0,.05);gap:12px}
+.topbar-left{display:flex;align-items:center;gap:12px;min-width:0}
+.topbar-left h1{font-size:17px;font-weight:800;color:#111827;white-space:nowrap}
+.topbar-left p{font-size:12px;color:#9ca3af;margin-top:1px}
+.topbar-left-text{min-width:0}
+.topbar-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.btn-hamburger{display:none;align-items:center;justify-content:center;width:40px;height:40px;border-radius:8px;background:#f3f4f6;border:1.5px solid #e5e7eb;font-size:18px;color:#374151;flex-shrink:0}
+.btn-hamburger:hover{background:#e5e7eb}
+.clock-display{font-size:14px;font-weight:700;color:#374151;background:#f9fafb;padding:6px 10px;border-radius:6px;border:1px solid #e5e7eb;white-space:nowrap}
+
+/* CONTENT */
+.content-area{flex:1;overflow-y:auto;padding:20px 24px 32px}
+
+/* PANEL */
+.panel{background:white;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden;margin-bottom:14px}
+.panel:last-child{margin-bottom:0}
+.panel-head{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:1px solid #f3f4f6;gap:8px;flex-wrap:wrap}
+.panel-title{font-size:14px;font-weight:800;color:#111827}
+.panel-pill{font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;background:#f3f4f6;color:#374151}
+.panel-pill.ok{background:#d1fae5;color:#065f46}
+.panel-body{padding:16px}
+
+.form-row{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
+.form-row .form-group{flex:1;margin-bottom:0;min-width:160px}
+.hint{font-size:11px;color:#9ca3af;margin-top:4px}
+.empty{text-align:center;padding:22px 16px;color:#9ca3af;font-size:13px}
+
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:9px 16px;border-radius:6px;border:none;font-size:13px;font-weight:700;transition:all .15s;min-height:38px;touch-action:manipulation;white-space:nowrap}
+.btn-primary{background:#0d9488;color:white}
+.btn-primary:hover{background:#0f766e}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-outline{background:#f9fafb;color:#374151;border:1.5px solid #d1d5db;padding:9px 16px;border-radius:6px;font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:5px}
+.btn-outline:hover{background:#f3f4f6}
+.btn-xlsx{background:#eff6ff;color:#1d4ed8;border:1.5px solid #93c5fd;padding:7px 12px;border-radius:6px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px;cursor:pointer;white-space:nowrap}
+.btn-xlsx:hover{background:#dbeafe}
+
+/* TABLE */
+.tbl-wrap{overflow-x:auto}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl thead th{text-align:left;padding:8px 10px;background:#f9fafb;font-size:10.5px;font-weight:800;color:#6b7280;text-transform:uppercase;letter-spacing:.3px;border-bottom:1.5px solid #e5e7eb;white-space:nowrap}
+.tbl tbody td{padding:7px 10px;border-bottom:1px solid #f3f4f6;vertical-align:top}
+.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tot-row td{font-weight:800;background:#f9fafb}
+.info-bar{padding:10px 16px;background:#f9fafb;border-bottom:1px solid #f3f4f6;font-size:12px;color:#374151;display:flex;gap:18px;flex-wrap:wrap}
+.info-bar b{color:#111827}
+.badge-rak{display:inline-block;padding:1px 8px;border-radius:20px;background:#e0f2fe;color:#075985;font-weight:700;font-size:11px}
+.badge-batch{display:inline-block;padding:1px 8px;border-radius:20px;background:#ede9fe;color:#5b21b6;font-weight:700;font-size:11px}
+#print-header{display:none}
+
+@media print{
+  .sidebar,.sidebar-overlay,.topbar,#panel-filter,.btn-xlsx,#btn-print{display:none !important}
+  #app-screen,.app-layout,.main-area,.content-area{height:auto !important;overflow:visible !important;display:block !important}
+  body{background:white}
+  .content-area{padding:0}
+  .panel{box-shadow:none;border:1px solid #e5e7eb;break-inside:avoid}
+  #print-header{display:block !important;margin-bottom:14px}
+  #print-header h2{font-size:16px}
+  #print-header p{font-size:12px;color:#374151;margin-top:2px}
+}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <span class="icon">🧊</span>
+      <h1>RPA Management System</h1>
+      <p>Laporan Blasting — Login</p>
+    </div>
+    <div class="login-error" id="login-error"></div>
+    <div class="form-group">
+      <label>Username</label>
+      <input type="text" id="inp-username" placeholder="Masukkan username" autocomplete="username"
+             onkeydown="if(event.key==='Enter')document.getElementById('inp-password').focus()">
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input type="password" id="inp-password" placeholder="Masukkan password" autocomplete="current-password"
+             onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button class="btn-login" id="btn-login" onclick="doLogin()">Masuk →</button>
+    <p class="login-version">v1.0 — RPA System</p>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app-screen">
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+<div class="app-layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <img src="logo.png" style="height:36px;width:auto;object-fit:contain;">
+        <span style="font-size:15px;font-weight:800;color:#f8fafc;">Kurnia's Food</span>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section-label">Utama</div>
+      <div class="nav-item" onclick="navTo('Dashboard.html')"><span class="nav-icon">🏠</span><span class="nav-label-text">Dashboard</span></div>
+      <div class="nav-section-label">Produksi</div>
+      <div class="nav-item" onclick="navTo('BatchAyamHidup.html')"><span class="nav-icon">🐔</span><span class="nav-label-text">Batch Ayam Hidup</span></div>
+      <div class="nav-item" onclick="navTo('ProduksiKarkas.html')"><span class="nav-icon">⚙️</span><span class="nav-label-text">Produksi Karkas</span></div>
+      <div class="nav-item" onclick="navTo('Thawing.html')"><span class="nav-icon">🌡️</span><span class="nav-label-text">Thawing</span></div>
+      <div class="nav-item" onclick="navTo('Chiller.html')"><span class="nav-icon">❄️</span><span class="nav-label-text">Chiller</span></div>
+      <div class="nav-item" onclick="navTo('WorkOrder.html')"><span class="nav-icon">📋</span><span class="nav-label-text">Work Order</span></div>
+      <div class="nav-item" onclick="navTo('Parting.html')"><span class="nav-icon">✂️</span><span class="nav-label-text">Parting</span></div>
+      <div class="nav-item" onclick="navTo('Boneless.html')"><span class="nav-icon">🥩</span><span class="nav-label-text">Boneless</span></div>
+      <div class="nav-item" onclick="navTo('Marinasi.html')"><span class="nav-icon">🌶️</span><span class="nav-label-text">Marinasi</span></div>
+      <div class="nav-item" onclick="navTo('Blasting.html')"><span class="nav-icon">🧊</span><span class="nav-label-text">Blasting</span></div>
+      <div class="nav-item" onclick="navTo('ByProductKarkas.html')"><span class="nav-icon">📦</span><span class="nav-label-text">By-product Karkas</span></div>
+      <div class="nav-section-label">Penjualan</div>
+      <div class="nav-item" onclick="navTo('Penjualan.html')"><span class="nav-icon">🛒</span><span class="nav-label-text">Penjualan</span></div>
+      <div class="nav-section-label">Manajemen</div>
+      <div class="nav-item" onclick="navTo('Koreksi.html')"><span class="nav-icon">✅</span><span class="nav-label-text">Koreksi & Approval</span></div>
+      <div class="nav-item" onclick="navTo('Laporan.html')"><span class="nav-icon">📊</span><span class="nav-label-text">Laporan</span></div>
+      <div class="nav-item" id="nav-saldo-awal" style="display:none" onclick="navTo('SaldoAwal.html')"><span class="nav-icon">📋</span><span class="nav-label-text">Saldo Awal Barang</span></div>
+      <div class="nav-item" onclick="navTo('MasterData.html')"><span class="nav-icon">🗂️</span><span class="nav-label-text">Master Data</span></div>
+      <div class="nav-item" id="nav-revisi-batch" style="display:none" onclick="navTo('RevisiBatch.html')"><span class="nav-icon">🔀</span><span class="nav-label-text">Revisi Batch Keranjang</span></div>
+      <div class="nav-item" id="nav-user-mgmt" style="display:none" onclick="navTo('UserManagement.html')"><span class="nav-icon">👥</span><span class="nav-label-text">Manajemen User</span></div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-card">
+        <div class="user-avatar" id="user-avatar">?</div>
+        <div class="user-info-text">
+          <div class="user-name" id="sidebar-name">—</div>
+          <div class="user-role" id="sidebar-role">—</div>
+        </div>
+      </div>
+      <button class="btn-logout" onclick="doLogout()">⬅ Keluar</button>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="main-area">
+    <div class="topbar">
+      <div class="topbar-left">
+        <button class="btn-hamburger" onclick="toggleSidebar()">☰</button>
+        <div class="topbar-left-text">
+          <h1>🧊 Laporan Blasting</h1>
+          <p id="topbar-date">—</p>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <div class="clock-display" id="clock">—</div>
+      </div>
+    </div>
+
+    <div class="content-area">
+
+      <!-- FILTER -->
+      <div class="panel" id="panel-filter">
+        <div class="panel-head"><span class="panel-title">🔎 Filter</span></div>
+        <div class="panel-body">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Tanggal Batch</label>
+              <input type="date" id="filter-tanggal">
+            </div>
+            <div class="form-group">
+              <label>Batch</label>
+              <select id="filter-batch">
+                <option value="">Semua Batch (pada tanggal terpilih)</option>
+              </select>
+            </div>
+            <div class="form-group" style="flex:0">
+              <button class="btn btn-primary" onclick="tampilkanLaporan()">📊 Tampilkan</button>
+            </div>
+            <div class="form-group" style="flex:0">
+              <button class="btn-outline" id="btn-print" onclick="printLaporan()">🖨️ Print</button>
+            </div>
+          </div>
+          <div class="hint">Isi Tanggal Batch dan/atau pilih Batch tertentu, lalu klik Tampilkan. Kosongkan Tanggal &amp; pilih "Semua Batch" untuk melihat semua batch yang pernah selesai. Laporan ini hanya menampilkan keranjang yang sudah selesai dibekukan (status FROZEN, bagian dari batch yang sudah COMPLETED) — alokasi yang masih menunggu (belum dibekukan) tidak termasuk.</div>
+        </div>
+      </div>
+
+      <div id="report-body" style="display:none">
+
+        <div id="print-header">
+          <h2>🧊 Laporan Blasting</h2>
+          <p id="print-filter-desc">—</p>
+        </div>
+
+        <div class="panel">
+          <div class="info-bar">
+            <span>Filter Tanggal: <b id="info-tanggal">—</b></span>
+            <span>Filter Batch: <b id="info-batch">—</b></span>
+            <span>Jumlah Batch: <b id="info-jml-batch">0</b></span>
+            <span>Jumlah Keranjang: <b id="info-jml-keranjang">0</b></span>
+            <span>Total Ekor: <b id="info-total-ekor">0</b></span>
+            <span>Total Kg: <b id="info-total-kg">0</b></span>
+          </div>
+        </div>
+
+        <!-- RINCIAN KERANJANG MASUK -->
+        <div class="panel">
+          <div class="panel-head">
+            <span class="panel-title">📥 Rincian Keranjang Masuk</span>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="panel-pill" id="pill-rincian">— baris</span>
+              <button class="btn-xlsx" onclick="exportRincianExcel()">⬇ Excel</button>
+            </div>
+          </div>
+          <div class="tbl-wrap"><table class="tbl">
+            <thead><tr><th>No</th><th>No. Keranjang</th><th>Nama Barang</th><th>Tgl Produksi</th><th class="num">Ekor</th><th class="num">Kg</th><th>No. Rak</th><th>Batch</th></tr></thead>
+            <tbody id="tbody-rincian"><tr><td colspan="8"><div class="empty">Atur filter &amp; klik Tampilkan.</div></td></tr></tbody>
+          </table></div>
+        </div>
+
+        <!-- REKAP NAMA BARANG -->
+        <div class="panel">
+          <div class="panel-head">
+            <span class="panel-title">📊 Rekap Barang (Ekor &amp; Kg)</span>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="panel-pill" id="pill-rekap">— barang</span>
+              <button class="btn-xlsx" onclick="exportRekapExcel()">⬇ Excel</button>
+            </div>
+          </div>
+          <div class="tbl-wrap"><table class="tbl">
+            <thead><tr><th>Nama Barang</th><th class="num">Ekor</th><th class="num">Kg</th></tr></thead>
+            <tbody id="tbody-rekap"><tr><td colspan="3"><div class="empty">—</div></td></tr></tbody>
+          </table></div>
+        </div>
+
+        <div class="hint" style="padding:0 4px 12px">
+          Catatan: Rincian Keranjang Masuk = satu baris per alokasi keranjang→rak yang berstatus FROZEN (sudah selesai dibekukan). Satu keranjang bisa muncul di lebih dari satu baris jika dipecah ke beberapa rak. Tgl Produksi = tanggal produksi asal keranjang tersebut (bukan tanggal blasting). Rekap Barang menjumlahkan seluruh baris rincian per nama barang.
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://dxixqyokuqrdprupsvic.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR4aXhxeW9rdXFyZHBydXBzdmljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5NjM3ODcsImV4cCI6MjA5MjUzOTc4N30.D_yaPwNbe4FFg_hmDeJ9cuxzbNvXZT8l1_TyZuq1t1M';
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let currentUser = null;
+let lastData = null; // dipakai untuk export/print
+
+// ── UTILS ──
+async function sha256(str){const buf=new TextEncoder().encode(str);const hash=await crypto.subtle.digest('SHA-256',buf);return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('')}
+function esc(s){return (s==null?'':String(s)).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function navTo(url){closeSidebar();if(currentUser){localStorage.setItem('rpa_user',JSON.stringify(currentUser));sessionStorage.setItem('rpa_user',JSON.stringify(currentUser))}window.location.href=url}
+function showToast(msg){alert(msg)}
+function fmt(v){return v==null?'0':Number(v).toLocaleString('id-ID')}
+function fmtKgNum(v){return (v==null?0:Number(v)).toLocaleString('id-ID',{minimumFractionDigits:1,maximumFractionDigits:1})}
+function fmtDate(d){if(!d)return'—';const dt=new Date(d+'T00:00:00');return dt.toLocaleDateString('id-ID',{day:'2-digit',month:'2-digit',year:'numeric'})}
+function todayISO(){return new Date().toLocaleDateString('en-CA')}
+
+// ── SIDEBAR ──
+function toggleSidebar(){const s=document.getElementById('sidebar'),o=document.getElementById('sidebar-overlay');s.classList.toggle('open');o.classList.toggle('visible')}
+function closeSidebar(){document.getElementById('sidebar')?.classList.remove('open');document.getElementById('sidebar-overlay')?.classList.remove('visible')}
+
+// ── AUTH ──
+async function doLogin(){
+  const username=document.getElementById('inp-username').value.trim();
+  const password=document.getElementById('inp-password').value;
+  const errEl=document.getElementById('login-error');
+  errEl.style.display='none';
+  if(!username||!password){errEl.textContent='Username dan password wajib diisi.';errEl.style.display='block';return}
+  const btn=document.getElementById('btn-login');
+  btn.disabled=true;btn.textContent='Memproses…';
+  try{
+    const hash=await sha256(password);
+    const{data,error}=await db.from('users').select('id,nama,username,role,aktif,pin,is_system_admin').eq('username',username).eq('password_hash',hash).eq('aktif',true).maybeSingle();
+    if(error)throw error;
+    if(!data){errEl.textContent='Username atau password salah.';errEl.style.display='block';return}
+    data.permissions=await RPA_PERM.fetchPermissions(db,data.id);
+    currentUser=data;localStorage.setItem('rpa_user',JSON.stringify(data));startApp();
+  }catch(e){errEl.textContent='Gagal terhubung ke server.';errEl.style.display='block';}
+  finally{btn.disabled=false;btn.textContent='Masuk →'}
+}
+function doLogout(){localStorage.removeItem('rpa_user');sessionStorage.removeItem('rpa_user');currentUser=null;document.getElementById('app-screen').style.display='none';document.getElementById('login-screen').style.display='flex'}
+
+function startApp(){
+  const moduleRole=RPA_PERM.enforceModuleAccess(currentUser,'laporan');
+  if(!moduleRole)return;
+  currentUser.moduleRole=moduleRole;
+
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('app-screen').style.display='block';
+  const av=document.getElementById('user-avatar');
+  if(av)av.textContent=(currentUser.nama||'?')[0].toUpperCase();
+  document.getElementById('sidebar-name').textContent=currentUser.nama;
+  document.getElementById('sidebar-role').textContent=currentUser.role+(currentUser.is_system_admin?' (Admin)':'');
+  if(currentUser.is_system_admin){const el=document.getElementById('nav-user-mgmt');if(el)el.style.display='flex'}
+  if(RPA_PERM.getModuleRole(currentUser,'revisi_batch')!==null){const rbEl=document.getElementById('nav-revisi-batch');if(rbEl)rbEl.style.display='flex'}
+  if(RPA_PERM.getModuleRole(currentUser,'saldo_awal')!==null){const saEl=document.getElementById('nav-saldo-awal');if(saEl)saEl.style.display='flex'}
+  RPA_STATE.bindScroll('LaporanBlasting');
+  startClock();
+  document.getElementById('filter-tanggal').value = todayISO();
+  loadBatchOptions();
+}
+
+function startClock(){
+  function tick(){
+    const now=new Date();
+    document.getElementById('clock').textContent=now.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    document.getElementById('topbar-date').textContent=now.toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  }
+  tick();setInterval(tick,1000);
+}
+
+// ── BATCH DROPDOWN ──
+// Populate dengan semua batch COMPLETED (terbaru dulu). Dropdown tidak otomatis
+// disaring ulang oleh perubahan Tanggal — user bebas pilih batch spesifik dari
+// hari manapun, atau biarkan "Semua Batch" lalu isi Tanggal untuk menyaring.
+async function loadBatchOptions(){
+  const sel = document.getElementById('filter-batch');
+  try{
+    const{data,error}=await db.from('blasting_batches')
+      .select('id,batch_code,tanggal,status')
+      .eq('status','COMPLETED')
+      .order('tanggal',{ascending:false})
+      .order('batch_code',{ascending:false})
+      .limit(500);
+    if(error)throw error;
+    const opts = (data||[]).map(b=>`<option value="${b.id}">${esc(b.batch_code)} — ${fmtDate(b.tanggal)}</option>`).join('');
+    sel.innerHTML = '<option value="">Semua Batch (pada tanggal terpilih)</option>' + opts;
+  }catch(e){
+    console.error(e);
+    sel.innerHTML = '<option value="">Semua Batch (pada tanggal terpilih)</option>';
+  }
+}
+
+// ── LOAD LAPORAN ──
+async function tampilkanLaporan(){
+  const tanggal = document.getElementById('filter-tanggal').value;
+  const batchSel = document.getElementById('filter-batch');
+  const batchId = batchSel.value;
+  const batchLabel = batchId ? batchSel.options[batchSel.selectedIndex].textContent : '';
+
+  if(!tanggal && !batchId){ showToast('Isi Tanggal Batch dan/atau pilih Batch terlebih dahulu.'); return; }
+
+  document.getElementById('report-body').style.display='block';
+  document.getElementById('info-tanggal').textContent = tanggal ? fmtDate(tanggal) : 'Semua tanggal';
+  document.getElementById('info-batch').textContent = batchId ? batchLabel : 'Semua batch';
+  document.getElementById('print-filter-desc').textContent =
+    'Tanggal: ' + (tanggal?fmtDate(tanggal):'Semua') + '  |  Batch: ' + (batchId?batchLabel:'Semua');
+  ['tbody-rincian','tbody-rekap'].forEach(id=>{
+    document.getElementById(id).innerHTML = '<tr><td colspan="8"><div class="empty">Memuat…</div></td></tr>';
+  });
+
+  try{
+    const rows = await fetchRincian(tanggal, batchId);
+    lastData = { tanggal, batchId, batchLabel, rows };
+    renderRincian(rows);
+    renderRekap(rows);
+    renderInfoBar(rows);
+  }catch(e){
+    console.error(e);
+    showToast('Gagal memuat laporan: '+(e.message||e));
+  }
+}
+
+async function fetchRincian(tanggal, batchId){
+  let q = db.from('blasting_rack_allocations')
+    .select(`
+      id, ekor, kg, status, frozen_at,
+      baskets ( basket_code, tanggal_produksi, product_master ( nama_produk, product_code ) ),
+      blasting_racks ( nomor_rak ),
+      blasting_batches!inner ( id, batch_code, tanggal, status )
+    `)
+    .eq('status','FROZEN');
+
+  if(batchId){
+    q = q.eq('batch_id', batchId);
+  }
+  if(tanggal){
+    q = q.eq('blasting_batches.tanggal', tanggal);
+  }
+
+  const{data,error} = await q.order('frozen_at',{ascending:true});
+  if(error) throw error;
+
+  const rows = (data||[]).map(r=>({
+    basketCode: r.baskets?.basket_code || '—',
+    namaBarang: r.baskets?.product_master?.nama_produk || '—',
+    tglProduksi: r.baskets?.tanggal_produksi || null,
+    ekor: Number(r.ekor)||0,
+    kg: Number(r.kg)||0,
+    nomorRak: r.blasting_racks?.nomor_rak || '—',
+    batchCode: r.blasting_batches?.batch_code || '—',
+    batchTanggal: r.blasting_batches?.tanggal || null
+  }));
+
+  // Urutkan tampilan: rak, lalu no. keranjang — lebih mudah dibaca daripada urutan frozen_at mentah.
+  rows.sort((a,b)=> a.nomorRak.localeCompare(b.nomorRak,'id',{numeric:true}) || a.basketCode.localeCompare(b.basketCode,'id',{numeric:true}));
+  return rows;
+}
+
+// ── RENDER ──
+function renderInfoBar(rows){
+  const jmlBatch = new Set(rows.map(r=>r.batchCode)).size;
+  const jmlKeranjang = new Set(rows.map(r=>r.basketCode)).size;
+  const totEkor = rows.reduce((s,r)=>s+r.ekor,0);
+  const totKg = rows.reduce((s,r)=>s+r.kg,0);
+  document.getElementById('info-jml-batch').textContent = fmt(jmlBatch);
+  document.getElementById('info-jml-keranjang').textContent = fmt(jmlKeranjang);
+  document.getElementById('info-total-ekor').textContent = fmt(totEkor);
+  document.getElementById('info-total-kg').textContent = fmtKgNum(totKg);
+}
+
+function renderRincian(rows){
+  const tb = document.getElementById('tbody-rincian');
+  document.getElementById('pill-rincian').textContent = rows.length + ' baris';
+  if(!rows.length){ tb.innerHTML='<tr><td colspan="8"><div class="empty">Tidak ada keranjang FROZEN untuk filter ini.</div></td></tr>'; return; }
+  let totEkor=0, totKg=0;
+  tb.innerHTML = rows.map((r,i)=>{
+    totEkor+=r.ekor; totKg+=r.kg;
+    return '<tr>'+
+      '<td>'+(i+1)+'</td>'+
+      '<td>'+esc(r.basketCode)+'</td>'+
+      '<td>'+esc(r.namaBarang)+'</td>'+
+      '<td>'+(r.tglProduksi?fmtDate(r.tglProduksi):'—')+'</td>'+
+      '<td class="num">'+fmt(r.ekor)+'</td>'+
+      '<td class="num">'+fmtKgNum(r.kg)+'</td>'+
+      '<td><span class="badge-rak">'+esc(r.nomorRak)+'</span></td>'+
+      '<td><span class="badge-batch">'+esc(r.batchCode)+'</span><div style="font-size:11px;color:#9ca3af;margin-top:2px">'+(r.batchTanggal?fmtDate(r.batchTanggal):'—')+'</div></td>'+
+    '</tr>';
+  }).join('') + '<tr class="tot-row"><td colspan="4">TOTAL</td><td class="num">'+fmt(totEkor)+'</td><td class="num">'+fmtKgNum(totKg)+'</td><td colspan="2"></td></tr>';
+}
+
+function renderRekap(rows){
+  const map = {};
+  rows.forEach(r=>{
+    if(!map[r.namaBarang]) map[r.namaBarang] = { ekor:0, kg:0 };
+    map[r.namaBarang].ekor += r.ekor;
+    map[r.namaBarang].kg += r.kg;
+  });
+  const list = Object.keys(map).sort((a,b)=>a.localeCompare(b,'id')).map(barang=>({barang, ...map[barang]}));
+  const tb = document.getElementById('tbody-rekap');
+  document.getElementById('pill-rekap').textContent = list.length + ' barang';
+  if(!list.length){ tb.innerHTML='<tr><td colspan="3"><div class="empty">Tidak ada data.</div></td></tr>'; return; }
+  let totEkor=0, totKg=0;
+  tb.innerHTML = list.map(p=>{
+    totEkor+=p.ekor; totKg+=p.kg;
+    return '<tr>'+
+      '<td>'+esc(p.barang)+'</td>'+
+      '<td class="num">'+fmt(p.ekor)+'</td>'+
+      '<td class="num">'+fmtKgNum(p.kg)+'</td>'+
+    '</tr>';
+  }).join('') + '<tr class="tot-row"><td>TOTAL</td><td class="num">'+fmt(totEkor)+'</td><td class="num">'+fmtKgNum(totKg)+'</td></tr>';
+}
+
+// ── PRINT ──
+function printLaporan(){
+  if(!lastData){ showToast('Tampilkan laporan dulu sebelum print.'); return; }
+  window.print();
+}
+
+// ── EXPORT EXCEL ──
+function exportXLSX(headers, rows, sheetName, filename){
+  if(typeof XLSX==='undefined'){ showToast('Library Excel belum dimuat. Coba refresh.'); return; }
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  XLSX.writeFile(wb, filename);
+}
+
+function fileTag(){
+  if(!lastData) return 'Blasting';
+  if(lastData.batchId) return lastData.batchLabel.split(' — ')[0];
+  return lastData.tanggal || 'Semua';
+}
+
+function exportRincianExcel(){
+  if(!lastData){ showToast('Tampilkan laporan dulu.'); return; }
+  const rows = lastData.rows.map((r,i)=>[i+1, r.basketCode, r.namaBarang, r.tglProduksi?fmtDate(r.tglProduksi):'', r.ekor, r.kg, r.nomorRak, r.batchCode]);
+  exportXLSX(['No','No. Keranjang','Nama Barang','Tgl Produksi','Ekor','Kg','No. Rak','Batch'], rows, 'Rincian Keranjang Masuk', `LaporanBlasting_Rincian_${fileTag()}.xlsx`);
+}
+
+function exportRekapExcel(){
+  if(!lastData){ showToast('Tampilkan laporan dulu.'); return; }
+  const map = {};
+  lastData.rows.forEach(r=>{ if(!map[r.namaBarang])map[r.namaBarang]={ekor:0,kg:0}; map[r.namaBarang].ekor+=r.ekor; map[r.namaBarang].kg+=r.kg; });
+  const rows = Object.keys(map).sort((a,b)=>a.localeCompare(b,'id')).map(b=>[b, map[b].ekor, map[b].kg]);
+  exportXLSX(['Nama Barang','Ekor','Kg'], rows, 'Rekap Barang', `LaporanBlasting_Rekap_${fileTag()}.xlsx`);
+}
+
+// ── AUTO LOGIN ──
+window.addEventListener('DOMContentLoaded', async () => {
+  const saved = localStorage.getItem('rpa_user') || sessionStorage.getItem('rpa_user');
+  if(saved){ try{ currentUser = await RPA_PERM.restoreSession(db); if(currentUser) startApp(); }catch{} }
+});
+</script>
+</body>
+</html>

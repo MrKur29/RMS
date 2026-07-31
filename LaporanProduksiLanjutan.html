@@ -263,8 +263,8 @@ a{text-decoration:none}
             </div>
           </div>
           <div class="tbl-wrap"><table class="tbl">
-            <thead><tr><th>Barang</th><th class="num">Ek</th><th class="num">Kg</th><th>Sumber</th><th>Tgl Produksi</th><th>Keterangan</th></tr></thead>
-            <tbody id="tbody-pengambilan"><tr><td colspan="6"><div class="empty">Pilih modul, tanggal &amp; klik Tampilkan.</div></td></tr></tbody>
+            <thead><tr><th>Barang</th><th>No. Keranjang</th><th class="num">Ek</th><th class="num">Kg</th><th>Sumber</th><th>Tgl Produksi</th><th>Keterangan</th></tr></thead>
+            <tbody id="tbody-pengambilan"><tr><td colspan="7"><div class="empty">Pilih modul, tanggal &amp; klik Tampilkan.</div></td></tr></tbody>
           </table></div>
         </div>
 
@@ -323,7 +323,7 @@ a{text-decoration:none}
         </div>
 
         <div class="hint" style="padding:0 4px 12px">
-          Catatan: Sumber/Keterangan diturunkan otomatis dari lokasi &amp; jenis asal keranjang (basket_type). Rekap hanya menampilkan barang yang punya aktivitas pada tanggal ini (bukan daftar tetap semua ukuran). Summary/% Rendemen belum tersedia di laporan ini.
+          Catatan: Pengambilan Produk = keranjang yang benar-benar MASUK ke lantai ini pada tanggal ini (transfer antar-lantai yang sudah dikonfirmasi, ditambah basket baru dari Thawing yang lahir langsung di lantai ini). Sumber = lokasi asal keranjang itu sebelum masuk ke sini (langsung dari produksi karkas ditampilkan sebagai "Karkas"), bukan kategori produksi asal jauhnya. Keterangan = catatan yang ditulis pengirim saat transfer. Rekap hanya menampilkan barang yang punya aktivitas pada tanggal ini (bukan daftar tetap semua ukuran). Summary/% Rendemen belum tersedia di laporan ini.
         </div>
 
       </div>
@@ -339,12 +339,14 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ── MODULE CONFIG ──
-// sourceCats: kategori sumber pengambilan produk yang mungkin buat modul ini (basket_type, atau CHILLER dari lokasi).
+// sourceCats: kategori sumber keranjang masuk yang mungkin buat modul ini — diturunkan dari
+//   basket_movements.dari_lokasi (LANTAI dinormalisasi jadi KARKAS, lihat normalizeCat()) atau
+//   'THAWING' untuk basket yang lahir langsung dari Thawing (lihat fetchPengambilan()).
 // destCats: kategori tujuan hasil produk (processing_outputs.tujuan_lokasi) yang mungkin buat modul ini.
 const MODULES = {
-  BONELESS: { label:'Boneless', icon:'🥩', sourceCats:['KARKAS','CHILLER','PARTING','THAWING'], destCats:['CHILLER','PARTING'] },
-  PARTING:  { label:'Parting',  icon:'✂️', sourceCats:['KARKAS','CHILLER','THAWING','BONELESS'], destCats:['CHILLER','BONELESS'] },
-  MARINASI: { label:'Marinasi', icon:'🌶️', sourceCats:['KARKAS','CHILLER','PARTING','THAWING'], destCats:['MARINASI'] }
+  BONELESS: { label:'Boneless', icon:'🥩', sourceCats:['KARKAS','CHILLER','PARTING','THAWING'], destCats:['CHILLER','PARTING','MARINASI','BLASTING'] },
+  PARTING:  { label:'Parting',  icon:'✂️', sourceCats:['KARKAS','CHILLER','THAWING','BONELESS'], destCats:['CHILLER','BONELESS','MARINASI','BLASTING'] },
+  MARINASI: { label:'Marinasi', icon:'🌶️', sourceCats:['KARKAS','CHILLER','PARTING','THAWING'], destCats:['CHILLER','PARTING','BONELESS','BLASTING'] }
 };
 let currentTipe = 'BONELESS';
 
@@ -361,14 +363,14 @@ function fmtKgNum(v){return (v==null?0:Number(v)).toLocaleString('id-ID',{minimu
 function fmtDate(d){if(!d)return'—';const dt=new Date(d+'T00:00:00');return dt.toLocaleDateString('id-ID',{day:'2-digit',month:'2-digit',year:'numeric'})}
 function todayISO(){return new Date().toLocaleDateString('en-CA')}
 
-const SUMBER_LABEL = {CHILLER:'Chiller',KARKAS:'Karkas',PARTING:'Parting',BONELESS:'Boneless',THAWING:'Thawing',BYPRODUCT:'Byproduct',MARINASI:'Marinasi',SALDO_AWAL:'Saldo Awal'};
-const DEST_LABEL_PREFIX = {CHILLER:'Ke Chiller',PARTING:'Ke Parting',BONELESS:'Ke Boneless',MARINASI:'Ke Marinasi'};
-function sourceCategory(basket){
-  if(!basket) return 'LAINNYA';
-  if(basket.lokasi==='CHILLER') return 'CHILLER';
-  return basket.basket_type || 'LAINNYA';
-}
+const SUMBER_LABEL = {CHILLER:'Chiller',KARKAS:'Karkas',PARTING:'Parting',BONELESS:'Boneless',THAWING:'Thawing',BYPRODUCT:'Byproduct',MARINASI:'Marinasi',BLASTING:'Blasting',SALDO_AWAL:'Saldo Awal'};
+const DEST_LABEL_PREFIX = {CHILLER:'Ke Chiller',PARTING:'Ke Parting',BONELESS:'Ke Boneless',MARINASI:'Ke Marinasi',BLASTING:'Ke Blasting'};
+// Basket_movements.dari_lokasi memakai nama lokasi fisik ('LANTAI' = lantai produksi karkas,
+// tempat keranjang karkas baru lahir). Dipetakan ke kosakata Sumber yang sama dipakai di
+// seluruh laporan ini (KARKAS/CHILLER/PARTING/BONELESS/MARINASI) supaya Rekap Barang Masuk
+// tetap konsisten. Kalau basket langsung lahir dari produksi karkas, Sumber = Karkas.
 function sourceLabel(cat){ return SUMBER_LABEL[cat] || cat; }
+function normalizeCat(lokasi){ return lokasi==='LANTAI' ? 'KARKAS' : lokasi; }
 const ALASAN_LABEL = {CACAT_FISIK:'Cacat Fisik',KONTAMINASI:'Kontaminasi',BUSUK:'Busuk',BENDA_ASING:'Benda Asing',LAIN_LAIN:'Lain-lain'};
 
 // ── SIDEBAR ──
@@ -473,32 +475,88 @@ async function tampilkanLaporan(){
 }
 
 async function fetchPengambilan(fromBound,toBound){
-  const { data, error } = await db.from('processing_inputs')
+  const dest = currentTipe; // 'PARTING' | 'BONELESS' | 'MARINASI'
+
+  // A) Keranjang yang masuk lewat transfer antar-lantai yang sudah dikonfirmasi
+  //    (basket_movements.ke_lokasi = lantai ini, status CONFIRMED pada tanggal ini).
+  const movQ = db.from('basket_movements')
     .select(`
-      id, qty_input, kg_input, kg_diambil, created_at,
-      baskets ( basket_code, basket_type, lokasi, tanggal_produksi ),
-      product_master ( nama_produk, product_code ),
-      processing_orders!inner ( tipe )
+      id, qty_pindah, kg_pindah, dari_lokasi, catatan, confirmed_at,
+      baskets ( basket_code, basket_type, tanggal_produksi, product_master ( nama_produk, product_code ) )
     `)
-    .eq('processing_orders.tipe', currentTipe)
+    .eq('ke_lokasi', dest)
+    .eq('status', 'CONFIRMED')
+    .gte('confirmed_at', fromBound)
+    .lte('confirmed_at', toBound)
+    .order('confirmed_at');
+
+  // B) Keranjang dari Thawing — basket-nya "lahir" langsung di lokasi tujuan
+  //    (dipilih di form Thawing), jadi TIDAK pernah lewat basket_movements sama sekali.
+  const thawQ = db.from('thawing_outputs')
+    .select(`
+      id, qty, kg, created_at,
+      baskets ( basket_code, tanggal_produksi ),
+      product_master ( nama_produk, product_code )
+    `)
+    .eq('destinasi', dest)
     .gte('created_at', fromBound)
     .lte('created_at', toBound)
     .order('created_at');
-  if(error) throw error;
-  return (data||[]).map(r=>({
+
+  const [movRes, thawRes] = await Promise.all([movQ, thawQ]);
+  if(movRes.error) throw movRes.error;
+  if(thawRes.error) throw thawRes.error;
+
+  const fromMov = (movRes.data||[]).map(r=>{
+    const rawCat = r.dari_lokasi || r.baskets?.basket_type || 'LAINNYA';
+    return {
+      barang: r.baskets?.product_master?.nama_produk || '—',
+      ek: Number(r.qty_pindah)||0,
+      kg: Number(r.kg_pindah)||0,
+      cat: normalizeCat(rawCat),
+      basketCode: r.baskets?.basket_code || '—',
+      tglProduksi: r.baskets?.tanggal_produksi || null,
+      keterangan: r.catatan || ''
+    };
+  });
+
+  const fromThaw = (thawRes.data||[]).map(r=>({
     barang: r.product_master?.nama_produk || '—',
-    ek: Number(r.qty_input)||0,
-    kg: Number(r.kg_diambil ?? r.kg_input)||0,
-    basket: r.baskets,
-    cat: sourceCategory(r.baskets),
-    tglProduksi: r.baskets?.tanggal_produksi || null
+    ek: Number(r.qty)||0,
+    kg: Number(r.kg)||0,
+    cat: 'THAWING',
+    basketCode: r.baskets?.basket_code || '—',
+    tglProduksi: r.baskets?.tanggal_produksi || null,
+    keterangan: ''
   }));
+
+  return [...fromMov, ...fromThaw];
+}
+
+// processing_outputs.tujuan_lokasi selalu diisi nama lantai ini sendiri saat basket
+// output dibuat (mis. 'BONELESS' untuk semua output Boneless) — itu BUKAN tujuan
+// pindah, cuma lokasi lahir basket-nya. Tujuan yang sebenarnya baru diketahui
+// belakangan lewat basket_movements (ke_lokasi, status CONFIRMED) begitu basket
+// itu dikirim & diterima di lantai berikutnya. Jadi kolom "Tujuan" di sini harus
+// ambil dari basket_movements, bukan dari kolom tujuan_lokasi.
+async function loadTujuanBerikutnya(basketIds){
+  const map = {};
+  if(!basketIds.length) return map;
+  const { data, error } = await db.from('basket_movements')
+    .select('basket_id,ke_lokasi,confirmed_at')
+    .in('basket_id', basketIds)
+    .eq('dari_lokasi', currentTipe)
+    .eq('status', 'CONFIRMED')
+    .order('confirmed_at', {ascending:true});
+  if(error){ console.error(error); return map; }
+  (data||[]).forEach(m=>{ if(!(m.basket_id in map)) map[m.basket_id]=m.ke_lokasi; });
+  return map;
 }
 
 async function fetchHasil(fromBound,toBound){
   const { data, error } = await db.from('processing_outputs')
     .select(`
-      id, qty_output, kg_output, tujuan_lokasi, created_at,
+      id, basket_id, qty_output, kg_output, created_at,
       baskets ( basket_code, status ),
       product_master ( nama_produk, product_code ),
       processing_orders!inner ( tipe, order_code, catatan )
@@ -508,15 +566,18 @@ async function fetchHasil(fromBound,toBound){
     .lte('created_at', toBound)
     .order('created_at');
   if(error) throw error;
-  return (data||[])
-    .filter(r => r.baskets?.status !== 'VOID')
-    .map(r=>({
-      barang: r.product_master?.nama_produk || '—',
-      qty: Number(r.qty_output)||0,
-      kg: Number(r.kg_output)||0,
-      tujuan: r.tujuan_lokasi,
-      keterangan: r.processing_orders?.catatan || ''
-    }));
+  const rows = (data||[]).filter(r => r.baskets?.status !== 'VOID');
+
+  const basketIds = [...new Set(rows.map(r=>r.basket_id).filter(Boolean))];
+  const tujuanMap = await loadTujuanBerikutnya(basketIds);
+
+  return rows.map(r=>({
+    barang: r.product_master?.nama_produk || '—',
+    qty: Number(r.qty_output)||0,
+    kg: Number(r.kg_output)||0,
+    tujuan: r.basket_id ? (tujuanMap[r.basket_id] || null) : null,
+    keterangan: r.processing_orders?.catatan || ''
+  }));
 }
 
 async function fetchReject(fromBound,toBound){
@@ -545,19 +606,20 @@ async function fetchReject(fromBound,toBound){
 function renderPengambilan(rows){
   const tb = document.getElementById('tbody-pengambilan');
   document.getElementById('pill-pengambilan').textContent = rows.length + ' baris';
-  if(!rows.length){ tb.innerHTML='<tr><td colspan="6"><div class="empty">Belum ada pengambilan produk pada tanggal ini.</div></td></tr>'; return; }
+  if(!rows.length){ tb.innerHTML='<tr><td colspan="7"><div class="empty">Belum ada keranjang masuk pada tanggal ini.</div></td></tr>'; return; }
   let totEk=0, totKg=0;
   tb.innerHTML = rows.map(r=>{
     totEk+=r.ek; totKg+=r.kg;
     return '<tr>'+
       '<td>'+esc(r.barang)+'</td>'+
+      '<td>'+esc(r.basketCode)+'</td>'+
       '<td class="num">'+fmt(r.ek)+'</td>'+
       '<td class="num">'+fmtKgNum(r.kg)+'</td>'+
       '<td>'+esc(sourceLabel(r.cat))+'</td>'+
       '<td>'+(r.tglProduksi?fmtDate(r.tglProduksi):'—')+'</td>'+
-      '<td>'+esc(r.basket?.basket_type?sourceLabel(r.basket.basket_type):'—')+'</td>'+
+      '<td>'+(r.keterangan?esc(r.keterangan):'<span style="color:#9ca3af;font-style:italic">—</span>')+'</td>'+
     '</tr>';
-  }).join('') + '<tr class="tot-row"><td>TOTAL</td><td class="num">'+fmt(totEk)+'</td><td class="num">'+fmtKgNum(totKg)+'</td><td colspan="3"></td></tr>';
+  }).join('') + '<tr class="tot-row"><td>TOTAL</td><td></td><td class="num">'+fmt(totEk)+'</td><td class="num">'+fmtKgNum(totKg)+'</td><td colspan="3"></td></tr>';
 }
 
 function renderHasil(rows){
@@ -571,7 +633,7 @@ function renderHasil(rows){
       '<td>'+esc(r.barang)+'</td>'+
       '<td class="num">'+fmt(r.qty)+'</td>'+
       '<td class="num">'+fmtKgNum(r.kg)+'</td>'+
-      '<td>'+esc(r.tujuan)+'</td>'+
+      '<td>'+(r.tujuan?esc(sourceLabel(r.tujuan)):'<span style="color:#9ca3af;font-style:italic">Belum Pindah</span>')+'</td>'+
       '<td>'+(r.keterangan?esc(r.keterangan):'<span style="color:#9ca3af;font-style:italic">—</span>')+'</td>'+
     '</tr>';
   }).join('') + '<tr class="tot-row"><td>TOTAL</td><td class="num">'+fmt(totQty)+'</td><td class="num">'+fmtKgNum(totKg)+'</td><td colspan="2"></td></tr>';
@@ -706,14 +768,14 @@ function exportXLSX(headers, rows, sheetName, filename){
 function exportPengambilanExcel(){
   if(!lastData){ showToast('Tampilkan laporan dulu.'); return; }
   const label = MODULES[lastData.tipe].label;
-  const rows = lastData.pengambilan.map(r=>[r.barang, r.ek, r.kg, sourceLabel(r.cat), r.tglProduksi?fmtDate(r.tglProduksi):'', r.basket?.basket_type?sourceLabel(r.basket.basket_type):'']);
-  exportXLSX(['Barang','Ek','Kg','Sumber','Tgl Produksi','Keterangan'], rows, 'Pengambilan Produk', `${label}_PengambilanProduk_${lastData.tanggal}.xlsx`);
+  const rows = lastData.pengambilan.map(r=>[r.barang, r.basketCode, r.ek, r.kg, sourceLabel(r.cat), r.tglProduksi?fmtDate(r.tglProduksi):'', r.keterangan||'']);
+  exportXLSX(['Barang','No. Keranjang','Ek','Kg','Sumber','Tgl Produksi','Keterangan'], rows, 'Pengambilan Produk', `${label}_PengambilanProduk_${lastData.tanggal}.xlsx`);
 }
 
 function exportHasilExcel(){
   if(!lastData){ showToast('Tampilkan laporan dulu.'); return; }
   const label = MODULES[lastData.tipe].label;
-  const rows = lastData.hasil.map(r=>[r.barang, r.qty, r.kg, r.tujuan, r.keterangan]);
+  const rows = lastData.hasil.map(r=>[r.barang, r.qty, r.kg, r.tujuan?sourceLabel(r.tujuan):'Belum Pindah', r.keterangan]);
   exportXLSX(['Barang','Qty','Kg','Tujuan','Keterangan'], rows, 'Hasil Produk', `${label}_HasilProduk_${lastData.tanggal}.xlsx`);
 }
 

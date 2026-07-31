@@ -517,11 +517,11 @@ a{text-decoration:none}
     <div class="form-row-2">
       <div class="form-group">
         <label>Target Ekor / Qty <span style="color:#dc2626">*</span></label>
-        <input type="number" id="crt-target-qty" placeholder="cth: 100" min="1">
+        <input type="text" inputmode="numeric" pattern="[0-9]*" id="crt-target-qty" placeholder="cth: 100" oninput="sanitizeIntInput(this)">
       </div>
       <div class="form-group">
         <label>Target Kg <span style="color:#dc2626">*</span></label>
-        <input type="number" id="crt-target-kg" placeholder="cth: 50" min="0.1" step="0.1">
+        <input type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" id="crt-target-kg" placeholder="cth: 50" oninput="sanitizeDecimalInput(this)">
       </div>
     </div>
     <div class="form-group" style="margin-bottom:0">
@@ -646,6 +646,14 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ============================================================
+// FEATURE FLAGS
+// ============================================================
+// Sementara di-nonaktifkan atas permintaan user (2026-07-31): operator boleh
+// menyelesaikan WO tanpa PIN Supervisor. Set kembali ke true untuk mengaktifkan
+// gate PIN Supervisor pada tombol "Selesaikan WO".
+const WO_COMPLETE_REQUIRE_PIN = false;
+
+// ============================================================
 // STATE
 // ============================================================
 let currentUser    = null;
@@ -675,6 +683,19 @@ async function sha256(str) {
   const buf  = new TextEncoder().encode(str);
   const hash = await crypto.subtle.digest('SHA-256', buf);
   return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+// Field angka pakai type="text" + inputmode (bukan type="number") karena di beberapa
+// tablet/WebView Android, type="number" kadang gagal memunculkan keyboard numerik.
+// Sanitasi manual di sini menjaga agar isinya tetap cuma angka (dan titik desimal utk kg).
+function sanitizeIntInput(el) {
+  const v = el.value.replace(/[^0-9]/g, '');
+  if (v !== el.value) el.value = v;
+}
+function sanitizeDecimalInput(el) {
+  let v = el.value.replace(',', '.').replace(/[^0-9.]/g, '');
+  const firstDot = v.indexOf('.');
+  if (firstDot !== -1) v = v.slice(0, firstDot+1) + v.slice(firstDot+1).replace(/\./g, '');
+  if (v !== el.value) el.value = v;
 }
 function fmt(n,d=0){if(n==null||n==='')return'—';return Number(n).toLocaleString('id-ID',{minimumFractionDigits:d,maximumFractionDigits:d})}
 function fmtKg(n){if(n==null)return'—';return Number(n).toLocaleString('id-ID',{minimumFractionDigits:1,maximumFractionDigits:1})+' kg'}
@@ -1306,6 +1327,7 @@ async function openDetailWO(woId) {
 // ============================================================
 function openApproveWO() {
   if (!currentWOData) return;
+  if (!WO_COMPLETE_REQUIRE_PIN) { completeWOWithoutPin(currentWOData); return; }
   prepareApproveModal(currentWOData);
   openModal('modal-approve');
 }
@@ -1314,8 +1336,34 @@ function openApproveFromList(woId) {
   currentWOId   = woId;
   currentWOData = allWOs.find(w => w.id === woId);
   if (!currentWOData) return;
+  if (!WO_COMPLETE_REQUIRE_PIN) { completeWOWithoutPin(currentWOData); return; }
   prepareApproveModal(currentWOData);
   openModal('modal-approve');
+}
+
+// Gate PIN Supervisor sedang dinonaktifkan (lihat WO_COMPLETE_REQUIRE_PIN).
+// Operator bisa langsung menyelesaikan WO, cukup konfirmasi ringan.
+async function completeWOWithoutPin(wo) {
+  if (!confirm(`Selesaikan WO ${wo.order_code} sebagai COMPLETED?`)) return;
+  try {
+    const { error: updErr } = await db.from('processing_orders').update({
+      status:      'COMPLETED',
+      approved_by: currentUser?.id || null,
+      approved_at: new Date().toISOString()
+    }).eq('id', wo.id);
+    if (updErr) throw updErr;
+
+    try {
+      await db.from('work_order_stages').update({ status: 'DONE' }).eq('wo_id', wo.id);
+    } catch(e) { /* table may not exist yet, ignore */ }
+
+    showToast(`WO ${wo.order_code} berhasil diselesaikan oleh ${currentUser?.nama||'operator'}!`, 'success');
+    closeModal('modal-detail');
+    await loadAll();
+  } catch(e) {
+    console.error(e);
+    showToast('Gagal menyelesaikan WO: ' + (e.message||''), 'error');
+  }
 }
 
 function prepareApproveModal(wo) {

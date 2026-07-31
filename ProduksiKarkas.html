@@ -557,9 +557,9 @@ a{text-decoration:none}
                     <div class="pk-partial-input" id="scan-partial-input">
                       <div class="pk-partial-row">
                         <div><label>Ekor dikirim <span style="color:#dc2626">*</span></label>
-                          <input type="number" id="scan-qty-kirim" min="1" placeholder="ekor" oninput="pkScanCheckRatio()"></div>
+                          <input type="text" inputmode="numeric" pattern="[0-9]*" id="scan-qty-kirim" placeholder="ekor" oninput="sanitizeIntInput(this);pkScanCheckRatio()"></div>
                         <div><label>Berat dikirim (kg) <span style="color:#dc2626">*</span></label>
-                          <input type="number" id="scan-kg-kirim" min="0.01" step="0.01" placeholder="kg" oninput="pkScanCheckRatio()"></div>
+                          <input type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" id="scan-kg-kirim" placeholder="kg" oninput="sanitizeDecimalInput(this);pkScanCheckRatio()"></div>
                       </div>
                       <div class="pk-partial-hint" id="scan-partial-hint">Maks: —</div>
                       <div class="pk-ratio-warn" id="scan-ratio-warn"></div>
@@ -638,11 +638,11 @@ a{text-decoration:none}
         </div>
         <div class="form-group modal-fg">
           <label>Jumlah Ekor <span style="color:#dc2626">*</span></label>
-          <input type="number" id="mk-qty" placeholder="Ekor" min="1" step="1" oninput="onKgQtyChange()">
+          <input type="text" inputmode="numeric" pattern="[0-9]*" id="mk-qty" placeholder="Ekor" oninput="sanitizeIntInput(this);onKgQtyChange()">
         </div>
         <div class="form-group modal-fg">
           <label>Berat Timbang (kg) <span style="color:#dc2626">*</span></label>
-          <input type="number" id="mk-kg" placeholder="0.0" min="0.1" step="0.1" oninput="onKgQtyChange()">
+          <input type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" id="mk-kg" placeholder="0.0" oninput="sanitizeDecimalInput(this);onKgQtyChange()">
         </div>
         <div class="full">
           <div style="display:flex;gap:16px;align-items:center">
@@ -703,9 +703,9 @@ a{text-decoration:none}
         <div class="pk-partial-input" id="mod-partial-input">
           <div class="pk-partial-row">
             <div><label>Ekor dikirim <span style="color:#dc2626">*</span></label>
-              <input type="number" id="mod-qty-kirim" min="1" placeholder="ekor" oninput="pkModalCheckRatio()"></div>
+              <input type="text" inputmode="numeric" pattern="[0-9]*" id="mod-qty-kirim" placeholder="ekor" oninput="sanitizeIntInput(this);pkModalCheckRatio()"></div>
             <div><label>Berat dikirim (kg) <span style="color:#dc2626">*</span></label>
-              <input type="number" id="mod-kg-kirim" min="0.01" step="0.01" placeholder="kg" oninput="pkModalCheckRatio()"></div>
+              <input type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" id="mod-kg-kirim" placeholder="kg" oninput="sanitizeDecimalInput(this);pkModalCheckRatio()"></div>
           </div>
           <div class="pk-partial-hint" id="mod-partial-hint">Maks: —</div>
           <div class="pk-ratio-warn" id="mod-ratio-warn"></div>
@@ -748,11 +748,11 @@ a{text-decoration:none}
       </div>
       <div class="form-group modal-fg">
         <label>Jumlah Ekor <span style="color:#dc2626">*</span></label>
-        <input type="number" id="ek-qty" placeholder="Ekor" min="1" step="1" oninput="onEkKgQtyChange()">
+        <input type="text" inputmode="numeric" pattern="[0-9]*" id="ek-qty" placeholder="Ekor" oninput="sanitizeIntInput(this);onEkKgQtyChange()">
       </div>
       <div class="form-group modal-fg">
         <label>Berat Timbang (kg) <span style="color:#dc2626">*</span></label>
-        <input type="number" id="ek-kg" placeholder="0.0" min="0.1" step="0.1" oninput="onEkKgQtyChange()">
+        <input type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" id="ek-kg" placeholder="0.0" oninput="sanitizeDecimalInput(this);onEkKgQtyChange()">
       </div>
       <div class="full">
         <div style="display:flex;gap:16px;align-items:center">
@@ -782,7 +782,7 @@ a{text-decoration:none}
     <div class="modal-grid">
       <div class="form-group modal-fg full">
         <label>Jumlah Ekor Rusak <span style="color:#dc2626">*</span></label>
-        <input type="number" id="mr-ekor" placeholder="Ekor" min="1" step="1">
+        <input type="text" inputmode="numeric" pattern="[0-9]*" id="mr-ekor" placeholder="Ekor" oninput="sanitizeIntInput(this)">
       </div>
       <div class="form-group modal-fg full">
         <label>Alasan <span style="color:#dc2626">*</span></label>
@@ -853,8 +853,8 @@ a{text-decoration:none}
       </div>
     </div>
 
-    <!-- PIN Supervisor -->
-    <div style="margin-bottom:16px">
+    <!-- PIN Supervisor (disembunyikan jika CLOSE_SESSION_REQUIRE_PIN=false) -->
+    <div id="rc-pin-section" style="margin-bottom:16px">
       <div class="form-group modal-fg">
         <label>PIN Supervisor untuk Menutup Sesi <span style="color:#dc2626">*</span></label>
         <input type="password" class="pin-input" id="rc-pin" placeholder="••••••" maxlength="6"
@@ -911,6 +911,14 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ============================================================
+// FEATURE FLAGS
+// ============================================================
+// Sementara di-nonaktifkan atas permintaan user (2026-07-31): operator boleh
+// menutup sesi produksi karkas (Tutup Sesi) tanpa PIN Supervisor. Set kembali
+// ke true untuk mengaktifkan gate PIN Supervisor pada tombol "Tutup Sesi".
+const CLOSE_SESSION_REQUIRE_PIN = false;
+
+// ============================================================
 // STATE
 // ============================================================
 let currentUser    = null;
@@ -936,6 +944,19 @@ async function sha256(str) {
   const buf  = new TextEncoder().encode(str);
   const hash = await crypto.subtle.digest('SHA-256', buf);
   return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+// Field angka pakai type="text" + inputmode (bukan type="number") karena di beberapa
+// tablet/WebView Android, type="number" kadang gagal memunculkan keyboard numerik.
+// Sanitasi manual di sini menjaga agar isinya tetap cuma angka (dan titik desimal utk kg).
+function sanitizeIntInput(el) {
+  const v = el.value.replace(/[^0-9]/g, '');
+  if (v !== el.value) el.value = v;
+}
+function sanitizeDecimalInput(el) {
+  let v = el.value.replace(',', '.').replace(/[^0-9.]/g, '');
+  const firstDot = v.indexOf('.');
+  if (firstDot !== -1) v = v.slice(0, firstDot+1) + v.slice(firstDot+1).replace(/\./g, '');
+  if (v !== el.value) el.value = v;
 }
 function fmt(n, d=0) {
   if (n == null || n === '') return '—';
@@ -2529,6 +2550,7 @@ async function openModalClose() {
   if (document.getElementById('rc-pin')) document.getElementById('rc-pin').value = '';
   document.getElementById('rc-pin-error').style.display = 'none';
   document.getElementById('rc-err').style.display = 'none';
+  showEl('rc-pin-section', CLOSE_SESSION_REQUIRE_PIN);
 
   // Lantai warning
   const lantaiCount = lantaiBaskets.filter(b => !b.pendingTo).length;
@@ -2552,14 +2574,20 @@ async function submitClose() {
     errEl.textContent = 'Alasan selisih wajib diisi.';
     errEl.style.display = 'block'; return;
   }
-  if (!pin) {
-    errEl.textContent = 'PIN Supervisor wajib diisi.';
-    errEl.style.display = 'block'; return;
-  }
-  const sup = await verifySupervisorPin(pin);
-  if (!sup) {
-    document.getElementById('rc-pin-error').style.display = 'block';
-    return;
+  let sup;
+  if (CLOSE_SESSION_REQUIRE_PIN) {
+    if (!pin) {
+      errEl.textContent = 'PIN Supervisor wajib diisi.';
+      errEl.style.display = 'block'; return;
+    }
+    sup = await verifySupervisorPin(pin);
+    if (!sup) {
+      document.getElementById('rc-pin-error').style.display = 'block';
+      return;
+    }
+  } else {
+    // Gate PIN Supervisor sedang dinonaktifkan (lihat CLOSE_SESSION_REQUIRE_PIN).
+    sup = currentUser;
   }
   try {
     const updateData = {

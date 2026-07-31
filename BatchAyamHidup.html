@@ -781,11 +781,11 @@ a { text-decoration: none; }
 
             <div class="form-group modal-fg">
                 <label>Ekor Kandang</label>
-                <input type="number" id="mb-ekor-kandang" placeholder="Jumlah ekor" min="0" step="1" oninput="hitungSelisih()">
+                <input type="text" inputmode="numeric" pattern="[0-9]*" id="mb-ekor-kandang" placeholder="Jumlah ekor" oninput="sanitizeIntInput(this);hitungSelisih()">
             </div>
             <div class="form-group modal-fg">
                 <label>Kg Kandang</label>
-                <input type="number" id="mb-kg-kandang" placeholder="Berat (kg)" min="0" step="0.01" oninput="hitungSelisih()">
+                <input type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" id="mb-kg-kandang" placeholder="Berat (kg)" oninput="sanitizeDecimalInput(this);hitungSelisih()">
             </div>
 
             <hr class="modal-divider">
@@ -793,11 +793,11 @@ a { text-decoration: none; }
 
             <div class="form-group modal-fg">
                 <label>Ekor Timbang Ulang</label>
-                <input type="number" id="mb-ekor-timbang" placeholder="Jumlah ekor" min="0" step="1" oninput="hitungSelisih()">
+                <input type="text" inputmode="numeric" pattern="[0-9]*" id="mb-ekor-timbang" placeholder="Jumlah ekor" oninput="sanitizeIntInput(this);hitungSelisih()">
             </div>
             <div class="form-group modal-fg">
                 <label>Kg Timbang Ulang</label>
-                <input type="number" id="mb-kg-timbang" placeholder="Berat (kg)" min="0" step="0.01" oninput="hitungSelisih()">
+                <input type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" id="mb-kg-timbang" placeholder="Berat (kg)" oninput="sanitizeDecimalInput(this);hitungSelisih()">
             </div>
 
             <hr class="modal-divider">
@@ -805,11 +805,11 @@ a { text-decoration: none; }
 
             <div class="form-group modal-fg">
                 <label>Ekor Mati</label>
-                <input type="number" id="mb-ekor-mati" placeholder="0" min="0" step="1" value="0" oninput="hitungSelisih()">
+                <input type="text" inputmode="numeric" pattern="[0-9]*" id="mb-ekor-mati" placeholder="0" value="0" oninput="sanitizeIntInput(this);hitungSelisih()">
             </div>
             <div class="form-group modal-fg">
                 <label>Kg Mati</label>
-                <input type="number" id="mb-kg-mati" placeholder="0" min="0" step="0.01" value="0">
+                <input type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" id="mb-kg-mati" placeholder="0" value="0" oninput="sanitizeDecimalInput(this)">
             </div>
 
             <!-- Selisih Preview -->
@@ -1008,6 +1008,20 @@ async function sha256(str) {
     const buf  = new TextEncoder().encode(str);
     const hash = await crypto.subtle.digest('SHA-256', buf);
     return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+// Field angka pakai type="text" + inputmode (bukan type="number") karena di beberapa
+// tablet/WebView Android, type="number" kadang gagal memunculkan keyboard numerik.
+// Sanitasi manual di sini menjaga agar isinya tetap cuma angka (dan titik desimal utk kg).
+function sanitizeIntInput(el) {
+  const v = el.value.replace(/[^0-9]/g, '');
+  if (v !== el.value) el.value = v;
+}
+function sanitizeDecimalInput(el) {
+  let v = el.value.replace(',', '.').replace(/[^0-9.]/g, '');
+  const firstDot = v.indexOf('.');
+  if (firstDot !== -1) v = v.slice(0, firstDot+1) + v.slice(firstDot+1).replace(/\./g, '');
+  if (v !== el.value) el.value = v;
 }
 
 function fmt(n, d = 0) {

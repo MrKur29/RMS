@@ -686,11 +686,11 @@ a{text-decoration:none}
     <div style="display:flex;gap:10px;margin-bottom:12px">
       <div class="form-group" style="flex:1;margin-bottom:0">
         <label>Jumlah Ekor <span style="color:#dc2626">*</span></label>
-        <input type="number" id="mr-ekor" min="1" step="1" placeholder="0">
+        <input type="text" inputmode="numeric" pattern="[0-9]*" id="mr-ekor" placeholder="0" oninput="sanitizeIntInput(this)">
       </div>
       <div class="form-group" style="flex:1;margin-bottom:0">
         <label>Berat (kg) <span style="color:#dc2626">*</span></label>
-        <input type="number" id="mr-kg" min="0.1" step="0.1" placeholder="0.0">
+        <input type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" id="mr-kg" placeholder="0.0" oninput="sanitizeDecimalInput(this)">
       </div>
     </div>
     <div class="form-group" style="margin-bottom:0">
@@ -718,11 +718,11 @@ a{text-decoration:none}
     <div style="display:flex;gap:10px;margin-bottom:12px">
       <div class="form-group" style="flex:1;margin-bottom:0">
         <label>Jumlah Ekor <span style="color:#dc2626">*</span></label>
-        <input type="number" id="ea-ekor" min="1" step="1" placeholder="0">
+        <input type="text" inputmode="numeric" pattern="[0-9]*" id="ea-ekor" placeholder="0" oninput="sanitizeIntInput(this)">
       </div>
       <div class="form-group" style="flex:1;margin-bottom:0">
         <label>Berat (kg) <span style="color:#dc2626">*</span></label>
-        <input type="number" id="ea-kg" min="0.1" step="0.1" placeholder="0.0">
+        <input type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" id="ea-kg" placeholder="0.0" oninput="sanitizeDecimalInput(this)">
       </div>
     </div>
     <div id="ea-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-top:4px;display:none"></div>
@@ -829,6 +829,20 @@ async function sha256(str) {
   const buf = new TextEncoder().encode(str);
   const hash = await crypto.subtle.digest('SHA-256', buf);
   return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+// Field angka pakai type="text" + inputmode (bukan type="number") karena di beberapa
+// tablet/WebView Android, type="number" kadang gagal memunculkan keyboard numerik.
+// Sanitasi manual di sini menjaga agar isinya tetap cuma angka (dan titik desimal utk kg).
+function sanitizeIntInput(el) {
+  const v = el.value.replace(/[^0-9]/g, '');
+  if (v !== el.value) el.value = v;
+}
+function sanitizeDecimalInput(el) {
+  let v = el.value.replace(',', '.').replace(/[^0-9.]/g, '');
+  const firstDot = v.indexOf('.');
+  if (firstDot !== -1) v = v.slice(0, firstDot+1) + v.slice(firstDot+1).replace(/\./g, '');
+  if (v !== el.value) el.value = v;
 }
 function fmt(n,d=0){if(n==null||n==='')return'—';return Number(n).toLocaleString('id-ID',{minimumFractionDigits:d,maximumFractionDigits:d})}
 function fmtKg(n){if(n==null)return'—';return Number(n).toLocaleString('id-ID',{minimumFractionDigits:1,maximumFractionDigits:1})+' kg'}
@@ -1406,15 +1420,15 @@ function renderRakDetail(rackId){
         <div style="display:flex;gap:10px;margin-bottom:8px">
           <div style="flex:1">
             <label style="font-size:10px;font-weight:700;color:#374151;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px">Jumlah Ekor *</label>
-            <input type="number" id="raf-ekor" min="1" step="1"
+            <input type="text" inputmode="numeric" pattern="[0-9]*" id="raf-ekor"
               style="width:100%;padding:10px;border:1.5px solid #d1d5db;border-radius:6px;font-size:18px;font-weight:800;text-align:center;font-family:inherit"
-              oninput="checkRafRatio()">
+              oninput="sanitizeIntInput(this);checkRafRatio()">
           </div>
           <div style="flex:1">
             <label style="font-size:10px;font-weight:700;color:#374151;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px">Berat (kg) *</label>
-            <input type="number" id="raf-kg" min="0.1" step="0.1"
+            <input type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" id="raf-kg"
               style="width:100%;padding:10px;border:1.5px solid #d1d5db;border-radius:6px;font-size:18px;font-weight:800;text-align:center;font-family:inherit"
-              oninput="checkRafRatio()">
+              oninput="sanitizeDecimalInput(this);checkRafRatio()">
           </div>
         </div>
         <div id="raf-ratio-warn" style="display:none;background:#fef3c7;border:1px solid #fde68a;border-radius:6px;padding:7px 10px;font-size:11px;color:#92400e;margin-bottom:8px"></div>

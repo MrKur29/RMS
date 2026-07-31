@@ -839,11 +839,11 @@ a{text-decoration:none}
     <div style="display:flex;gap:10px;margin-top:14px">
       <div class="form-group" style="flex:1;margin-bottom:0">
         <label>Jumlah Ekor <span style="color:#dc2626">*</span></label>
-        <input type="number" id="mp-qty" min="1" step="1" placeholder="0">
+        <input type="text" inputmode="numeric" pattern="[0-9]*" id="mp-qty" placeholder="0" oninput="sanitizeIntInput(this)">
       </div>
       <div class="form-group" style="flex:1;margin-bottom:0">
         <label>Berat (kg) <span style="color:#dc2626">*</span></label>
-        <input type="number" id="mp-kg" min="0.1" step="0.1" placeholder="0.0">
+        <input type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" id="mp-kg" placeholder="0.0" oninput="sanitizeDecimalInput(this)">
       </div>
     </div>
     <div class="form-group" style="margin-top:10px;margin-bottom:0">
@@ -906,11 +906,11 @@ a{text-decoration:none}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
         <div class="form-group" style="margin-bottom:0">
           <label>Qty Ekor <span style="color:#dc2626">*</span></label>
-          <input type="number" id="ai-qty-input" placeholder="ekor" min="1" max="9999">
+          <input type="text" inputmode="numeric" pattern="[0-9]*" id="ai-qty-input" placeholder="ekor" oninput="sanitizeIntInput(this)">
         </div>
         <div class="form-group" style="margin-bottom:0">
           <label>Kg Diambil <span style="color:#dc2626">*</span></label>
-          <input type="number" id="ai-kg-diambil" placeholder="kg" min="0.1" step="0.1" max="9999">
+          <input type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" id="ai-kg-diambil" placeholder="kg" oninput="sanitizeDecimalInput(this)">
         </div>
       </div>
     </div>
@@ -1035,11 +1035,11 @@ a{text-decoration:none}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div class="form-group" style="margin-bottom:0">
         <label>Qty Ekor <span style="color:#dc2626">*</span></label>
-        <input type="number" id="ro-qty" placeholder="ekor" min="1" max="9999" step="1" oninput="updateROKgHint()">
+        <input type="text" inputmode="numeric" pattern="[0-9]*" id="ro-qty" placeholder="ekor" oninput="sanitizeIntInput(this);updateROKgHint()">
       </div>
       <div class="form-group" style="margin-bottom:0">
         <label>Kg Aktual <span style="color:#dc2626">*</span></label>
-        <input type="number" id="ro-kg" placeholder="kg" min="0.1" max="9999" step="0.1">
+        <input type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" id="ro-kg" placeholder="kg" oninput="sanitizeDecimalInput(this)">
       </div>
     </div>
     <div id="ro-kg-hint" style="font-size:11px;color:#6b7280;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:6px 10px;margin-top:6px;display:none"></div>
@@ -1074,11 +1074,11 @@ a{text-decoration:none}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px">
       <div class="form-group" style="margin-bottom:0">
         <label>Qty Total <span style="color:#dc2626">*</span></label>
-        <input type="number" id="tby-qty" placeholder="ekor/pcs" min="0.001" step="0.001">
+        <input type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" id="tby-qty" placeholder="ekor/pcs" oninput="sanitizeDecimalInput(this)">
       </div>
       <div class="form-group" style="margin-bottom:0">
         <label>Kg Total <span style="color:#dc2626">*</span></label>
-        <input type="number" id="tby-kg" placeholder="kg" min="0.1" step="0.1">
+        <input type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" id="tby-kg" placeholder="kg" oninput="sanitizeDecimalInput(this)">
       </div>
     </div>
     <div id="tby-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-top:8px;display:none"></div>
@@ -1107,7 +1107,7 @@ a{text-decoration:none}
     </div>
     <div class="form-group">
       <label>Jumlah Kg <span style="color:#dc2626">*</span></label>
-      <input type="number" id="rj-kg" placeholder="kg" min="0.1" step="0.1">
+      <input type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" id="rj-kg" placeholder="kg" oninput="sanitizeDecimalInput(this)">
     </div>
     <div class="form-group">
       <label>Alasan <span style="color:#dc2626">*</span></label>
@@ -1152,12 +1152,12 @@ a{text-decoration:none}
     <div id="ei-kaitan" style="display:none;margin-bottom:10px;padding:8px 10px;border-radius:6px;font-size:12px;font-weight:700"></div>
     <div class="form-group">
       <label>Kg Diambil (Baru) <span style="color:#dc2626">*</span></label>
-      <input type="number" id="ei-kg" placeholder="kg" min="0.1" step="0.1">
+      <input type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" id="ei-kg" placeholder="kg" oninput="sanitizeDecimalInput(this)">
       <div id="ei-kg-hint" style="font-size:11px;color:#6b7280;margin-top:4px"></div>
     </div>
     <div class="form-group" style="margin-bottom:0">
       <label>Qty Input (ekor) — opsional</label>
-      <input type="number" id="ei-qty" placeholder="ekor" min="0" step="1">
+      <input type="text" inputmode="numeric" pattern="[0-9]*" id="ei-qty" placeholder="ekor" oninput="sanitizeIntInput(this)">
     </div>
     <div id="ei-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-top:8px;display:none"></div>
     <div class="modal-footer">
@@ -1187,11 +1187,11 @@ a{text-decoration:none}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div class="form-group" style="margin-bottom:0">
         <label>Qty Ekor (Baru) <span style="color:#dc2626">*</span></label>
-        <input type="number" id="eo-qty" placeholder="ekor" min="1" step="1" oninput="updateEOKgHint()">
+        <input type="text" inputmode="numeric" pattern="[0-9]*" id="eo-qty" placeholder="ekor" oninput="sanitizeIntInput(this);updateEOKgHint()">
       </div>
       <div class="form-group" style="margin-bottom:0">
         <label>Kg Aktual (Baru) <span style="color:#dc2626">*</span></label>
-        <input type="number" id="eo-kg" placeholder="kg" min="0.1" step="0.1" oninput="updateEOKgHint()">
+        <input type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" id="eo-kg" placeholder="kg" oninput="sanitizeDecimalInput(this);updateEOKgHint()">
       </div>
     </div>
     <div id="eo-kg-hint" style="font-size:11px;color:#6b7280;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:6px 10px;margin-top:6px;display:none"></div>
@@ -1264,6 +1264,19 @@ async function sha256(str) {
   const buf  = new TextEncoder().encode(str);
   const hash = await crypto.subtle.digest('SHA-256', buf);
   return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+// Field angka pakai type="text" + inputmode (bukan type="number") karena di beberapa
+// tablet/WebView Android, type="number" kadang gagal memunculkan keyboard numerik.
+// Sanitasi manual di sini menjaga agar isinya tetap cuma angka (dan titik desimal utk kg).
+function sanitizeIntInput(el) {
+  const v = el.value.replace(/[^0-9]/g, '');
+  if (v !== el.value) el.value = v;
+}
+function sanitizeDecimalInput(el) {
+  let v = el.value.replace(',', '.').replace(/[^0-9.]/g, '');
+  const firstDot = v.indexOf('.');
+  if (firstDot !== -1) v = v.slice(0, firstDot+1) + v.slice(firstDot+1).replace(/\./g, '');
+  if (v !== el.value) el.value = v;
 }
 function fmt(n,d=0){if(n==null||n==='')return'—';return Number(n).toLocaleString('id-ID',{minimumFractionDigits:d,maximumFractionDigits:d})}
 function fmtKg(n){if(n==null)return'—';return Number(n).toLocaleString('id-ID',{minimumFractionDigits:1,maximumFractionDigits:1})+' kg'}
@@ -3919,29 +3932,55 @@ async function doRevisiSesiByproduct(sessionId, sup, alasan) {
       showToast('Keranjang hasil timbangan ini sudah bergerak/berkurang — tidak bisa direvisi.', 'error');
       return;
     }
+    const basketIdLama   = session.basket_id;
+    const basketCodeLama = b.basket_code;
 
-    await db.from('baskets').delete().eq('id', session.basket_id);
-    // Kontribusi lama (link WO) dihapus juga — akan di-derive ulang saat
-    // timbang ulang lewat submitTimbangByproduct().
-    await db.from('byproduct_session_contributions').delete().eq('session_id', sessionId);
-
-    await db.from('byproduct_session_revisi_log').insert({
-      session_id:       sessionId,
-      basket_id_lama:   session.basket_id,
-      basket_code_lama: b.basket_code,
-      revisi_by:        sup.id,
-      alasan
-    });
-
-    await db.from('byproduct_collection_sessions').update({
+    // PENTING (fix 2026-07-31): byproduct_collection_sessions.basket_id adalah
+    // FK ke baskets TANPA ON DELETE CASCADE/SET NULL. Kalau baskets.delete()
+    // dipanggil SELAGI sesi ini masih menunjuk ke basket itu, Postgres akan
+    // menolak (FK violation) — sebelumnya error ini tidak dicek sama sekali,
+    // jadi delete diam-diam gagal tapi kode lanjut seolah berhasil (sesi
+    // dibuka ulang, log revisi dicatat, tapi keranjang LAMA tetap ada di DB).
+    // Fix: lepas dulu referensi FK-nya (basket_id -> NULL di sesi) SEBELUM
+    // hapus baris basket-nya, dan cek {error} di setiap langkah.
+    const { error: updErr } = await db.from('byproduct_collection_sessions').update({
       status:       'OPEN',
       basket_id:    null,
       closed_by:    null,
       closed_at:    null,
       revisi_count: (session.revisi_count || 0) + 1
     }).eq('id', sessionId);
+    if (updErr) throw updErr;
 
-    showToast(`Timbangan ${session.session_code} dibatalkan — isi ulang di form "Timbang By-Product".`, 'success');
+    // Kontribusi lama (link WO) dihapus juga — akan di-derive ulang saat
+    // timbang ulang lewat submitTimbangByproduct().
+    const { error: contribErr } = await db.from('byproduct_session_contributions').delete().eq('session_id', sessionId);
+    if (contribErr) throw contribErr;
+
+    const { error: delErr } = await db.from('baskets').delete().eq('id', basketIdLama);
+    if (delErr) {
+      // Sesi & kontribusi sudah terlanjur direset — jangan sembunyikan
+      // kegagalan ini, kasih tahu eksplisit supaya keranjang lama tidak
+      // "hilang tanpa jejak" seperti bug sebelumnya.
+      await db.from('byproduct_session_revisi_log').insert({
+        session_id: sessionId, basket_id_lama: basketIdLama, basket_code_lama: basketCodeLama,
+        revisi_by: sup.id, alasan: alasan + ' [PERINGATAN: gagal hapus keranjang lama — ' + delErr.message + ']'
+      });
+      showToast(`Sesi dibuka ulang, tapi keranjang lama ${basketCodeLama} GAGAL dihapus (${delErr.message}). Hapus manual lewat SQL/admin.`, 'error');
+      closeModal('modal-revisi-pin');
+      await loadAll();
+      return;
+    }
+
+    await db.from('byproduct_session_revisi_log').insert({
+      session_id:       sessionId,
+      basket_id_lama:   basketIdLama,
+      basket_code_lama: basketCodeLama,
+      revisi_by:        sup.id,
+      alasan
+    });
+
+    showToast(`Timbangan ${session.session_code} dibatalkan, keranjang lama ${basketCodeLama} dihapus — isi ulang di form "Timbang By-Product".`, 'success');
     closeModal('modal-revisi-pin');
     await loadAll();
   } catch (e) {
@@ -3963,8 +4002,8 @@ function toLabelData(b) {
     qtyText:    `${fmt(b.qty)} ekor`,
     kgText:     fmtKg(b.kg),
     tglText:    tglFmt,
-    refLabel:   'No WO',
-    refValue:   b.wo_code || '—'
+    refLabel:   'Keterangan',
+    refValue:   b.wo_catatan || '—'
   };
 }
 

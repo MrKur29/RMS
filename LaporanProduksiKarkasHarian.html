@@ -359,7 +359,7 @@ a{text-decoration:none}
             </tbody>
           </table>
 
-          <div class="hint no-print" style="margin-top:14px">Catatan: Rincian ini merangkum TOTAL semua sesi timbang karkas dari seluruh batch pada tanggal ini. Kolom "Produk Transfer" menunjukkan lokasi terkini keranjang karkas hasil batch-batch tersebut. Rekapan By-Product merangkum entri By-product Karkas pada tanggal yang sama (tidak termasuk entri yang berstatus "Ditolak").</div>
+          <div class="hint no-print" style="margin-top:14px">Catatan: Rincian ini merangkum TOTAL semua sesi timbang karkas dari seluruh batch pada tanggal ini. Kolom "Produk Transfer" menunjukkan tujuan PERTAMA keranjang karkas hasil batch-batch tersebut dipindah dari lantai karkas, bukan lokasi terkininya. Rekapan By-Product merangkum entri By-product Karkas pada tanggal yang sama (tidak termasuk entri yang berstatus "Ditolak").</div>
         </div>
       </div>
 
@@ -464,6 +464,23 @@ window.addEventListener('DOMContentLoaded',async ()=>{
 // ══════════════════════════════════════════════════════════════
 function todayISO(){return new Date().toISOString().split('T')[0]}
 
+// Ambil tujuan pindah PERTAMA tiap keranjang dari lantai karkas (basket_movements
+// dengan dari_lokasi='LANTAI'), diurutkan paling awal. Kalau sebuah keranjang pernah
+// dikirim beberapa kali dari lantai (mis. sempat ditolak lalu dikirim ulang), yang
+// dipakai adalah kiriman pertama secara kronologis.
+async function loadTujuanAwal(basketIds){
+  const map = {};
+  if(!basketIds.length) return map;
+  const { data, error } = await db.from('basket_movements')
+    .select('basket_id,ke_lokasi,created_at')
+    .in('basket_id', basketIds)
+    .eq('dari_lokasi','LANTAI')
+    .order('created_at',{ascending:true});
+  if(error){ console.error(error); return map; }
+  (data||[]).forEach(m=>{ if(!(m.basket_id in map)) map[m.basket_id]=m.ke_lokasi; });
+  return map;
+}
+
 async function loadReport(){
   const tanggal=document.getElementById('rpt-date').value;
   if(!tanggal){showToast('Pilih tanggal terlebih dahulu','error');return}
@@ -484,7 +501,7 @@ async function loadReport(){
     if(batchIds.length){
       const [basketsRes, transferRes] = await Promise.all([
         db.from('carcass_baskets').select('qty_timbang,kg_timbang,tipe_kerusakan,product:product_id(product_code,nama_produk,grade,sub_kategori,kg_min,kg_max),basket:basket_id(status)').in('batch_id',batchIds),
-        db.from('baskets').select('qty_awal,kg_awal,lokasi,product:product_id(product_code,nama_produk,grade,sub_kategori,kg_min,kg_max,kategori)').in('batch_id',batchIds)
+        db.from('baskets').select('id,qty_awal,kg_awal,lokasi,product:product_id(product_code,nama_produk,grade,sub_kategori,kg_min,kg_max,kategori)').in('batch_id',batchIds)
       ]);
       if(basketsRes.error) throw basketsRes.error;
       if(transferRes.error) throw transferRes.error;
@@ -492,6 +509,14 @@ async function loadReport(){
       // akan lebih besar dari yang seharusnya (beda dari Dashboard yang pakai counter tersimpan).
       cbaskets = (basketsRes.data||[]).filter(r=>r.product && r.basket?.status!=='VOID');
       allBaskets = (transferRes.data||[]).filter(r=>r.product && r.product.kategori==='KARKAS');
+
+      // "Produk Transfer" harus menunjukkan tujuan PERTAMA keranjang dipindah dari lantai
+      // karkas (basket_movements.dari_lokasi='LANTAI'), bukan lokasi terkini keranjang
+      // (baskets.lokasi) — lokasi terkini bisa sudah berubah lagi setelah pindah lanjutan
+      // (mis. Parting → Chiller), sehingga menyesatkan untuk laporan produksi karkas.
+      const basketIds = [...new Set(allBaskets.map(r=>r.id).filter(Boolean))];
+      const tujuanAwalMap = await loadTujuanAwal(basketIds);
+      allBaskets.forEach(r=>{ r.tujuan_awal = r.id ? (tujuanAwalMap[r.id]||null) : null; });
     }
 
     const byproductRes = await db.from('byproduct_karkas_entries')
@@ -741,7 +766,7 @@ function renderTransfer(basketRows){
     const key=p.product_code;
     if(!map[key]) map[key]={nama_produk:p.nama_produk, grade:p.grade, ukuran:parseUkuran(p),
       parting:{ek:0,kg:0}, boneless:{ek:0,kg:0}, chiller:{ek:0,kg:0}};
-    const bucket = r.lokasi==='PARTING' ? 'parting' : r.lokasi==='BONELESS' ? 'boneless' : 'chiller';
+    const bucket = r.tujuan_awal==='PARTING' ? 'parting' : r.tujuan_awal==='BONELESS' ? 'boneless' : 'chiller';
     map[key][bucket].ek += Number(r.qty_awal)||0;
     map[key][bucket].kg += Number(r.kg_awal)||0;
   });

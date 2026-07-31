@@ -337,11 +337,11 @@ tr:hover td{background:#fafafa}
               </div>
               <div>
                 <label class="form-label">Bungkus *</label>
-                <input type="number" id="inp-qty" class="form-input" placeholder="cth: 3" min="1" step="1">
+                <input type="text" inputmode="numeric" pattern="[0-9]*" id="inp-qty" class="form-input" placeholder="cth: 3" oninput="sanitizeIntInput(this)">
               </div>
               <div>
                 <label class="form-label">Kg *</label>
-                <input type="number" id="inp-kg" class="form-input" placeholder="0.0" min="0.1" step="0.1">
+                <input type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" id="inp-kg" class="form-input" placeholder="0.0" oninput="sanitizeDecimalInput(this)">
               </div>
             </div>
             <!-- BARIS 2: Tujuan | Nama Pelanggan -->
@@ -585,6 +585,20 @@ function fmtKg(v){ return parseFloat(v||0).toFixed(1); }
 async function sha256(str){
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
   return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+// Field angka pakai type="text" + inputmode (bukan type="number") karena di beberapa
+// tablet/WebView Android, type="number" kadang gagal memunculkan keyboard numerik.
+// Sanitasi manual di sini menjaga agar isinya tetap cuma angka (dan titik desimal utk kg).
+function sanitizeIntInput(el) {
+  const v = el.value.replace(/[^0-9]/g, '');
+  if (v !== el.value) el.value = v;
+}
+function sanitizeDecimalInput(el) {
+  let v = el.value.replace(',', '.').replace(/[^0-9.]/g, '');
+  const firstDot = v.indexOf('.');
+  if (firstDot !== -1) v = v.slice(0, firstDot+1) + v.slice(firstDot+1).replace(/\./g, '');
+  if (v !== el.value) el.value = v;
 }
 function todayStr(){ return new Date().toISOString().slice(0,10); }
 
