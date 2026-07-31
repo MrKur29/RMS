@@ -1064,14 +1064,17 @@ async function doKonfirmasi(){
   btn.disabled=true;btn.textContent='Memproses…';
   try{
     const mv=pendingMovements.find(m=>m.id===activeMovementId);
-    lastConfirmedBasketId=mv?.basket_id||null;
-    const mvCode=mv?.baskets?.basket_code||'—';
     const mvQtyKg=mv?`${fmt(mv.qty_pindah)} ekor / ${fmtKg(mv.kg_pindah)}`:'—';
     const{data,error}=await db.rpc('konfirmasi_movement',{p_movement_id:activeMovementId,p_user_id:currentUser.id});
     if(error)throw error;
     const r=typeof data==='string'?JSON.parse(data):data;
     if(!(r.ok??r.success))throw new Error(r.error||'Konfirmasi gagal');
+    // Basket yang benar-benar mendarat di Blasting: basket_id dari respons RPC.
+    // Untuk pengiriman sebagian (is_partial) ini basket BARU.
+    lastConfirmedBasketId=r.basket_id||mv?.basket_id||null;
     await loadAll();
+    const landedBasket=blastingStock.find(b=>b.id===lastConfirmedBasketId);
+    const mvCode=landedBasket?.basket_code||mv?.baskets?.basket_code||'—';
     document.getElementById('mk-step1').style.display='none';
     document.getElementById('mk-step2').style.display='';
     setEl('mk-post-code',mvCode);

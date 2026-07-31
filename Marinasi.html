@@ -1629,10 +1629,7 @@ async function doKonfirmasi() {
   const btn = document.getElementById('mk-btn-ok');
   btn.disabled = true; btn.textContent = 'Memproses…';
   try {
-    // Simpan basket_id sebelum loadAll (movement akan hilang dari list)
     const mv = pendingMovements.find(m => m.id === activeMovementId);
-    lastConfirmedBasketId = mv?.basket_id || null;
-    const mvCode = mv?.baskets?.basket_code || '—';
     const mvQtyKg = mv ? `${fmt(mv.qty_pindah)} ekor / ${fmtKg(mv.kg_pindah)}` : '—';
 
     const { data, error } = await db.rpc('konfirmasi_movement', {
@@ -1643,8 +1640,16 @@ async function doKonfirmasi() {
     const r = typeof data === 'string' ? JSON.parse(data) : data;
     if (!(r.ok ?? r.success)) throw new Error(r.error || 'Konfirmasi gagal');
 
+    // Basket yang benar-benar mendarat di Marinasi: basket_id dari respons RPC.
+    // Untuk pengiriman sebagian (is_partial) ini basket BARU (bukan basket_id
+    // di movement lama, yang tetap menunjuk basket sumber di lokasi asal).
+    lastConfirmedBasketId = r.basket_id || mv?.basket_id || null;
+
     clearScanMasukResult();
     await loadAll();
+
+    const landedBasket = marinasiStock.find(b => b.id === lastConfirmedBasketId);
+    const mvCode = landedBasket?.basket_code || mv?.baskets?.basket_code || '—';
 
     // Switch ke step 2 — tawaran alokasi ke WS
     document.getElementById('mk-step1').style.display = 'none';
