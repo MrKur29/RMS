@@ -87,7 +87,7 @@
       '<div style="font-size:7.5pt;color:#000;font-weight:700">' + esc(data.qtyText) + '</div>' +
       '<div style="font-size:7.5pt;color:#000;font-weight:700">' + esc(data.kgText) + '</div>' +
       '<div style="font-size:6.5pt;color:#000;font-weight:600">Tgl Produksi: ' + esc(data.tglText) + '</div>' +
-      '<div style="font-size:6.5pt;color:#000;font-weight:600">' + esc(data.refLabel) + ': ' + esc(data.refValue) + '</div>' +
+      '<div style="font-size:6.5pt;color:#000;font-weight:600">' + (data.refLabel ? esc(data.refLabel) + ': ' : '') + esc(data.refValue) + '</div>' +
       '</div>' +
       '</div>'
     );
