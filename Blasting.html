@@ -1040,9 +1040,11 @@ function clearScanResult(resultId){const el=document.getElementById(resultId);if
 // pencarian setelah jeda singkat (scanner mengetik jauh lebih cepat daripada manusia).
 let scanPendingTimer=null;
 function onScanPendingInput(val){
-  clearScanResult('scan-pending-result');
   clearTimeout(scanPendingTimer);
+  // Abaikan event input kosong (mis. sisa 'Enter' penutup dari scanner
+  // IME-mode Android) — jangan sampai menghapus hasil scan yang baru tampil.
   if(!val||!val.trim())return;
+  clearScanResult('scan-pending-result');
   scanPendingTimer=setTimeout(()=>doScanPending(),200);
 }
 
