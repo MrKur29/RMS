@@ -1439,7 +1439,7 @@ async function loadActiveWOs() {
   const { data, error } = await db
     .from('processing_orders')
     .select(`
-      id, order_code, status, target_kg, target_qty_ekor, catatan, tanggal, created_at, produk_id,
+      id, order_code, status, tipe, target_kg, target_qty_ekor, catatan, tanggal, created_at, produk_id,
       product_master ( nama_produk, product_code ),
       wo_workstations (
         workstation_id, target_kg, target_qty_ekor, selesai_at, selesai_by,
@@ -1449,10 +1449,62 @@ async function loadActiveWOs() {
       processing_inputs ( id, basket_id, workstation_id, kg_diambil, qty_input ),
       processing_outputs ( id, product_id, output_type, kg_output, qty_output, worker_id, workstation_id, tanggal_produksi, product_master ( kategori ) )
     `)
-    .eq('tipe', 'BONELESS')
+    .in('tipe', ['BONELESS', 'MULTI'])
     .in('status', ['OPEN','IN_PROGRESS'])
     .order('created_at');
-  if (!error) activeWOs = data || [];
+  if (!error) {
+    activeWOs = await attachWOStages(data || [], 'BONELESS');
+  }
+}
+
+// Detect "table doesn't exist yet" style errors regardless of exact wording
+// (PostgREST reports "Could not find the table ... in the schema cache", not
+// "does not exist").
+function isMissingTableError(e) {
+  const msg = (e?.message || '').toLowerCase();
+  return e?.code === 'PGRST205'
+    || e?.code === '42P01'
+    || msg.includes('does not exist')
+    || msg.includes('schema cache');
+}
+
+// Load work_order_stages untuk sekumpulan WO, attach ke masing-masing WO,
+// dan filter: untuk WO tipe MULTI, hanya lolos jika punya stage processType.
+// Dipakai baik untuk activeWOs maupun closedWOs.
+async function attachWOStages(list, processType) {
+  if (!list.length) return list;
+  try {
+    const woIds = list.map(w => w.id);
+    const { data, error } = await db
+      .from('work_order_stages')
+      .select(`
+        id, wo_id, stage_order, process_type, status,
+        output_product:product_master!work_order_stages_output_product_id_fkey ( nama_produk, product_code )
+      `)
+      .in('wo_id', woIds)
+      .order('stage_order', { ascending: true });
+    if (error) throw error;
+
+    // Group stages by wo_id
+    const stagesMap = {};
+    (data || []).forEach(s => {
+      if (!stagesMap[s.wo_id]) stagesMap[s.wo_id] = [];
+      stagesMap[s.wo_id].push(s);
+    });
+
+    // Attach stages dan filter MULTI WO yang tidak punya stage processType
+    return list.filter(wo => {
+      wo.stages = stagesMap[wo.id] || null;
+      if (wo.tipe === 'MULTI') {
+        return (wo.stages || []).some(s => s.process_type === processType);
+      }
+      return true; // WO tipe processType biasa selalu ditampilkan
+    });
+  } catch(e) {
+    // Tabel belum ada — tampilkan WO tipe processType biasa saja, MULTI disembunyikan
+    if (!isMissingTableError(e)) console.warn('attachWOStages:', e.message);
+    return list.filter(wo => wo.tipe === processType).map(wo => { wo.stages = null; return wo; });
+  }
 }
 
 async function loadClosedWOs() {
@@ -1470,12 +1522,12 @@ async function loadClosedWOs() {
 
   let q = db.from('processing_orders')
     .select(`
-      id, order_code, status, target_kg, target_qty_ekor, tanggal, updated_at, produk_id,
+      id, order_code, status, tipe, target_kg, target_qty_ekor, tanggal, updated_at, produk_id,
       product_master ( nama_produk, product_code ),
       wo_workstations ( workstation_id, selesai_at, workstations ( kode ) ),
       processing_outputs ( id, product_id, output_type, kg_output, qty_output, product_master ( kategori ) )
     `)
-    .eq('tipe', 'BONELESS')
+    .in('tipe', ['BONELESS', 'MULTI'])
     .in('status', ['COMPLETED','CANCELLED'])
     .order('updated_at', { ascending: false });
 
@@ -1483,7 +1535,7 @@ async function loadClosedWOs() {
   if (toEl?.value)   q = q.lte('updated_at', toEl.value   + 'T23:59:59');
 
   const { data, error } = await q;
-  if (!error) closedWOs = data || [];
+  if (!error) closedWOs = await attachWOStages(data || [], 'BONELESS');
 }
 
 async function loadAndRenderClosedWOs() {
@@ -1515,8 +1567,9 @@ function renderClosedWOs() {
     const statusColor = {
       COMPLETED: 'b-aktif', APPROVED: 'b-aktif', CANCELLED: 'background:#fee2e2;color:#991b1b'
     }[wo.status] || '';
+    const stageBadge = stageBadgeHtml(wo, 'BONELESS');
     return '<tr>' +
-      '<td style="font-family:monospace;font-weight:800;font-size:12px">' + wo.order_code + '</td>' +
+      '<td style="font-family:monospace;font-weight:800;font-size:12px">' + wo.order_code + stageBadge + '</td>' +
       '<td>' + (pm.nama_produk || '—') + '<div class="tbl-sub">' + (pm.product_code || '') + '</div></td>' +
       '<td>' + fmtKg(wo.target_kg) + '<div class="tbl-sub">' + fmt(wo.target_qty_ekor) + ' ekor</div></td>' +
       '<td><strong>' + fmt(outQty) + ' ekor</strong><div class="tbl-sub" style="' + pctColor + '">' +
@@ -2262,6 +2315,39 @@ function statusBadge(s) {
 // ============================================================
 // TAB 2 — RENDER WO TABLE
 // ============================================================
+// ============================================================
+// STAGE HELPERS
+// ============================================================
+const PROCESS_ICON  = { PARTING: '✂️', BONELESS: '🥩', MARINASI: '🌶️' };
+const PROCESS_LABEL = { PARTING: 'Parting', BONELESS: 'Boneless', MARINASI: 'Marinasi' };
+
+// Kembalikan info stage untuk WO ini di modul tertentu (process_type)
+// { stageOrder, totalStages, nextStage } atau null jika single-stage
+function getStageInfo(wo, processType) {
+  if (!wo.stages || wo.stages.length <= 1) return null;
+  const idx  = wo.stages.findIndex(s => s.process_type === processType);
+  if (idx < 0) return null;
+  return {
+    stageOrder:  idx + 1,
+    totalStages: wo.stages.length,
+    currentStage: wo.stages[idx],
+    nextStage:   wo.stages[idx + 1] || null
+  };
+}
+
+// HTML badge "Stage X/Y" + anak panah ke proses berikutnya
+function stageBadgeHtml(wo, processType) {
+  const info = getStageInfo(wo, processType);
+  if (!info) return '';
+  const nextIcon  = info.nextStage ? (PROCESS_ICON[info.nextStage.process_type]  || '⚙️') : '';
+  const nextLabel = info.nextStage ? (PROCESS_LABEL[info.nextStage.process_type] || info.nextStage.process_type) : '';
+  const nextHtml  = info.nextStage
+    ? ` <span style="color:#6b7280">→</span> <span style="color:#7c3aed;font-weight:700">${nextIcon} ${nextLabel}</span>`
+    : ' <span style="color:#6b7280">(tahap terakhir)</span>';
+  return `<div style="margin-top:3px;display:inline-flex;align-items:center;gap:3px;background:#ede9fe;color:#5b21b6;border-radius:8px;padding:1px 7px;font-size:10px;font-weight:700">` +
+    `🔀 Stage ${info.stageOrder}/${info.totalStages}${nextHtml}</div>`;
+}
+
 function renderWOTab() {
   const tbody = document.getElementById('wo-tab-tbody');
   const pill  = document.getElementById('pill-wo-count');
@@ -2291,8 +2377,10 @@ function renderWOTab() {
     const canClose   = wo.status === 'IN_PROGRESS';
     const isExpanded = woDetailId === wo.id;
     const bgRow      = isExpanded ? 'background:#eff6ff' : (allSelesai ? 'background:#f0fdf4' : '');
+    const stageBadge = stageBadgeHtml(wo, 'BONELESS');
     return '<tr style="' + bgRow + '">' +
       '<td style="font-family:monospace;font-weight:800;font-size:12px">' + wo.order_code +
+        stageBadge +
         (wo.catatan ? '<div class="tbl-sub" style="font-style:italic;white-space:normal">' + wo.catatan + '</div>' : '') + '</td>' +
       '<td>' + (pm.nama_produk||'—') + '<div class="tbl-sub">' + (pm.product_code||'') + '</div></td>' +
       '<td>' + fmtKg(wo.target_kg) + '<div class="tbl-sub">' + fmt(wo.target_qty_ekor) + ' ekor</div></td>' +

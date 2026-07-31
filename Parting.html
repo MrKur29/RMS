@@ -1461,8 +1461,7 @@ async function loadActiveWOs() {
     .in('status', ['OPEN','IN_PROGRESS'])
     .order('created_at');
   if (!error) {
-    activeWOs = data || [];
-    await loadPartingWOStages();
+    activeWOs = await attachWOStages(data || [], 'PARTING');
   }
 }
 
@@ -1477,12 +1476,13 @@ function isMissingTableError(e) {
     || msg.includes('schema cache');
 }
 
-// Load work_order_stages untuk activeWOs, attach ke masing-masing WO.
-// Filter: untuk WO tipe MULTI, hanya tampilkan jika punya stage PARTING.
-async function loadPartingWOStages() {
-  if (!activeWOs.length) return;
+// Load work_order_stages untuk sekumpulan WO, attach ke masing-masing WO,
+// dan filter: untuk WO tipe MULTI, hanya lolos jika punya stage processType.
+// Dipakai baik untuk activeWOs maupun closedWOs.
+async function attachWOStages(list, processType) {
+  if (!list.length) return list;
   try {
-    const woIds = activeWOs.map(w => w.id);
+    const woIds = list.map(w => w.id);
     const { data, error } = await db
       .from('work_order_stages')
       .select(`
@@ -1500,19 +1500,18 @@ async function loadPartingWOStages() {
       stagesMap[s.wo_id].push(s);
     });
 
-    // Attach stages dan filter MULTI WO yang tidak punya stage PARTING
-    activeWOs = activeWOs.filter(wo => {
+    // Attach stages dan filter MULTI WO yang tidak punya stage processType
+    return list.filter(wo => {
       wo.stages = stagesMap[wo.id] || null;
       if (wo.tipe === 'MULTI') {
-        return (wo.stages || []).some(s => s.process_type === 'PARTING');
+        return (wo.stages || []).some(s => s.process_type === processType);
       }
-      return true; // WO tipe PARTING biasa selalu ditampilkan
+      return true; // WO tipe processType biasa selalu ditampilkan
     });
   } catch(e) {
-    // Tabel belum ada — tampilkan WO PARTING biasa saja, MULTI disembunyikan
-    if (!isMissingTableError(e)) console.warn('loadPartingWOStages:', e.message);
-    activeWOs = activeWOs.filter(wo => wo.tipe === 'PARTING');
-    activeWOs.forEach(wo => { wo.stages = null; });
+    // Tabel belum ada — tampilkan WO tipe processType biasa saja, MULTI disembunyikan
+    if (!isMissingTableError(e)) console.warn('attachWOStages:', e.message);
+    return list.filter(wo => wo.tipe === processType).map(wo => { wo.stages = null; return wo; });
   }
 }
 
@@ -1531,12 +1530,12 @@ async function loadClosedWOs() {
 
   let q = db.from('processing_orders')
     .select(`
-      id, order_code, status, target_kg, target_qty_ekor, tanggal, updated_at,
+      id, order_code, status, tipe, target_kg, target_qty_ekor, tanggal, updated_at,
       product_master ( nama_produk, product_code ),
       wo_workstations ( workstation_id, selesai_at, workstations ( kode ) ),
       processing_outputs ( id, output_type, kg_output, qty_output )
     `)
-    .eq('tipe', 'PARTING')
+    .in('tipe', ['PARTING', 'MULTI'])
     .in('status', ['COMPLETED','CANCELLED'])
     .order('updated_at', { ascending: false });
 
@@ -1544,7 +1543,7 @@ async function loadClosedWOs() {
   if (toEl?.value)   q = q.lte('updated_at', toEl.value   + 'T23:59:59');
 
   const { data, error } = await q;
-  if (!error) closedWOs = data || [];
+  if (!error) closedWOs = await attachWOStages(data || [], 'PARTING');
 }
 
 async function loadAndRenderClosedWOs() {
@@ -1576,8 +1575,9 @@ function renderClosedWOs() {
     const statusColor = {
       COMPLETED: 'b-aktif', APPROVED: 'b-aktif', CANCELLED: 'background:#fee2e2;color:#991b1b'
     }[wo.status] || '';
+    const stageBadge = stageBadgeHtml(wo, 'PARTING');
     return '<tr>' +
-      '<td style="font-family:monospace;font-weight:800;font-size:12px">' + wo.order_code + '</td>' +
+      '<td style="font-family:monospace;font-weight:800;font-size:12px">' + wo.order_code + stageBadge + '</td>' +
       '<td>' + (pm.nama_produk || '—') + '<div class="tbl-sub">' + (pm.product_code || '') + '</div></td>' +
       '<td>' + fmtKg(wo.target_kg) + '<div class="tbl-sub">' + fmt(wo.target_qty_ekor) + ' ekor</div></td>' +
       '<td><strong>' + fmt(outQty) + ' ekor</strong><div class="tbl-sub" style="' + pctColor + '">' +
