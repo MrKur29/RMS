@@ -622,6 +622,7 @@ a{text-decoration:none}
   <div class="modal-box modal-sm">
     <div class="modal-title">✗ Batalkan Work Order</div>
     <div class="modal-desc">WO <strong id="can-code">—</strong> akan dibatalkan. Masukkan alasan.</div>
+    <div id="can-warn" style="display:none;background:#fef3c7;color:#92400e;font-size:12px;font-weight:700;padding:8px 10px;border-radius:6px;margin-bottom:10px"></div>
     <div class="form-group" style="margin-bottom:0">
       <label>Alasan Pembatalan <span style="color:#dc2626">*</span></label>
       <textarea id="can-alasan" placeholder="Contoh: Target berubah, bahan tidak cukup…" rows="3"></textarea>
@@ -1434,21 +1435,54 @@ async function doApproveWO() {
 // ============================================================
 // CANCEL WO
 // ============================================================
-function openCancelWO() {
+// Cek apakah WO sudah punya input bahan baku (processing_inputs). Kalau ada,
+// pembatalan diblok sampai keranjangnya dikeluarkan dulu (lihat tombol ✗ di
+// panel Detail > Input Bahan Baku pada halaman lantai produksi terkait).
+async function checkWOHasInput(woId) {
+  const { count, error } = await db.from('processing_inputs')
+    .select('id', { count: 'exact', head: true })
+    .eq('order_id', woId);
+  if (error) { console.error(error); return 0; }
+  return count || 0;
+}
+
+function renderCancelGuard(inputCount) {
+  const warn   = document.getElementById('can-warn');
+  const alasan = document.getElementById('can-alasan');
+  const btn    = document.getElementById('can-btn-ok');
+  if (inputCount > 0) {
+    warn.style.display = '';
+    warn.textContent = `⚠ WO ini sudah punya ${inputCount} input bahan baku (keranjang). Keluarkan/hapus input tersebut dulu di halaman produksi terkait sebelum WO ini bisa dibatalkan.`;
+    alasan.disabled = true;
+    btn.disabled = true;
+  } else {
+    warn.style.display = 'none';
+    alasan.disabled = false;
+    btn.disabled = false;
+  }
+}
+
+async function openCancelWO() {
   if (!currentWOData) return;
   setEl('can-code', currentWOData.order_code);
   document.getElementById('can-alasan').value = '';
   showErr('can-err', '');
+  renderCancelGuard(0);
   openModal('modal-cancel');
+  const n = await checkWOHasInput(currentWOData.id);
+  if (currentWOData) renderCancelGuard(n);
 }
 
-function openCancelFromList(woId) {
+async function openCancelFromList(woId) {
   currentWOId   = woId;
   currentWOData = allWOs.find(w => w.id === woId);
   setEl('can-code', currentWOData?.order_code || '—');
   document.getElementById('can-alasan').value = '';
   showErr('can-err', '');
+  renderCancelGuard(0);
   openModal('modal-cancel');
+  const n = await checkWOHasInput(woId);
+  if (currentWOId === woId) renderCancelGuard(n);
 }
 
 async function doCancelWO() {
@@ -1458,6 +1492,14 @@ async function doCancelWO() {
   const btn = document.getElementById('can-btn-ok');
   btn.disabled = true; btn.textContent = 'Memproses…';
   try {
+    // Safety net: cek ulang di detik terakhir, jaga-jaga ada input yang masuk
+    // setelah modal dibuka (race condition) atau guard di atas gagal jalan.
+    const n = await checkWOHasInput(currentWOId);
+    if (n > 0) {
+      renderCancelGuard(n);
+      showErr('can-err', `Dibatalkan: WO ini sudah punya ${n} input bahan baku. Keluarkan input tersebut dulu.`);
+      return;
+    }
     const { error } = await db.from('processing_orders').update({
       status:        'CANCELLED',
       reject_alasan: alasan
