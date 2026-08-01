@@ -1476,7 +1476,7 @@ async function loadActiveWOs() {
   const { data, error } = await db
     .from('processing_orders')
     .select(`
-      id, order_code, status, tipe, target_kg, target_qty_ekor, catatan, tanggal, created_at,
+      id, order_code, status, tipe, target_kg, target_qty_ekor, catatan, tanggal, created_at, produk_id,
       product_master ( nama_produk, product_code ),
       wo_workstations (
         workstation_id, target_kg, target_qty_ekor, selesai_at, selesai_by,
@@ -1484,7 +1484,7 @@ async function loadActiveWOs() {
         users!selesai_by ( nama )
       ),
       processing_inputs ( id, basket_id, workstation_id, kg_diambil, qty_input ),
-      processing_outputs ( id, output_type, kg_output, qty_output, worker_id, workstation_id, tanggal_produksi )
+      processing_outputs ( id, product_id, output_type, kg_output, qty_output, worker_id, workstation_id, tanggal_produksi )
     `)
     .in('tipe', ['PARTING', 'MULTI'])
     .in('status', ['OPEN','IN_PROGRESS'])
@@ -1559,10 +1559,10 @@ async function loadClosedWOs() {
 
   let q = db.from('processing_orders')
     .select(`
-      id, order_code, status, tipe, target_kg, target_qty_ekor, tanggal, updated_at,
+      id, order_code, status, tipe, target_kg, target_qty_ekor, tanggal, updated_at, produk_id,
       product_master ( nama_produk, product_code ),
       wo_workstations ( workstation_id, selesai_at, workstations ( kode ) ),
-      processing_outputs ( id, output_type, kg_output, qty_output )
+      processing_outputs ( id, product_id, output_type, kg_output, qty_output )
     `)
     .in('tipe', ['PARTING', 'MULTI'])
     .in('status', ['COMPLETED','CANCELLED'])
@@ -2330,11 +2330,22 @@ async function doPindahKeluar() {
 // ============================================================
 // TAB 2 — HELPER: compute actual output from WO data
 // ============================================================
+// Hanya hitung output yang produknya sesuai target akhir WO (wo.produk_id).
+// Untuk WO MULTI-stage, processing_outputs berisi baris dari SEMUA stage (semua
+// share order_id yang sama) — kalau difilter cuma output_type==='PRIMARY' tanpa
+// cek produk, output stage sebelumnya ikut kehitung bareng output Parting sendiri,
+// bikin actual > target_kg dan persentase membengkak. wo.produk_id selalu =
+// output_product_id stage TERAKHIR (lihat WorkOrder.html doCreateWO), jadi ini
+// otomatis mengecualikan output stage-stage sebelumnya. Pola sama seperti Boneless.html.
 function getActualKg(wo) {
-  return (wo.processing_outputs||[]).filter(o=>o.output_type==='PRIMARY').reduce((s,o)=>s+(Number(o.kg_output)||0),0);
+  return (wo.processing_outputs||[])
+    .filter(o => o.product_id === wo.produk_id)
+    .reduce((s,o) => s + (Number(o.kg_output)||0), 0);
 }
 function getActualQty(wo) {
-  return (wo.processing_outputs||[]).filter(o=>o.output_type==='PRIMARY').reduce((s,o)=>s+(Number(o.qty_output)||0),0);
+  return (wo.processing_outputs||[])
+    .filter(o => o.product_id === wo.produk_id)
+    .reduce((s,o) => s + (Number(o.qty_output)||0), 0);
 }
 function getSelisihPct(wo) {
   const actual = getActualKg(wo);

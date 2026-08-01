@@ -721,11 +721,24 @@ function openModal(id){document.getElementById(id).classList.add('open')}
 function closeModal(id){document.getElementById(id).classList.remove('open')}
 function showErr(id,msg){const e=document.getElementById(id);if(e){e.textContent=msg;e.style.display=msg?'block':'none'}}
 
+// Hanya hitung output yang produknya sesuai target akhir WO (wo.produk_id).
+// Untuk WO MULTI-stage, processing_outputs berisi baris dari SEMUA stage (semua
+// share order_id yang sama) — kalau difilter cuma output_type==='PRIMARY' tanpa
+// cek produk, output stage-stage sebelumnya (mis. Boneless→Marinasi) ikut
+// kehitung bareng output stage terakhir, bikin actual > target_kg dan
+// persentase membengkak. wo.produk_id selalu = output_product_id stage
+// TERAKHIR (lihat doCreateWO: "Final product = output of last stage"), jadi
+// ini otomatis mengecualikan output stage-stage sebelumnya. Pola sama seperti
+// Boneless.html (yang sudah benar sejak awal).
 function getActualKg(wo) {
-  return (wo.processing_outputs||[]).filter(o=>o.output_type==='PRIMARY').reduce((s,o)=>s+(Number(o.kg_output)||0),0);
+  return (wo.processing_outputs||[])
+    .filter(o => o.product_id === wo.produk_id)
+    .reduce((s,o) => s + (Number(o.kg_output)||0), 0);
 }
 function getActualQty(wo) {
-  return (wo.processing_outputs||[]).filter(o=>o.output_type==='PRIMARY').reduce((s,o)=>s+(Number(o.qty_output)||0),0);
+  return (wo.processing_outputs||[])
+    .filter(o => o.product_id === wo.produk_id)
+    .reduce((s,o) => s + (Number(o.qty_output)||0), 0);
 }
 function getSelisihPct(wo) {
   const actual = getActualKg(wo);
@@ -908,7 +921,7 @@ async function loadWOs() {
         workstations ( kode, nama, tipe )
       ),
       processing_outputs (
-        id, output_type, kg_output, qty_output,
+        id, product_id, output_type, kg_output, qty_output,
         tanggal_produksi, worker_id, workstation_id,
         users!processing_outputs_worker_id_fkey ( nama ),
         product_master!processing_outputs_product_id_fkey ( nama_produk ),
