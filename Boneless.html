@@ -243,6 +243,8 @@ a{text-decoration:none}
 .btn-dest-blasting:hover,.btn-dest-blasting.selected{background:#0d9488;color:white;border-color:#0d9488}
 .btn-dest-marinasi{background:#fef9c3;color:#854d0e;border-color:#fde68a}
 .btn-dest-marinasi:hover,.btn-dest-marinasi.selected{background:#d97706;color:white;border-color:#d97706}
+.btn-dest-parting{background:#ede9fe;color:#5b21b6;border-color:#ddd6fe}
+.btn-dest-parting:hover,.btn-dest-parting.selected{background:#7c3aed;color:white;border-color:#7c3aed}
 
 /* ===== BASKET SELECT LIST ===== */
 .basket-select-list{max-height:200px;overflow-y:auto;border:1.5px solid #e5e7eb;border-radius:8px;margin-top:6px}
@@ -801,6 +803,7 @@ a{text-decoration:none}
       <button class="btn-dest btn-dest-chiller"    id="dest-chiller"     onclick="selectDest('CHILLER')">❄️<br>Chiller</button>
       <button class="btn-dest btn-dest-blasting"   id="dest-blasting"    onclick="selectDest('BLASTING')">🧊<br>Blasting</button>
       <button class="btn-dest btn-dest-marinasi"   id="dest-marinasi"    onclick="selectDest('MARINASI')">🌶️<br>Marinasi</button>
+      <button class="btn-dest btn-dest-parting"    id="dest-parting"     onclick="selectDest('PARTING')">✂️<br>Parting</button>
       <button class="btn-dest" id="dest-workstation" style="border-color:#2563eb;color:#2563eb" onclick="selectDest('WORKSTATION')">🔨<br>Work Station</button>
     </div>
     <!-- Panel WO + WS: muncul saat pilih Work Station -->
@@ -1313,7 +1316,7 @@ function navTo(url) {
 function openModal(id){document.getElementById(id).classList.add('open')}
 function closeModal(id){document.getElementById(id).classList.remove('open')}
 function showErr(id,msg){const e=document.getElementById(id);if(e){e.textContent=msg;e.style.display=msg?'block':'none'}}
-function lokasiLabel(l){const m={CHILLER:'Chiller',BONELESS:'Boneless',MARINASI:'Marinasi',BLASTING:'Blasting',SOLD:'Sold',BYPRODUCT_DIRECT:'By-product',LANTAI:'Lantai Produksi'};return m[l]||l||'—'}
+function lokasiLabel(l){const m={CHILLER:'Chiller',PARTING:'Parting',BONELESS:'Boneless',MARINASI:'Marinasi',BLASTING:'Blasting',SOLD:'Sold',BYPRODUCT_DIRECT:'By-product',LANTAI:'Lantai Produksi'};return m[l]||l||'—'}
 
 // ============================================================
 // TAB NAVIGATION
@@ -2060,7 +2063,7 @@ function openPindahKeluar(basketId) {
   document.getElementById('mp-qty').value = b.qty_sisa || '';
   document.getElementById('mp-kg').value  = b.kg_sisa  || '';
   // Reset semua dest button + sembunyikan panel WS
-  ['chiller','blasting','marinasi','workstation'].forEach(d =>
+  ['chiller','blasting','marinasi','parting','workstation'].forEach(d =>
     document.getElementById(`dest-${d}`)?.classList.remove('selected'));
   document.getElementById('mp-ws-panel').style.display    = 'none';
   document.getElementById('mp-wo-info').style.display     = 'none';
@@ -2077,7 +2080,7 @@ function selectDest(dest) {
   selectedDest = dest;
   selectedWsId = null;
   showErr('mp-err', '');
-  ['chiller','blasting','marinasi','workstation'].forEach(d =>
+  ['chiller','blasting','marinasi','parting','workstation'].forEach(d =>
     document.getElementById(`dest-${d}`)?.classList.remove('selected'));
   document.getElementById(`dest-${dest.toLowerCase()}`)?.classList.add('selected');
 

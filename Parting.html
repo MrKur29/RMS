@@ -2757,8 +2757,8 @@ function renderAssignedInputs(wo) {
 
 function renderBasketList(filter) {
   const f   = (filter||'').trim().toLowerCase();
-  // Hanya KARKAS yang boleh jadi bahan baku input — PARTING/BONELESS output tidak boleh
-  let list  = partingStock.filter(b => !b.basket_type || b.basket_type === 'KARKAS' || b.basket_type === 'THAWING');
+  // KARKAS, THAWING, atau BONELESS boleh jadi bahan baku input — PARTING output sendiri tidak boleh (cegah re-proses siklus)
+  let list  = partingStock.filter(b => !b.basket_type || b.basket_type === 'KARKAS' || b.basket_type === 'THAWING' || b.basket_type === 'BONELESS');
   if (f) list = list.filter(b =>
     (b.basket_code||'').toLowerCase().includes(f) ||
     (b.product_master?.nama_produk||'').toLowerCase().includes(f)
