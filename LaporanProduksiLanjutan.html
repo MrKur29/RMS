@@ -346,7 +346,7 @@ const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const MODULES = {
   BONELESS: { label:'Boneless', icon:'🥩', sourceCats:['KARKAS','CHILLER','PARTING','THAWING'], destCats:['CHILLER','PARTING','MARINASI','BLASTING'] },
   PARTING:  { label:'Parting',  icon:'✂️', sourceCats:['KARKAS','CHILLER','THAWING','BONELESS'], destCats:['CHILLER','BONELESS','MARINASI','BLASTING'] },
-  MARINASI: { label:'Marinasi', icon:'🌶️', sourceCats:['KARKAS','CHILLER','PARTING','THAWING'], destCats:['CHILLER','PARTING','BONELESS','BLASTING'] }
+  MARINASI: { label:'Marinasi', icon:'🌶️', sourceCats:['KARKAS','CHILLER','PARTING','THAWING','BONELESS'], destCats:['CHILLER','PARTING','BONELESS','BLASTING'] }
 };
 let currentTipe = 'BONELESS';
 
@@ -554,14 +554,20 @@ async function loadTujuanBerikutnya(basketIds){
 }
 
 async function fetchHasil(fromBound,toBound){
+  // NB: dulu filter pakai processing_orders.tipe = currentTipe. Itu salah untuk WO
+  // MULTI-stage (mis. Parting→Marinasi) karena processing_orders.tipe = 'MULTI',
+  // bukan 'MARINASI' — jadi semua hasil dari WO multi-stage hilang dari laporan
+  // modul manapun. tujuan_lokasi selalu diisi nama lantai ini sendiri saat output
+  // dibuat (lihat komentar loadTujuanBerikutnya di atas), terlepas dari tipe WO-nya,
+  // jadi itu filter yang benar untuk "lahir di lantai ini".
   const { data, error } = await db.from('processing_outputs')
     .select(`
       id, basket_id, qty_output, kg_output, created_at,
       baskets ( basket_code, status ),
       product_master ( nama_produk, product_code ),
-      processing_orders!inner ( tipe, order_code, catatan )
+      processing_orders ( tipe, order_code, catatan )
     `)
-    .eq('processing_orders.tipe', currentTipe)
+    .eq('tujuan_lokasi', currentTipe)
     .gte('created_at', fromBound)
     .lte('created_at', toBound)
     .order('created_at');
@@ -581,14 +587,18 @@ async function fetchHasil(fromBound,toBound){
 }
 
 async function fetchReject(fromBound,toBound){
+  // Sama seperti fetchHasil: processing_orders.tipe jadi 'MULTI' untuk WO multi-stage,
+  // jadi reject dari WO itu hilang kalau filternya pakai tipe WO. workstation_id di
+  // processing_rusak selalu diisi WS tempat reject dicatat, dan workstations.tipe
+  // adalah lantai fisiknya (tidak pernah 'MULTI') — jadi itu filter yang benar.
   const { data, error } = await db.from('processing_rusak')
     .select(`
       id, jumlah_kg, alasan, catatan, created_at,
       product_master ( nama_produk ),
       users!approved_by ( nama ),
-      processing_orders!inner ( tipe )
+      workstations!inner ( tipe )
     `)
-    .eq('processing_orders.tipe', currentTipe)
+    .eq('workstations.tipe', currentTipe)
     .gte('created_at', fromBound)
     .lte('created_at', toBound)
     .order('created_at');
@@ -686,12 +696,21 @@ function renderRekapMasuk(rows){
   tb.innerHTML += totRow;
 }
 
+// Bucket khusus untuk hasil produk yang belum pindah lantai (r.tujuan === null).
+// HARUS ikut dihitung di kolom TOTAL — sebelumnya cats.forEach cuma iterasi destCats
+// yang fixed, jadi baris dengan tujuan=null (paling umum — output baru biasanya
+// belum ditransfer hari yang sama) numpuk di cells[null] tapi tidak pernah dijumlah
+// ke mana pun, bikin TOTAL Rekap Hasil Produksi < TOTAL Hasil Produk (rincian).
+const BELUM_PINDAH_KEY = '__BELUM_PINDAH__';
+function rekapHasilCats(){ return [...MODULES[currentTipe].destCats, BELUM_PINDAH_KEY]; }
+function rekapHasilCatLabel(c){ return c===BELUM_PINDAH_KEY ? 'Belum Pindah' : (DEST_LABEL_PREFIX[c]||('Ke '+c)); }
+
 function renderRekapHasilHead(){
-  const cats = MODULES[currentTipe].destCats;
+  const cats = rekapHasilCats();
   let h1 = '<th rowspan="2" style="vertical-align:bottom">Barang</th>';
   let h2 = '';
   cats.forEach(c=>{
-    h1 += '<th colspan="2" style="text-align:center">'+(DEST_LABEL_PREFIX[c]||('Ke '+c))+'</th>';
+    h1 += '<th colspan="2" style="text-align:center">'+rekapHasilCatLabel(c)+'</th>';
     h2 += '<th class="num">Qty</th><th class="num">Kg</th>';
   });
   h1 += '<th colspan="2" style="text-align:center">Total</th>';
@@ -700,11 +719,11 @@ function renderRekapHasilHead(){
 }
 
 function renderRekapHasil(rows){
-  const cats = MODULES[currentTipe].destCats;
+  const cats = rekapHasilCats();
   const map = {};
   rows.forEach(r=>{
     if(!map[r.barang]) map[r.barang] = { barang:r.barang, cells:{} };
-    const cat = r.tujuan;
+    const cat = r.tujuan || BELUM_PINDAH_KEY;
     if(!map[r.barang].cells[cat]) map[r.barang].cells[cat] = { qty:0, kg:0 };
     map[r.barang].cells[cat].qty += r.qty;
     map[r.barang].cells[cat].kg += r.kg;
@@ -810,12 +829,12 @@ function exportRekapMasukExcel(){
 function exportRekapHasilExcel(){
   if(!lastData){ showToast('Tampilkan laporan dulu.'); return; }
   const label = MODULES[lastData.tipe].label;
-  const cats = MODULES[lastData.tipe].destCats;
+  const cats = rekapHasilCats(); // termasuk BELUM_PINDAH_KEY, lihat renderRekapHasil
   const map = {};
-  lastData.hasil.forEach(r=>{ if(!map[r.barang])map[r.barang]={}; if(!map[r.barang][r.tujuan])map[r.barang][r.tujuan]={qty:0,kg:0}; map[r.barang][r.tujuan].qty+=r.qty; map[r.barang][r.tujuan].kg+=r.kg; });
+  lastData.hasil.forEach(r=>{ const cat=r.tujuan||BELUM_PINDAH_KEY; if(!map[r.barang])map[r.barang]={}; if(!map[r.barang][cat])map[r.barang][cat]={qty:0,kg:0}; map[r.barang][cat].qty+=r.qty; map[r.barang][cat].kg+=r.kg; });
   const aoa = [];
   const h1 = ['BARANG']; const h2 = [];
-  cats.forEach(c=>{ h1.push('KE '+c, null); h2.push('QTY','KG'); });
+  cats.forEach(c=>{ h1.push((c===BELUM_PINDAH_KEY?'BELUM PINDAH':'KE '+c), null); h2.push('QTY','KG'); });
   h1.push('TOTAL', null); h2.push('QTY','KG');
   aoa.push(h1); aoa.push(h2);
   Object.keys(map).sort().forEach(b=>{
