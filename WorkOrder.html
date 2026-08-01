@@ -412,6 +412,10 @@ a{text-decoration:none}
           <option value="COMPLETED">Completed</option>
           <option value="CANCELLED">Cancelled</option>
         </select>
+        <label style="display:flex;align-items:center;gap:6px;font-weight:600;cursor:pointer;white-space:nowrap">
+          <input type="checkbox" id="flt-show-completed" checked onchange="applyFilter()">
+          Tampilkan WO Selesai
+        </label>
         <div class="filter-spacer"></div>
         <button class="btn-refresh" onclick="loadAll()">🔄 Refresh</button>
       </div>
@@ -969,11 +973,13 @@ function applyFilter() {
   const to     = document.getElementById('flt-date-to').value;
   const tipe   = document.getElementById('flt-tipe').value;
   const status = document.getElementById('flt-status').value;
+  const showCompleted = document.getElementById('flt-show-completed').checked;
   filteredWOs  = allWOs.filter(wo => {
     if (from && wo.tanggal < from) return false;
     if (to   && wo.tanggal > to)   return false;
     if (tipe !== 'ALL' && wo.tipe !== tipe) return false;
     if (status !== 'ALL' && wo.status !== status) return false;
+    if (!showCompleted && wo.status === 'COMPLETED') return false;
     return true;
   });
   woPage = 0;
