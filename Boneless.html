@@ -1238,6 +1238,23 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ============================================================
+// FEATURE FLAGS
+// ============================================================
+// Sementara di-nonaktifkan atas permintaan user (2026-08-01, sama seperti
+// Parting.html): operator boleh menutup WO langsung meski selisih output
+// dari target melebihi ±10%, tanpa PIN Supervisor. Set kembali ke true untuk
+// mengaktifkan gate approval PIN Supervisor saat selisih melebihi ±10%
+// (lihat doCloseWO()).
+const WO_CLOSE_REQUIRE_PIN_ON_EXCEED = false;
+// Sementara di-nonaktifkan atas permintaan user (2026-08-01): operator boleh
+// menandai "Selesai di WS Ini" langsung tanpa PIN Supervisor. Set kembali ke
+// true untuk mengaktifkan gate PIN (lihat openSelesaiDiWS() — dua definisi
+// di file ini, sama seperti Parting.html; yang berlaku di runtime adalah
+// definisi TERAKHIR karena function hoisting, tapi keduanya diberi flag yang
+// sama supaya konsisten kalau ada yang di-hapus).
+const WS_FINISH_REQUIRE_PIN = false;
+
+// ============================================================
 // STATE
 // ============================================================
 let currentUser      = null;
@@ -2869,8 +2886,14 @@ function openCloseWO(woId) {
   }
   const warnBox  = document.getElementById('cwo-warn-box');
   const btnClose = document.getElementById('cwo-btn-ok');
-  if (warnBox)  warnBox.style.display = exceed?'':'none';
-  if (btnClose) btnClose.textContent  = exceed?'⚠️ Tutup & Minta Approval':'✅ Tutup & Approve';
+  const gateOn   = exceed && WO_CLOSE_REQUIRE_PIN_ON_EXCEED;
+  if (warnBox) {
+    warnBox.style.display = exceed?'':'none';
+    warnBox.innerHTML = gateOn
+      ? '⚠️ Selisih melebihi ±10%. Diperlukan PIN Supervisor untuk menutup WO ini.'
+      : '⚠️ Selisih melebihi ±10% dari target. Gate PIN Supervisor sedang dinonaktifkan — WO tetap bisa langsung ditutup.';
+  }
+  if (btnClose) btnClose.textContent = gateOn?'⚠️ Tutup & Minta Approval':'✅ Tutup & Approve';
   showErr('cwo-err','');
   openModal('modal-close-wo');
 }
@@ -2880,10 +2903,11 @@ async function doCloseWO() {
   const wo     = activeWOs.find(w=>w.id===currentCloseWOId);
   const selPct = getSelisihPct(wo);
   const exceed = selPct!==null && selPct>10;
+  const gateOn = exceed && WO_CLOSE_REQUIRE_PIN_ON_EXCEED;
   const btn    = document.getElementById('cwo-btn-ok');
   btn.disabled=true; btn.textContent='Memproses…';
   try {
-    if (!exceed) {
+    if (!gateOn) {
       const { error } = await db.from('processing_orders').update({
         status:          'COMPLETED',
         approved_by:     currentUser.id,
@@ -2891,7 +2915,7 @@ async function doCloseWO() {
         total_output_kg: getActualKg(wo)
       }).eq('id', currentCloseWOId);
       if (error) throw error;
-      showToast(`WO ${wo.order_code} berhasil ditutup!`,'success');
+      showToast(`WO ${wo.order_code} berhasil ditutup!${exceed?' (selisih >10%, gate PIN Supervisor sedang dinonaktifkan)':''}`,'success');
       closeModal('modal-close-wo');
       await loadAll();
     } else {
@@ -2908,7 +2932,8 @@ async function doCloseWO() {
     btn.disabled=false;
     const w2   = activeWOs.find(w=>w.id===currentCloseWOId);
     const sel2 = getSelisihPct(w2);
-    if (btn) btn.textContent = sel2&&sel2>10?'⚠️ Tutup & Minta Approval':'✅ Tutup & Approve';
+    const gateOn2 = sel2&&sel2>10&&WO_CLOSE_REQUIRE_PIN_ON_EXCEED;
+    if (btn) btn.textContent = gateOn2?'⚠️ Tutup & Minta Approval':'✅ Tutup & Approve';
   }
 }
 
@@ -2995,8 +3020,31 @@ async function rpSubmit() {
 // ============================================================
 // TAB 3 — SELESAI DI WS
 // ============================================================
+// Gate PIN Supervisor sedang dinonaktifkan (lihat WS_FINISH_REQUIRE_PIN).
+// Operator bisa langsung menandai selesai di WS ini, cukup konfirmasi ringan.
+async function finishWSWithoutPin(woId) {
+  const wo = activeWOs.find(w => w.id === woId);
+  const ws = allWorkstations.find(w => w.id === selectedWSId);
+  if (!wo) return;
+  if (!confirm(`Tandai WO ${wo.order_code} selesai di ${ws ? (ws.kode + ' — ' + ws.nama) : 'workstation ini'}?`)) return;
+  try {
+    const { data: wwsRow, error: wwsErr } = await db.from('wo_workstations').select('id')
+      .eq('order_id', woId).eq('workstation_id', selectedWSId).maybeSingle();
+    if (wwsErr || !wwsRow) throw new Error('Data workstation-WO tidak ditemukan.');
+    const { error } = await db.from('wo_workstations')
+      .update({ selesai_at: new Date().toISOString(), selesai_by: currentUser?.id || null }).eq('id', wwsRow.id);
+    if (error) throw error;
+    showToast('WO ' + wo.order_code + ' ditandai selesai di ' + (ws?.kode || 'WS ini') + ' oleh ' + (currentUser?.nama||'operator'), 'success');
+    await loadAll();
+  } catch(e) {
+    console.error(e);
+    showToast('Gagal menandai selesai: ' + (e.message||''), 'error');
+  }
+}
+
 function openSelesaiDiWS(woId) {
   selesaiWOId = woId;
+  if (!WS_FINISH_REQUIRE_PIN) { finishWSWithoutPin(woId); return; }
   const wo  = activeWOs.find(w => w.id === woId);
   const wws = (wo?.wo_workstations || []).find(w => w.workstation_id === selectedWSId);
   const ws  = allWorkstations.find(w => w.id === selectedWSId);
@@ -4617,6 +4665,7 @@ async function reprintLabelById(outputId) {
 // ============================================================
 function openSelesaiDiWS(woId) {
   selesaiWOId = woId;
+  if (!WS_FINISH_REQUIRE_PIN) { finishWSWithoutPin(woId); return; }
   const wo  = activeWOs.find(w => w.id === woId);
   const ws  = allWorkstations.find(w => w.id === selectedWSId);
   setEl('sws-wo-code', wo?.order_code || '—');
