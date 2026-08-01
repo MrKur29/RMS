@@ -2934,11 +2934,17 @@ async function finishWSWithoutPin(woId) {
   if (!wo) return;
   if (!confirm(`Tandai WO ${wo.order_code} selesai di ${ws ? (ws.kode + ' — ' + ws.nama) : 'workstation ini'}?`)) return;
   try {
-    const { data: wwsRow, error: wwsErr } = await db.from('wo_workstations').select('id')
-      .eq('order_id', woId).eq('workstation_id', selectedWSId).maybeSingle();
-    if (wwsErr || !wwsRow) throw new Error('Data workstation-WO tidak ditemukan.');
+    // Upsert (bukan select+update) — kalau baris wo_workstations belum ada
+    // (mis. WO sempat CANCELLED lalu dibuka manual via SQL, atau output
+    // tercatat lewat jalur yang tidak sempat registrasi WS), baris ini
+    // langsung dibuat alih-alih gagal dengan "data tidak ditemukan".
     const { error } = await db.from('wo_workstations')
-      .update({ selesai_at: new Date().toISOString(), selesai_by: currentUser?.id || null }).eq('id', wwsRow.id);
+      .upsert({
+        order_id:       woId,
+        workstation_id: selectedWSId,
+        selesai_at:     new Date().toISOString(),
+        selesai_by:     currentUser?.id || null
+      }, { onConflict: 'order_id,workstation_id' });
     if (error) throw error;
     showToast('WO ' + wo.order_code + ' ditandai selesai di ' + (ws?.kode || 'WS ini') + ' oleh ' + (currentUser?.nama||'operator'), 'success');
     await loadAll();
@@ -4047,11 +4053,14 @@ async function doSelesaiDiWS() {
     if (!sup) { pinErr.textContent = 'PIN salah atau bukan Supervisor.'; pinErr.style.display = 'block'; return; }
     const wo = activeWOs.find(w => w.id === selesaiWOId);
     if (!wo) throw new Error('WO tidak ditemukan.');
-    const { data: wwsRow, error: wwsErr } = await db.from('wo_workstations').select('id')
-      .eq('order_id', selesaiWOId).eq('workstation_id', selectedWSId).maybeSingle();
-    if (wwsErr || !wwsRow) throw new Error('Data workstation-WO tidak ditemukan.');
+    // Upsert — lihat catatan di finishWSWithoutPin() soal kenapa bukan select+update.
     const { error } = await db.from('wo_workstations')
-      .update({ selesai_at: new Date().toISOString(), selesai_by: sup.id }).eq('id', wwsRow.id);
+      .upsert({
+        order_id:       selesaiWOId,
+        workstation_id: selectedWSId,
+        selesai_at:     new Date().toISOString(),
+        selesai_by:     sup.id
+      }, { onConflict: 'order_id,workstation_id' });
     if (error) throw error;
     const ws = allWorkstations.find(w => w.id === selectedWSId);
     showToast('WO ' + wo.order_code + ' ditandai selesai di ' + (ws?.kode || 'WS ini') + ' oleh ' + sup.nama, 'success');
