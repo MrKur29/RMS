@@ -2097,7 +2097,10 @@ function populateWOSelect() {
   const prevVal = woSel.value;
   woSel.innerHTML = '<option value="">— Pilih Work Order —</option>';
 
-  (activeWOs||[]).filter(wo => ['OPEN','IN_PROGRESS'].includes(wo.status)).forEach(wo => {
+  // Hanya WO tanggal hari ini yang boleh dipilih untuk alokasi bahan baku.
+  // WO aktif dari tanggal lain (belum ditutup) tetap terlihat & bisa ditutup
+  // lewat Tab Work Order — tidak hilang, cuma tidak muncul di dropdown ini.
+  (activeWOs||[]).filter(wo => ['OPEN','IN_PROGRESS'].includes(wo.status) && wo.tanggal === todayISO()).forEach(wo => {
     const target   = Number(wo.target_qty_ekor) || 0;
     const teralok  = (wo.processing_inputs||[]).reduce((s,i) => s + (Number(i.qty_input)||0), 0);
     const fullySent = target > 0 && teralok >= target;

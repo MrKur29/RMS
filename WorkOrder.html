@@ -507,6 +507,11 @@ a{text-decoration:none}
     <div class="modal-title">＋ Buat Work Order Baru</div>
     <div class="modal-desc">Atur tahapan proses. Default 1 tahap — klik <strong>+ Tambah Stage</strong> jika produk perlu diproses lebih dari sekali.</div>
 
+    <div class="form-group">
+      <label>Tanggal WO <span style="color:#dc2626">*</span></label>
+      <input type="date" id="crt-tanggal">
+    </div>
+
     <!-- STAGE BUILDER -->
     <div class="stage-builder-wrap">
       <div class="stage-builder-label">
@@ -1158,6 +1163,7 @@ function openCreateWO() {
   document.getElementById('crt-target-kg').value  = '';
   document.getElementById('crt-target-qty').value = '';
   document.getElementById('crt-catatan').value    = '';
+  document.getElementById('crt-tanggal').value    = todayISO();
   showErr('crt-err', '');
   openModal('modal-create');
 }
@@ -1175,9 +1181,11 @@ async function doCreateWO() {
   const targetKg  = parseFloat(document.getElementById('crt-target-kg').value);
   const targetQty = parseInt(document.getElementById('crt-target-qty').value);
   const catatan   = document.getElementById('crt-catatan').value.trim();
+  const tanggal   = document.getElementById('crt-tanggal').value;
 
   if (!targetKg || targetKg <= 0)   { showErr('crt-err', 'Target Kg harus lebih dari 0.'); return; }
   if (!targetQty || targetQty <= 0) { showErr('crt-err', 'Target Ekor harus lebih dari 0.'); return; }
+  if (!tanggal)                     { showErr('crt-err', 'Tanggal WO harus diisi.'); return; }
 
   // Determine tipe: single = process_type, multi = 'MULTI'
   const isMulti    = createStages.length > 1;
@@ -1198,7 +1206,7 @@ async function doCreateWO() {
     const { data: wo, error: insertErr } = await db.from('processing_orders').insert({
       order_code:      woCode,
       tipe:            woTipe,
-      tanggal:         todayISO(),
+      tanggal:         tanggal,
       produk_id:       produkId,
       target_kg:       targetKg,
       target_qty_ekor: targetQty,
