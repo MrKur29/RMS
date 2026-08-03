@@ -301,6 +301,7 @@ a{text-decoration:none}
                 <th>Tanggal</th>
                 <th>Sumber/Tujuan</th>
                 <th>Produk</th>
+                <th>No Keranjang</th>
                 <th>Keterangan</th>
                 <th class="num">Masuk Qty</th>
                 <th class="num">Masuk Kg</th>
@@ -309,7 +310,7 @@ a{text-decoration:none}
               </tr>
             </thead>
             <tbody id="tbody-transaksi">
-              <tr><td colspan="8"><div class="empty">Pilih rentang tanggal, lalu klik Tampilkan.</div></td></tr>
+              <tr><td colspan="9"><div class="empty">Pilih rentang tanggal, lalu klik Tampilkan.</div></td></tr>
             </tbody>
           </table>
         </div>
@@ -317,7 +318,7 @@ a{text-decoration:none}
         <div class="rpt-note">
           Catatan: Laporan ini merangkum pergerakan basket/keranjang di lokasi Chiller untuk semua produk — transfer masuk/keluar antar lokasi, konsumsi ke proses lanjutan, hasil produksi yang dituju ke Chiller, dan koreksi yang sudah disetujui.
           Kolom Qty memakai satuan per produk (ekor/kg/pcs sesuai Master Data) sehingga tidak dijumlahkan lintas produk — hanya kolom Kg yang ditotalkan di ringkasan.
-          Transfer yang berstatus "Menunggu Konfirmasi" atau "Ditolak" tetap ditampilkan sebagai keluar karena stok sudah dikurangi saat pengiriman disubmit, sesuai desain sistem saat ini.
+          Transfer keluar hanya dihitung setelah dikonfirmasi penerima — movement yang masih "Menunggu Konfirmasi" atau yang "Ditolak" tidak muncul di sini karena keranjangnya secara fisik belum/tidak pernah pindah dari Chiller.
         </div>
       </div>
 
@@ -468,7 +469,7 @@ async function tampilkanRincianTransaksi(){
   const panel=document.getElementById('panel-result');
   panel.style.display='block';
   document.getElementById('result-subtitle').textContent = `Chiller — Periode ${fmtDateID(dateFrom)} s/d ${fmtDateID(dateTo)}`;
-  document.getElementById('tbody-transaksi').innerHTML = '<tr><td colspan="8"><div class="empty">Memuat…</div></td></tr>';
+  document.getElementById('tbody-transaksi').innerHTML = '<tr><td colspan="9"><div class="empty">Memuat…</div></td></tr>';
 
   try{
     const events = await fetchAllEventsSemuaProduk(dateFrom, dateTo);
@@ -495,7 +496,7 @@ async function tampilkanRincianTransaksi(){
 
   }catch(e){
     console.error(e);
-    document.getElementById('tbody-transaksi').innerHTML = '<tr><td colspan="8"><div class="empty">Gagal memuat data transaksi.</div></td></tr>';
+    document.getElementById('tbody-transaksi').innerHTML = '<tr><td colspan="9"><div class="empty">Gagal memuat data transaksi.</div></td></tr>';
     showToast('Gagal memuat rincian transaksi: '+(e.message||''),'error');
   }
 }
@@ -511,7 +512,7 @@ async function fetchAllEventsSemuaProduk(dateFrom, dateTo){
   // A) Transfer masuk ke Chiller (basket_movements CONFIRMED, ke_lokasi = CHILLER)
   queries.push(
     db.from('basket_movements')
-      .select('id,qty_pindah,kg_pindah,confirmed_at,dari_lokasi,status,baskets!inner(basket_code,product_id)')
+      .select('id,basket_id,qty_pindah,kg_pindah,confirmed_at,dari_lokasi,status,baskets!inner(basket_code,product_id)')
       .eq('ke_lokasi',LOKASI)
       .eq('status','CONFIRMED')
       .gte('confirmed_at',fromBound)
@@ -523,7 +524,10 @@ async function fetchAllEventsSemuaProduk(dateFrom, dateTo){
             date:new Date(m.confirmed_at), tipe:'Transfer Masuk', tipeCls:'tp-masuk',
             asalTujuan:asalTujuanLabel(m.dari_lokasi),
             product_id:m.baskets?.product_id,
-            ket:`Keranjang ${m.baskets?.basket_code||'—'}`,
+            basketCode:m.baskets?.basket_code||'—',
+            ket:'—',
+            // retur dari Loading (penjualan) — cari PS & customer terkait basket ini
+            _psLookupBasketId: m.dari_lokasi==='LOADING' ? m.basket_id : null,
             masuk_qty:Number(m.qty_pindah)||0, masuk_kg:Number(m.kg_pindah)||0,
             keluar_qty:0, keluar_kg:0
           });
@@ -531,22 +535,30 @@ async function fetchAllEventsSemuaProduk(dateFrom, dateTo){
       })
   );
 
-  // B) Transfer keluar dari Chiller (basket_movements — semua status, dikurangi sejak dikirim)
+  // B) Transfer keluar dari Chiller (basket_movements CONFIRMED, ke_lokasi != CHILLER)
+  //    Hanya movement yang SUDAH dikonfirmasi penerima yang dianggap transaksi nyata —
+  //    PENDING (belum tentu jadi) dan REJECTED (batal, keranjang tetap di Chiller,
+  //    lihat doCancel() di Chiller.html) sengaja TIDAK dihitung sebagai keluar.
+  //    Dipakai confirmed_at (bukan created_at) supaya konsisten dengan event A di atas
+  //    dan dengan waktu transaksi nyatanya terjadi (saat dikonfirmasi, bukan saat dikirim).
   queries.push(
     db.from('basket_movements')
-      .select('id,qty_pindah,kg_pindah,created_at,ke_lokasi,status,baskets!inner(basket_code,product_id)')
+      .select('id,basket_id,qty_pindah,kg_pindah,confirmed_at,ke_lokasi,status,baskets!inner(basket_code,product_id)')
       .eq('dari_lokasi',LOKASI)
-      .gte('created_at',fromBound)
-      .lte('created_at',toBound)
+      .eq('status','CONFIRMED')
+      .gte('confirmed_at',fromBound)
+      .lte('confirmed_at',toBound)
       .then(({data,error})=>{
         if(error){console.error('fetchAllEventsSemuaProduk B',error);return}
         (data||[]).forEach(m=>{
-          const statusLbl = m.status==='PENDING' ? ' (Menunggu Konfirmasi)' : m.status==='REJECTED' ? ' (Ditolak)' : '';
           events.push({
-            date:new Date(m.created_at), tipe:'Transfer Keluar', tipeCls:'tp-keluar',
-            asalTujuan:`${asalTujuanLabel(m.ke_lokasi)}${statusLbl}`,
+            date:new Date(m.confirmed_at), tipe:'Transfer Keluar', tipeCls:'tp-keluar',
+            asalTujuan:asalTujuanLabel(m.ke_lokasi),
             product_id:m.baskets?.product_id,
-            ket:`Keranjang ${m.baskets?.basket_code||'—'}`,
+            basketCode:m.baskets?.basket_code||'—',
+            ket:'—',
+            // keluar ke Loading (penjualan) — cari PS & customer terkait basket ini
+            _psLookupBasketId: m.ke_lokasi==='LOADING' ? m.basket_id : null,
             masuk_qty:0, masuk_kg:0,
             keluar_qty:Number(m.qty_pindah)||0, keluar_kg:Number(m.kg_pindah)||0
           });
@@ -568,7 +580,8 @@ async function fetchAllEventsSemuaProduk(dateFrom, dateTo){
             date:new Date(pi.created_at), tipe:'Konsumsi Produksi', tipeCls:'tp-konsumsi',
             asalTujuan:asalTujuanLabel(pi.processing_orders?.tipe),
             product_id:pi.product_id,
-            ket:`WO ${pi.processing_orders?.order_code||'—'} — keranjang ${pi.baskets?.basket_code||'—'}`,
+            basketCode:pi.baskets?.basket_code||'—',
+            ket:`WO ${pi.processing_orders?.order_code||'—'}`,
             masuk_qty:0, masuk_kg:0,
             keluar_qty:Number(pi.qty_input)||0, keluar_kg:Number(pi.kg_input)||0
           });
@@ -590,7 +603,8 @@ async function fetchAllEventsSemuaProduk(dateFrom, dateTo){
             date:new Date(po.created_at), tipe:'Hasil Produksi', tipeCls:'tp-output',
             asalTujuan:asalTujuanLabel(po.processing_orders?.tipe),
             product_id:po.product_id,
-            ket:`WO ${po.processing_orders?.order_code||'—'} — keranjang baru ${po.baskets?.basket_code||'—'}`,
+            basketCode:po.baskets?.basket_code||'—',
+            ket:`WO ${po.processing_orders?.order_code||'—'} (keranjang baru)`,
             masuk_qty:Number(po.qty_output)||0, masuk_kg:Number(po.kg_output)||0,
             keluar_qty:0, keluar_kg:0
           });
@@ -630,7 +644,8 @@ async function fetchAllEventsSemuaProduk(dateFrom, dateTo){
           date:new Date(c.reviewed_at), tipe:'Koreksi', tipeCls:'tp-koreksi',
           asalTujuan:'Chiller',
           product_id:meta.product_id,
-          ket:`Koreksi ${c.field_salah}: ${c.nilai_lama??'—'} → ${c.nilai_baru??'—'} — keranjang ${meta.code||'—'}`,
+          basketCode:meta.code||'—',
+          ket:`Koreksi ${c.field_salah}: ${c.nilai_lama??'—'} → ${c.nilai_baru??'—'}`,
           masuk_qty: (!isKg && delta>0) ? delta : 0,
           masuk_kg:  (isKg && delta>0) ? delta : 0,
           keluar_qty:(!isKg && delta<0) ? -delta : 0,
@@ -641,6 +656,34 @@ async function fetchAllEventsSemuaProduk(dateFrom, dateTo){
   );
 
   await Promise.all(queries);
+
+  // F) Lengkapi Keterangan untuk baris yang menyentuh Loading (penjualan) dengan No PS & nama customer,
+  //    dicari lewat picking_slip_items berdasarkan basket_id. Kalau satu basket_id pernah dipakai di
+  //    lebih dari satu picking slip (mis. keranjang balik lagi setelah retur), ambil PS terbaru.
+  const psBasketIds = [...new Set(events.map(e=>e._psLookupBasketId).filter(Boolean))];
+  if(psBasketIds.length){
+    const { data: psItems, error: psErr } = await db.from('picking_slip_items')
+      .select('basket_id,picking_slips(ps_code,nama_pelanggan,created_at)')
+      .in('basket_id', psBasketIds);
+    if(psErr){
+      console.error('fetchAllEventsSemuaProduk F (picking_slip_items)',psErr);
+    } else {
+      const psMap = {};
+      (psItems||[]).forEach(pi=>{
+        const ps = pi.picking_slips;
+        if(!ps) return;
+        const prev = psMap[pi.basket_id];
+        if(!prev || new Date(ps.created_at||0) > new Date(prev.created_at||0)){
+          psMap[pi.basket_id] = ps;
+        }
+      });
+      events.forEach(e=>{
+        if(!e._psLookupBasketId) return;
+        const ps = psMap[e._psLookupBasketId];
+        e.ket = ps ? `PS ${ps.ps_code||'—'} — ${ps.nama_pelanggan||'—'}` : '—';
+      });
+    }
+  }
   return events;
 }
 
@@ -683,7 +726,7 @@ function renderTransaksiTable(){
 
   const tbody=document.getElementById('tbody-transaksi');
   if(!rows.length){
-    tbody.innerHTML = `<tr><td colspan="8"><div class="empty">${allRows.length ? 'Tidak ada transaksi yang cocok dengan pencarian produk.' : 'Tidak ada transaksi Chiller pada periode ini.'}</div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9"><div class="empty">${allRows.length ? 'Tidak ada transaksi yang cocok dengan pencarian produk.' : 'Tidak ada transaksi Chiller pada periode ini.'}</div></td></tr>`;
     return;
   }
   const totMasukQty=rows.reduce((s,r)=>s+(r.masuk_qty||0),0);
@@ -698,6 +741,7 @@ function renderTransaksiTable(){
       <td>
         <div class="produk-name">${esc(r.nama_produk)}</div>
       </td>
+      <td style="white-space:nowrap;font-family:monospace">${esc(r.basketCode||'—')}</td>
       <td>${esc(r.ket)}</td>
       <td class="num ${r.masuk_qty?'in-val':''}">${numOrDash(r.masuk_qty)}</td>
       <td class="num ${r.masuk_kg?'in-val':''}">${numOrDash(r.masuk_kg)}</td>
@@ -705,7 +749,7 @@ function renderTransaksiTable(){
       <td class="num ${r.keluar_kg?'out-val':''}">${numOrDash(r.keluar_kg)}</td>
     </tr>`).join('');
   html += `<tr class="tot-row">
-    <td colspan="4">TOTAL (${rows.length} transaksi) — Qty dijumlahkan apa adanya, satuan berbeda per produk</td>
+    <td colspan="5">TOTAL (${rows.length} transaksi) — Qty dijumlahkan apa adanya, satuan berbeda per produk</td>
     <td class="num">${num(totMasukQty)}</td>
     <td class="num">${num(totMasukKg)}</td>
     <td class="num">${num(totKeluarQty)}</td>
@@ -721,16 +765,16 @@ function exportTransaksiCSV(){
   if(!renderedRows.length){showToast('Belum ada data untuk diekspor.','warning');return}
   const dateFrom = document.getElementById('filter-tgl-dari').value;
   const dateTo   = document.getElementById('filter-tgl-sampai').value;
-  const headers = ['Tanggal','Sumber/Tujuan','Produk','Keterangan','Masuk Qty','Masuk Kg','Keluar Qty','Keluar Kg'];
-  const rows = renderedRows.map(r=>[fmtDT(r.date), r.asalTujuan, r.nama_produk, r.ket, r.masuk_qty||'', r.masuk_kg||'', r.keluar_qty||'', r.keluar_kg||'']);
+  const headers = ['Tanggal','Sumber/Tujuan','Produk','No Keranjang','Keterangan','Masuk Qty','Masuk Kg','Keluar Qty','Keluar Kg'];
+  const rows = renderedRows.map(r=>[fmtDT(r.date), r.asalTujuan, r.nama_produk, r.basketCode||'', r.ket, r.masuk_qty||'', r.masuk_kg||'', r.keluar_qty||'', r.keluar_kg||'']);
   exportCSV(headers, rows, todayFilename(`rincian_transaksi_chiller_${dateFrom}_${dateTo}`) + 'csv');
 }
 function exportTransaksiXLSX(){
   if(!renderedRows.length){showToast('Belum ada data untuk diekspor.','warning');return}
   const dateFrom = document.getElementById('filter-tgl-dari').value;
   const dateTo   = document.getElementById('filter-tgl-sampai').value;
-  const headers = ['Tanggal','Sumber/Tujuan','Produk','Keterangan','Masuk Qty','Masuk Kg','Keluar Qty','Keluar Kg'];
-  const rows = renderedRows.map(r=>[fmtDT(r.date), r.asalTujuan, r.nama_produk, r.ket, r.masuk_qty||'', r.masuk_kg||'', r.keluar_qty||'', r.keluar_kg||'']);
+  const headers = ['Tanggal','Sumber/Tujuan','Produk','No Keranjang','Keterangan','Masuk Qty','Masuk Kg','Keluar Qty','Keluar Kg'];
+  const rows = renderedRows.map(r=>[fmtDT(r.date), r.asalTujuan, r.nama_produk, r.basketCode||'', r.ket, r.masuk_qty||'', r.masuk_kg||'', r.keluar_qty||'', r.keluar_kg||'']);
   exportXLSX(headers, rows, 'Rincian Transaksi Chiller', todayFilename(`rincian_transaksi_chiller_${dateFrom}_${dateTo}`) + 'xlsx');
 }
 </script>
