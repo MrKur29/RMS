@@ -178,6 +178,7 @@ a{text-decoration:none}
         <span class="nav-icon">📊</span><span class="nav-label-text">Laporan</span>
         <span class="nav-tag">Aktif</span>
       </div>
+      <div class="nav-item" onclick="navTo('Tracing.html')"><span class="nav-icon">🔍</span><span class="nav-label-text">Tracing Produk</span></div>
       <div class="nav-item" id="nav-saldo-awal" style="display:none" onclick="navTo('SaldoAwal.html')">
         <span class="nav-icon">📋</span><span class="nav-label-text">Saldo Awal Barang</span>
       </div>
@@ -259,6 +260,13 @@ const REPORTS = [
     title: 'Laporan Kartu Stok',
     desc: 'Kartu stok per produk & lokasi: saldo berjalan dari produksi, transfer antar lokasi, konsumsi ke proses lanjutan, hasil produksi, dan koreksi disetujui.',
     url: 'LaporanKartuStok.html',
+    enabled: true
+  },
+  {
+    icon: '📦',
+    title: 'Laporan Kartu Stok Keranjang',
+    desc: 'Kartu stok satu keranjang spesifik: asal (produksi/transfer/opname), tiap kali dipakai ke Work Order atau dikirim sebagian ke lokasi lain, sampai koreksi yang disetujui — cari cukup dengan kode keranjang.',
+    url: 'LaporanKartuStokKeranjang.html',
     enabled: true
   },
   {

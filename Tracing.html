@@ -155,6 +155,18 @@ a{text-decoration:none}
 .tn-sources-label{font-size:11px;font-weight:700;color:#4b5563;margin:10px 0 8px;display:flex;align-items:center;gap:6px}
 .tn-children{padding-left:20px;border-left:2px dashed #e5e7eb;margin-left:6px}
 
+/* LEDGER (ringkasan alur pemakaian per keranjang) */
+.tn-ledger{background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:8px;padding:12px 14px;margin:10px 0;font-size:12.5px}
+.ledger-title{font-size:11px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px;display:flex;align-items:center;gap:5px}
+.ledger-awal{font-weight:700;color:#111827;padding:6px 10px;background:white;border:1px solid #e5e7eb;border-radius:6px;margin-bottom:8px}
+.ledger-rows{display:flex;flex-direction:column;gap:5px;margin-bottom:8px}
+.ledger-row{padding:6px 10px;background:white;border:1px solid #f3f4f6;border-radius:6px;color:#374151}
+.ledger-row.soft{background:#f9fafb;border-style:dashed;color:#6b7280}
+.ledger-num{color:#9ca3af;font-weight:700;margin-right:2px}
+.ledger-sisa{padding:8px 10px;border-radius:6px;font-weight:700;background:#d1fae5;color:#065f46;border:1px solid #a7f3d0}
+.ledger-sisa.habis{background:#f3f4f6;color:#4b5563;border-color:#e5e7eb}
+.ledger-sisa.void{background:#fee2e2;color:#991b1b;border-color:#fecaca}
+
 /* SCAN MODAL */
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;align-items:flex-start;justify-content:center;padding:32px 16px;overflow-y:auto}
 .modal-overlay.open{display:flex}
@@ -272,6 +284,7 @@ a{text-decoration:none}
         <span class="nav-icon">🔍</span><span class="nav-label-text">Tracing Produk</span>
         <span class="nav-tag">Aktif</span>
       </div>
+      <div class="nav-item" id="nav-saldo-awal" style="display:none" onclick="navTo('SaldoAwal.html')"><span class="nav-icon">📋</span><span class="nav-label-text">Saldo Awal Barang</span></div>
       <div class="nav-item" onclick="navTo('MasterData.html')">
         <span class="nav-icon">🗂️</span><span class="nav-label-text">Master Data</span>
       </div>
@@ -428,6 +441,7 @@ function startApp(){
   document.getElementById('sidebar-role').textContent=currentUser.role+(currentUser.is_system_admin?' (Admin)':'');
   if(currentUser.is_system_admin){const el=document.getElementById('nav-user-mgmt');if(el)el.style.display='flex'}
   if (RPA_PERM.getModuleRole(currentUser, 'revisi_batch') !== null) { const rbEl = document.getElementById('nav-revisi-batch'); if (rbEl) rbEl.style.display = 'flex'; }
+  if (RPA_PERM.getModuleRole(currentUser, 'saldo_awal') !== null) { const saEl = document.getElementById('nav-saldo-awal'); if (saEl) saEl.style.display = 'flex'; }
   RPA_STATE.bindScroll('Tracing');
   const fields=RPA_STATE.getFields('Tracing');
   if(fields['trace-input']) document.getElementById('trace-input').value=fields['trace-input'];
@@ -677,6 +691,55 @@ async function buildForwardTraceNode(basketId,path,depth){
   return node;
 }
 
+/**
+ * Ringkasan alur pemakaian satu keranjang, format buku besar (ledger):
+ *   Stok Awal → daftar bernomor tiap pemakaian (WO / Terjual) dengan tujuan
+ *   & tanggalnya → baris Sisa (lokasi saat ini, atau Habis/Void).
+ * Alokasi Blasting ditampilkan sebagai baris terpisah bertanda "lunak" —
+ * TIDAK dijumlah ke total pemakaian karena tidak mengurangi qty_sisa
+ * (lihat catatan di buildForwardTraceNode / memory 2026-07-31: alokasi rak
+ * adalah reservasi, bukan konsumsi).
+ * Sisa memakai b.qty_sisa/b.kg_sisa langsung dari basket (sumber kebenaran
+ * di DB), bukan dihitung ulang dari qty_awal - total pemakaian, supaya
+ * ledger ini selalu konsisten dengan halaman lain yang membaca qty_sisa.
+ */
+function renderLedger(node){
+  const b=node.basket||{};
+  const satuan=b.product_master?.satuan_qty||'';
+  const rows=[];
+  (node.uses||[]).forEach(u=>{
+    if(u.type==='WO'){
+      const p=u.order||{};
+      const tl=tipeLabel(p.tipe);
+      const qty=u.input.qty_input,kg=u.input.kg_diambil??u.input.kg_input;
+      rows.push(`<div class="ledger-row"><span class="ledger-num">${rows.filter(r=>!r.includes('soft')).length+1}.</span> <b>${fmt(qty)} ${esc(satuan)}</b> (${fmtKg(kg)}) → <span class="badge ${tl.cls}">${tl.icon} ${esc(tl.label)}</span> WO <b>${esc(p.order_code||'—')}</b> <span style="color:#9ca3af">(${fmtDate(p.tanggal)})</span></div>`);
+    } else if(u.type==='SOLD'){
+      const qty=u.data.qty_ekor,kg=u.data.berat_kg;
+      rows.push(`<div class="ledger-row"><span class="ledger-num">${rows.filter(r=>!r.includes('soft')).length+1}.</span> <b>${fmt(qty)} ${esc(satuan)}</b> (${fmtKg(kg)}) → 🛒 Terjual — Picking Slip <b>${esc(u.data.picking_slips?.ps_code||'—')}</b> <span style="color:#9ca3af">(${fmtDate(u.data.picking_slips?.tanggal)})</span></div>`);
+    } else if(u.type==='BLASTING'){
+      rows.push(`<div class="ledger-row soft"><span class="ledger-num">•</span> ${fmt(u.data.ekor)} ekor (${fmtKg(u.data.kg)}) → 🧊 Dialokasikan ke Blasting Rak ${esc(u.data.blasting_racks?.nomor_rak||'—')} <span style="color:#9ca3af">— alokasi lunak, belum mengurangi stok keranjang</span></div>`);
+    }
+  });
+
+  let sisaCls='',sisaHtml='';
+  if(b.status==='VOID'){
+    sisaCls='void';
+    sisaHtml=`🚫 Keranjang di-<b>VOID</b> — tidak dihitung sebagai stok aktif.`;
+  } else if(b.status==='HABIS' || (b.qty_sisa!=null && Number(b.qty_sisa)<=0)){
+    sisaCls='habis';
+    sisaHtml=`✅ <b>Habis</b> — seluruh isi keranjang sudah terpakai/terjual, tidak ada sisa.`;
+  } else {
+    sisaHtml=`📍 <b>Sisa: ${fmt(b.qty_sisa)} ${esc(satuan)}</b> (${fmtKg(b.kg_sisa)}) — masih berada di <b>${esc(lokasiLabel(b.lokasi))}</b>.`;
+  }
+
+  return `<div class="tn-ledger">
+      <div class="ledger-title">📒 Ringkasan Alur Keranjang Ini</div>
+      <div class="ledger-awal">Stok Awal: ${fmt(b.qty_awal)} ${esc(satuan)} (${fmtKg(b.kg_awal)})</div>
+      <div class="ledger-rows">${rows.length?rows.join(''):'<div class="ledger-row" style="color:#9ca3af">Belum ada pemakaian tercatat.</div>'}</div>
+      <div class="ledger-sisa ${sisaCls}">${sisaHtml}</div>
+    </div>`;
+}
+
 function renderForwardNode(node,depth,isRoot){
   if(!node)return'';
   const b=node.basket||{};
@@ -705,19 +768,10 @@ function renderForwardNode(node,depth,isRoot){
       <div class="g-item"><div class="g-label">Tgl Produksi</div><div class="g-val">${fmtDate(b.tanggal_produksi)}</div></div>
     </div>`;
 
-  if(node.origin==='UNUSED'){
-    html+=`<div class="tn-unknown-box">📭 Belum dipakai ke WO lain, belum masuk Blasting, dan belum terjual — kemungkinan masih menunggu di lokasi saat ini (<b>${esc(lokasiLabel(b.lokasi))}</b>).</div>`;
-  }
+  html+=renderLedger(node);
 
   if(node.depthCut){
     html+=`<div class="tn-unknown-box">⏸️ Kedalaman rantai maksimum tercapai (${MAX_DEPTH} tingkat) — penelusuran dihentikan di sini.</div>`;
-  }
-
-  const blastingUses=(node.uses||[]).filter(u=>u.type==='BLASTING');
-  if(blastingUses.length){
-    const totalAlokasi=blastingUses.reduce((s,u)=>s+(u.data.ekor||0),0);
-    const belumAlokasi=Math.max(0,(b.qty_sisa||0)-totalAlokasi);
-    html+=`<div class="hint" style="margin:8px 0 0">ℹ️ <b>Qty Sisa</b> di atas (${fmt(b.qty_sisa)}) belum dikurangi alokasi rak Blasting — alokasi ke rak tidak mengurangi saldo keranjang ini (bisa dipecah ke banyak rak). Dari ${fmt(b.qty_sisa)} ekor: <b>${fmt(totalAlokasi)}</b> sudah dialokasikan/dibekukan (rincian di bawah), sisanya <b>${fmt(belumAlokasi)}</b> ekor kemungkinan masih menunggu dialokasikan ke rak.</div>`;
   }
 
   if(node.uses && node.uses.length){

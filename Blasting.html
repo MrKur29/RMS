@@ -331,6 +331,8 @@ a{text-decoration:none}
       <div class="nav-section-label">Manajemen</div>
       <div class="nav-item" onclick="navTo('Koreksi.html')"><span class="nav-icon">✅</span><span class="nav-label-text">Koreksi &amp; Approval</span></div>
       <div class="nav-item" onclick="navTo('Laporan.html')"><span class="nav-icon">📊</span><span class="nav-label-text">Laporan</span></div>
+      <div class="nav-item" onclick="navTo('Tracing.html')"><span class="nav-icon">🔍</span><span class="nav-label-text">Tracing Produk</span></div>
+      <div class="nav-item" id="nav-saldo-awal" style="display:none" onclick="navTo('SaldoAwal.html')"><span class="nav-icon">📋</span><span class="nav-label-text">Saldo Awal Barang</span></div>
       <div class="nav-item" onclick="navTo('MasterData.html')">
         <span class="nav-icon">🗂️</span><span class="nav-label-text">Master Data</span>
       </div>
@@ -800,6 +802,31 @@ a{text-decoration:none}
   </div>
 </div>
 
+<!-- ==================== MODAL: HAPUS BATCH (belum terpakai) ==================== -->
+<div class="modal-overlay" id="modal-hapus-batch">
+  <div class="modal-box modal-sm">
+    <div class="modal-title">🗑️ Hapus Batch</div>
+    <div class="modal-desc">
+      Batch <strong id="hb-code">—</strong> akan <strong>dihapus permanen</strong> karena belum ada rak yang ditambahkan (belum terpakai).
+      Tindakan ini tidak dapat dibatalkan.
+    </div>
+    <div class="form-group" style="margin-bottom:0">
+      <label>Alasan Hapus <span style="color:#dc2626">*</span></label>
+      <textarea id="hb-alasan" placeholder="cth: Batch dibuat dobel / salah klik, tidak jadi dipakai…" rows="2" maxlength="500"></textarea>
+    </div>
+    <div class="form-group" style="margin-top:10px;margin-bottom:0">
+      <label>PIN Supervisor <span style="color:#dc2626">*</span></label>
+      <input type="password" id="hb-pin" placeholder="● ● ● ●" maxlength="6" inputmode="numeric"
+             oninput="this.value=this.value.replace(/\D/g,'')">
+    </div>
+    <div id="hb-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-top:8px;display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-hapus-batch')">Batal</button>
+      <button class="btn btn-red" id="hb-btn-ok" onclick="doHapusBatch()">🗑️ Hapus Permanen</button>
+    </div>
+  </div>
+</div>
+
 <!-- TOAST -->
 <div id="toast"></div>
 
@@ -821,6 +848,7 @@ let activeMovementId  = null;
 let lastConfirmedBasketId = null;
 let activeAllocId     = null;
 let activeBatchId     = null;
+let hapusBatchId      = null;
 let expandedGroups    = new Set();
 let selectedBasketForRak = null; // basket dipilih untuk dialokasikan ke rak
 
@@ -913,6 +941,7 @@ function startApp(){
   setEl('sidebar-role',currentUser.role+(currentUser.is_system_admin?' (Admin)':''));
   if(currentUser.is_system_admin){const el=document.getElementById('nav-user-mgmt');if(el)el.style.display='flex'}
   if (RPA_PERM.getModuleRole(currentUser, 'revisi_batch') !== null) { const rbEl = document.getElementById('nav-revisi-batch'); if (rbEl) rbEl.style.display = 'flex'; }
+  if (RPA_PERM.getModuleRole(currentUser, 'saldo_awal') !== null) { const saEl = document.getElementById('nav-saldo-awal'); if (saEl) saEl.style.display = 'flex'; }
   applyViewOnlyGuard();
   RPA_STATE.bindScroll('Blasting');
   switchTab(RPA_STATE.getTab('Blasting', 'masuk'));
@@ -1699,6 +1728,7 @@ function renderActiveBatches(){
         <div style="display:flex;gap:6px;flex-wrap:wrap">
           <button class="btn btn-ghost btn-sm" onclick="openTambahRak('${b.id}','${b.batch_code}')">➕ Tambah Rak</button>
           <button class="btn btn-amber btn-sm" onclick="openJalankanBatch('${b.id}')" ${!bRacks.length?'disabled':''}>🔥 Jalankan</button>
+          ${!bRacks.length?`<button class="btn btn-red btn-sm" onclick="openHapusBatch('${b.id}','${b.batch_code}')">🗑️ Hapus</button>`:''}
         </div>
       </div>
       <div style="padding:0 16px 14px">
@@ -1906,6 +1936,78 @@ async function doJalankanBatch(){
     await loadAll();
   }catch(e){showErr('jb-err','Gagal: '+(e.message||''));}
   finally{btn.disabled=false;btn.textContent='🔥 Ya, Jalankan Batch'}
+}
+
+// ── BATCH: HAPUS (hanya batch OPEN yang belum ditambahkan rak — belum terpakai) ──
+function openHapusBatch(batchId,batchCode){
+  hapusBatchId=batchId;
+  setEl('hb-code',batchCode);
+  document.getElementById('hb-alasan').value='';
+  document.getElementById('hb-pin').value='';
+  showErr('hb-err','');
+  openModal('modal-hapus-batch');
+}
+
+async function doHapusBatch(){
+  if(!hapusBatchId)return;
+  const alasan=document.getElementById('hb-alasan').value.trim();
+  const pin=document.getElementById('hb-pin').value;
+  showErr('hb-err','');
+  if(!alasan){showErr('hb-err','Alasan hapus wajib diisi.');return}
+  if(!pin||pin.length<4){showErr('hb-err','PIN harus minimal 4 digit.');return}
+
+  // Verifikasi PIN — Supervisor, System Admin, atau user dengan permission modul 'blasting' setara supervisor
+  const{data:pinUser}=await db.from('users').select('id,nama,role,is_system_admin').eq('pin',pin).eq('aktif',true).maybeSingle();
+  let sup=null;
+  if(pinUser){
+    if(pinUser.role==='SUPERVISOR'||pinUser.is_system_admin){
+      sup=pinUser;
+    }else{
+      const pinUserPerms=await RPA_PERM.fetchPermissions(db,pinUser.id);
+      if(RPA_PERM.canApprove(pinUserPerms['blasting']||null))sup=pinUser;
+    }
+  }
+  if(!sup){showErr('hb-err','PIN salah atau bukan Supervisor.');document.getElementById('hb-pin').value='';return}
+
+  const btn=document.getElementById('hb-btn-ok');
+  btn.disabled=true;btn.textContent='Menghapus…';
+  try{
+    // Re-cek data terbaru dari DB (bukan cache lokal) — pastikan masih OPEN & belum ada rak/alokasi
+    const{data:batchRow,error:fetchErr}=await db.from('blasting_batches').select('*').eq('id',hapusBatchId).single();
+    if(fetchErr)throw fetchErr;
+    if(!batchRow)throw new Error('Batch tidak ditemukan (mungkin sudah dihapus).');
+    if(batchRow.status!=='OPEN')throw new Error('Batch sudah '+batchRow.status+' — tidak bisa dihapus.');
+
+    const[{count:cntRak},{count:cntAlloc}]=await Promise.all([
+      db.from('blasting_batch_racks').select('id',{count:'exact',head:true}).eq('batch_id',hapusBatchId),
+      db.from('blasting_rack_allocations').select('id',{count:'exact',head:true}).eq('batch_id',hapusBatchId)
+    ]);
+    if((cntRak||0)>0||(cntAlloc||0)>0){
+      throw new Error(`Batch sudah punya ${cntRak||0} rak / ${cntAlloc||0} alokasi — tidak bisa dihapus. Lepas rak dari batch dulu.`);
+    }
+
+    const{error:delErr}=await db.from('blasting_batches').delete().eq('id',hapusBatchId);
+    if(delErr)throw delErr;
+
+    await db.from('audit_log').insert({
+      user_id:currentUser.id,
+      aksi:'BLASTING_BATCH_DELETED',
+      tabel_terkait:'blasting_batches',
+      record_id:hapusBatchId,
+      data_sebelum:batchRow,
+      data_sesudah:{deleted_by_pin_user:sup.id,deleted_by_pin_nama:sup.nama,alasan}
+    });
+
+    showToast(`Batch ${batchRow.batch_code} dihapus ✅`,'success');
+    closeModal('modal-hapus-batch');
+    hapusBatchId=null;
+    await loadAll();
+  }catch(e){
+    console.error(e);
+    showErr('hb-err','Gagal: '+(e.message||''));
+  }finally{
+    btn.disabled=false;btn.textContent='🗑️ Hapus Permanen';
+  }
 }
 
 </script>

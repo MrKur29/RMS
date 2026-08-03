@@ -571,6 +571,8 @@ a { text-decoration: none; }
                 <span class="nav-icon">📊</span>
                 <span class="nav-label-text">Laporan</span>
             </div>
+            <div class="nav-item" onclick="navTo('Tracing.html')"><span class="nav-icon">🔍</span><span class="nav-label-text">Tracing Produk</span></div>
+            <div class="nav-item" id="nav-saldo-awal" style="display:none" onclick="navTo('SaldoAwal.html')"><span class="nav-icon">📋</span><span class="nav-label-text">Saldo Awal Barang</span></div>
             <div class="nav-item" onclick="navTo('MasterData.html')">
                 <span class="nav-icon">🗂️</span>
                 <span class="nav-label-text">Master Data</span>
@@ -1164,6 +1166,7 @@ function startApp() {
         if (umEl) umEl.style.display = 'flex';
     }
     if (RPA_PERM.getModuleRole(currentUser, 'revisi_batch') !== null) { const rbEl = document.getElementById('nav-revisi-batch'); if (rbEl) rbEl.style.display = 'flex'; }
+    if (RPA_PERM.getModuleRole(currentUser, 'saldo_awal') !== null) { const saEl = document.getElementById('nav-saldo-awal'); if (saEl) saEl.style.display = 'flex'; }
 
     if (currentUser.role === 'SUPERVISOR') {
         document.getElementById('app-screen').classList.add('is-supervisor');
