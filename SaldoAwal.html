@@ -355,6 +355,16 @@ tr.clickable{cursor:pointer}
                   <input type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" id="inp-kg" class="form-input" placeholder="0.0" oninput="sanitizeDecimalInput(this)">
                 </div>
               </div>
+              <div class="input-grid row2" style="margin-top:10px">
+                <div>
+                  <label class="form-label">Tanggal Produksi *</label>
+                  <input type="date" id="inp-tgl-produksi" class="form-input">
+                </div>
+                <div>
+                  <label class="form-label">Keterangan <span style="font-weight:400;text-transform:none;font-size:10px;color:#9ca3af">(opsional)</span></label>
+                  <input type="text" id="inp-keterangan" class="form-input" placeholder="cth: sumber stok / kondisi fisik">
+                </div>
+              </div>
               <div class="submit-row">
                 <button class="btn-reset" onclick="resetForm()">Reset</button>
                 <button class="btn-tambah" id="btn-tambah" onclick="tambahEntry()">+ Tambah &amp; Cetak Label</button>
@@ -379,11 +389,13 @@ tr.clickable{cursor:pointer}
                     <th>Produk</th>
                     <th style="text-align:right">Qty</th>
                     <th style="text-align:right">Kg</th>
+                    <th>Tgl Produksi</th>
+                    <th>Keterangan</th>
                     <th>Aksi</th>
                   </tr>
                 </thead>
                 <tbody id="tbody-entries">
-                  <tr class="empty-row"><td colspan="6">Belum ada keranjang di sesi ini</td></tr>
+                  <tr class="empty-row"><td colspan="8">Belum ada keranjang di sesi ini</td></tr>
                 </tbody>
               </table>
             </div>
@@ -812,6 +824,8 @@ function resetForm(){
   document.getElementById('inp-produk').value = '';
   document.getElementById('inp-qty').value = '';
   document.getElementById('inp-kg').value = '';
+  document.getElementById('inp-keterangan').value = '';
+  document.getElementById('inp-tgl-produksi').value = currentSession?.tanggal_opname || '';
 }
 
 async function tambahEntry(){
@@ -820,11 +834,14 @@ async function tambahEntry(){
   const product_id = document.getElementById('inp-produk').value;
   const qty = parseFloat(document.getElementById('inp-qty').value) || 0;
   const kg = parseFloat(document.getElementById('inp-kg').value) || 0;
+  const keterangan = document.getElementById('inp-keterangan').value.trim() || null;
+  const tanggalProduksi = document.getElementById('inp-tgl-produksi').value;
 
   if(!lokasi){ toast('Pilih lokasi terlebih dahulu','error'); return; }
   if(!product_id){ toast('Pilih produk terlebih dahulu','error'); return; }
   if(qty<=0){ toast('Qty harus lebih dari 0','error'); return; }
   if(kg<=0){ toast('Kg harus lebih dari 0','error'); return; }
+  if(!tanggalProduksi){ toast('Tanggal produksi wajib diisi','error'); return; }
 
   const btn = document.getElementById('btn-tambah');
   btn.disabled = true; btn.textContent = 'Menyimpan...';
@@ -839,14 +856,15 @@ async function tambahEntry(){
       basket_type: 'SALDO_AWAL',
       product_id,
       batch_id: null,
-      tanggal_produksi: currentSession.tanggal_opname,
+      tanggal_produksi: tanggalProduksi,
       qty_awal: qty, qty_sisa: qty,
       kg_awal: kg, kg_sisa: kg,
       lokasi,
+      keterangan,
       status: 'AKTIF',
       saldo_awal_session_id: currentSession.id,
       created_by: currentUser.id
-    }).select('id,basket_code,product_id,qty_awal,kg_awal,lokasi,created_at,product_master(nama_produk,product_code,satuan_qty)').single();
+    }).select('id,basket_code,product_id,qty_awal,kg_awal,lokasi,keterangan,tanggal_produksi,created_at,product_master(nama_produk,product_code,satuan_qty)').single();
     if(bErr) throw bErr;
 
     entriesList.unshift(basket);
@@ -861,7 +879,9 @@ async function tambahEntry(){
     showModal('modal-label');
     resetForm();
   } catch(e){
-    if(e.message.includes('does not exist') || e.message.includes('SALDO_AWAL') || e.message.includes('check constraint')){
+    if(e.message.includes('keterangan')){
+      toast('⚠️ Skema belum siap — pastikan migration 65 sudah dijalankan di Supabase','warning',7000);
+    } else if(e.message.includes('does not exist') || e.message.includes('SALDO_AWAL') || e.message.includes('check constraint')){
       toast('⚠️ Skema belum siap — pastikan migration 49 sudah dijalankan di Supabase','warning',7000);
     } else {
       toast('Gagal simpan: '+e.message,'error');
@@ -882,7 +902,7 @@ async function syncSessionCount(){
 async function loadEntries(){
   try {
     const { data, error } = await db.from('baskets')
-      .select('id,basket_code,product_id,qty_awal,kg_awal,lokasi,created_at,product_master(nama_produk,product_code,satuan_qty)')
+      .select('id,basket_code,product_id,qty_awal,kg_awal,lokasi,keterangan,tanggal_produksi,created_at,product_master(nama_produk,product_code,satuan_qty)')
       .eq('saldo_awal_session_id', currentSession.id)
       .order('created_at', {ascending:false});
     if(error) throw error;
@@ -900,7 +920,7 @@ function renderEntries(){
   const tbody = document.getElementById('tbody-entries');
   document.getElementById('entries-count').textContent = `${entriesList.length} keranjang`;
   if(!entriesList.length){
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="6">Belum ada keranjang di sesi ini</td></tr>';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="8">Belum ada keranjang di sesi ini</td></tr>';
     return;
   }
   const locked = isLocked();
@@ -916,6 +936,8 @@ function renderEntries(){
       <td>${prod?prod.nama_produk:'-'}</td>
       <td style="text-align:right">${fmtNum(e.qty_awal)} ${prod?.satuan_qty||''}</td>
       <td style="text-align:right">${fmtKg(e.kg_awal)}</td>
+      <td>${fmtTgl(e.tanggal_produksi)}</td>
+      <td style="color:#6b7280">${e.keterangan||'—'}</td>
       <td style="white-space:nowrap">${aksi}</td>
     </tr>`;
   }).join('');
@@ -1036,9 +1058,9 @@ function toLabelData(e){
     namaProduk: prod?.nama_produk || '-',
     qtyText: `${fmtNum(e.qty_awal)} ${prod?.satuan_qty||''}`,
     kgText: `${fmtKg(e.kg_awal)} kg`,
-    tglText: fmtTgl(currentSession?.tanggal_opname),
-    refLabel: 'Lokasi (Saldo Awal)',
-    refValue: lokasiLabel(e.lokasi)
+    tglText: fmtTgl(e.tanggal_produksi || currentSession?.tanggal_opname),
+    refLabel: '',
+    refValue: e.keterangan || ''
   };
 }
 
