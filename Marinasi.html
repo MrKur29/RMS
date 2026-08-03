@@ -1997,10 +1997,12 @@ function populateWOSelect() {
     const fullySent = target > 0 && teralok >= target;
     if (fullySent && !showAll) return; // hide — sudah terkirim semua
 
-    const pm  = wo.product_master || {};
-    const opt = document.createElement('option');
+    const pm    = wo.product_master || {};
+    const label = (wo.catatan && String(wo.catatan).trim()) ? String(wo.catatan).trim() : wo.order_code;
+    const opt   = document.createElement('option');
     opt.value = wo.id;
-    opt.textContent = `${wo.order_code} — ${pm.nama_produk || ''} (${fmt(wo.target_qty_ekor)} ek / ${fmtKg(wo.target_kg)})`
+    opt.title = wo.order_code; // nomor WO tetap terlihat lewat tooltip
+    opt.textContent = `${label} — ${pm.nama_produk || ''} (${fmt(wo.target_qty_ekor)} ek / ${fmtKg(wo.target_kg)})`
       + (fullySent ? ' ✅ terkirim penuh' : '');
     woSel.appendChild(opt);
   });
