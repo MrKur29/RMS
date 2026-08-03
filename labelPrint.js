@@ -83,6 +83,7 @@
       '<div style="font-size:6pt;font-weight:700;color:#000;text-align:center;line-height:1.15;word-break:break-all;max-width:19mm">' + esc(data.code) + '</div>' +
       '</div>' +
       '<div style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;overflow:hidden;gap:1.1mm">' +
+      '<div style="font-size:6.5pt;color:#000;font-weight:700;letter-spacing:0.2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">No: ' + esc(data.code) + '</div>' +
       '<div style="font-size:10.5pt;font-weight:900;color:#000;line-height:1.15;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">' + esc(data.namaProduk) + '</div>' +
       '<div style="font-size:7.5pt;color:#000;font-weight:700">' + esc(data.qtyText) + '</div>' +
       '<div style="font-size:7.5pt;color:#000;font-weight:700">' + esc(data.kgText) + '</div>' +
