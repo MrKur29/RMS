@@ -316,7 +316,9 @@ a{text-decoration:none}
             <thead>
               <tr>
                 <th>Tanggal</th>
-                <th>Tipe</th>
+                <th>Sumber/Tujuan</th>
+                <th>Produk</th>
+                <th>No Keranjang</th>
                 <th>Keterangan</th>
                 <th class="num">Masuk Qty</th>
                 <th class="num">Masuk Kg</th>
@@ -327,7 +329,7 @@ a{text-decoration:none}
               </tr>
             </thead>
             <tbody id="tbody-ledger">
-              <tr><td colspan="9"><div class="empty">Pilih produk &amp; lokasi, lalu klik Tampilkan.</div></td></tr>
+              <tr><td colspan="11"><div class="empty">Pilih produk &amp; lokasi, lalu klik Tampilkan.</div></td></tr>
             </tbody>
           </table>
         </div>
@@ -379,9 +381,19 @@ function daysAgoISOFrom(dateStr,n){const d=new Date(dateStr+'T00:00:00');d.setDa
 const LOKASI_LABEL = {
   LANTAI:'Lantai', CHILLER:'Chiller', PARTING:'Parting', BONELESS:'Boneless',
   MARINASI:'Marinasi', BLASTING:'Blasting', LOADING:'Loading', SOLD:'Terjual (Sold)',
-  BYPRODUCT_DIRECT:'By-product Langsung', MUSNAH:'Musnah'
+  BYPRODUCT_DIRECT:'By-product Langsung', MUSNAH:'Musnah', SELISIH:'Selisih'
 };
 function lokasiLabel(k){return LOKASI_LABEL[k]||k||'—'}
+
+// Label untuk kolom Sumber/Tujuan — SAMA seperti Laporan Rincian Transaksi Chiller
+// (2026-08-03): LOADING & SOLD ditampilkan "Jual", SELISIH = write-off selisih
+// penjualan, LANTAI (basket karkas baru lahir) ditampilkan "Karkas".
+const ASAL_TUJUAN_LABEL = {
+  LANTAI:'Karkas', CHILLER:'Chiller', PARTING:'Parting', BONELESS:'Boneless',
+  MARINASI:'Marinasi', BLASTING:'Blasting', LOADING:'Jual', SOLD:'Jual',
+  BYPRODUCT_DIRECT:'By-product Langsung', MUSNAH:'Musnah', SELISIH:'Selisih'
+};
+function asalTujuanLabel(k){return ASAL_TUJUAN_LABEL[k]||k||'—'}
 
 function exportCSV(headers, rows, filename) {
   const escCsv = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
@@ -488,7 +500,9 @@ window.addEventListener('DOMContentLoaded',async ()=>{
 });
 
 // ══════════════════════════════════════════════════════════════
-// PRODUK PICKER — dropdown, hanya produk yang pernah punya keranjang (baskets)
+// PRODUK PICKER — dropdown, SEMUA produk di product_master (2026-08-03: sebelumnya
+// difilter hanya yang pernah punya baskets/transaksi — diubah atas permintaan user,
+// supaya produk baru yang belum pernah ada transaksi tetap bisa dipilih di sini).
 // ══════════════════════════════════════════════════════════════
 let produkById = {};
 
@@ -496,30 +510,23 @@ async function loadProdukOptions(){
   const sel  = document.getElementById('produk-select');
   const hint = document.getElementById('produk-select-hint');
   try{
-    // Ambil daftar product_id unik dari baskets (mencakup semua produk yang
-    // pernah punya transaksi keranjang: produksi karkas, hasil proses, dsb).
-    const { data: basketRows, error: bErr } = await db.from('baskets').select('product_id');
-    if(bErr) throw bErr;
-    const ids = [...new Set((basketRows||[]).map(r=>r.product_id).filter(Boolean))];
-
-    if(!ids.length){
-      sel.innerHTML = '<option value="">Belum ada produk dengan transaksi</option>';
-      hint.textContent = 'Belum ada keranjang/transaksi tercatat di sistem.';
-      return;
-    }
-
     const { data: products, error: pErr } = await db.from('product_master')
       .select('id,product_code,nama_produk,kategori,grade')
-      .in('id', ids)
       .order('nama_produk');
     if(pErr) throw pErr;
 
+    if(!products || !products.length){
+      sel.innerHTML = '<option value="">Belum ada produk di Master Data</option>';
+      hint.textContent = 'Belum ada produk terdaftar di Master Data.';
+      return;
+    }
+
     produkById = {};
-    (products||[]).forEach(p=>{produkById[p.id]=p});
+    products.forEach(p=>{produkById[p.id]=p});
 
     sel.innerHTML = '<option value="">— Pilih produk —</option>' +
-      (products||[]).map(p=>`<option value="${p.id}">${esc(p.nama_produk)} (${esc(p.product_code)})${p.grade?' — Grade '+esc(p.grade):''}</option>`).join('');
-    hint.textContent = `${(products||[]).length} produk dengan riwayat transaksi keranjang.`;
+      products.map(p=>`<option value="${p.id}">${esc(p.nama_produk)} (${esc(p.product_code)})${p.grade?' — Grade '+esc(p.grade):''}</option>`).join('');
+    hint.textContent = `${products.length} produk terdaftar.`;
   }catch(e){
     console.error('loadProdukOptions',e);
     sel.innerHTML = '<option value="">Gagal memuat produk</option>';
@@ -547,7 +554,7 @@ async function tampilkanKartuStok(){
   panel.style.display='block';
   document.getElementById('result-title').textContent = `${selectedProduk.nama_produk} (${selectedProduk.product_code}) — ${lokasiLabel(lokasi)}`;
   document.getElementById('result-subtitle').textContent = `Periode ${fmtDateID(dateFrom)} s/d ${fmtDateID(dateTo)}`;
-  document.getElementById('tbody-ledger').innerHTML = '<tr><td colspan="9"><div class="empty">Memuat…</div></td></tr>';
+  document.getElementById('tbody-ledger').innerHTML = '<tr><td colspan="11"><div class="empty">Memuat…</div></td></tr>';
 
   try{
     const events = await fetchAllEvents(selectedProduk.id, lokasi, dateTo);
@@ -588,7 +595,7 @@ async function tampilkanKartuStok(){
 
   }catch(e){
     console.error(e);
-    document.getElementById('tbody-ledger').innerHTML = '<tr><td colspan="9"><div class="empty">Gagal memuat data kartu stok.</div></td></tr>';
+    document.getElementById('tbody-ledger').innerHTML = '<tr><td colspan="11"><div class="empty">Gagal memuat data kartu stok.</div></td></tr>';
     showToast('Gagal memuat kartu stok: '+(e.message||''),'error');
   }
 }
@@ -596,7 +603,7 @@ async function tampilkanKartuStok(){
 // Ambil semua sumber transaksi (tanpa batas bawah tanggal — dipakai untuk hitung saldo awal),
 // dibatasi tanggal atas (dateTo) supaya query tidak membengkak.
 async function fetchAllEvents(productId, lokasi, dateTo){
-  const toBound = dateTo+'T23:59:59';
+  const toBound = dateTo+'T23:59:59+07:00';
   const events=[];
 
   const queries = [];
@@ -613,7 +620,8 @@ async function fetchAllEvents(productId, lokasi, dateTo){
           (data||[]).forEach(b=>{
             events.push({
               date:new Date(b.created_at), tipe:'Produksi Karkas', tipeCls:'tp-produksi',
-              ket:`Timbang karkas — keranjang ${b.basket_code}`,
+              asalTujuan:asalTujuanLabel('LANTAI'), basketCode:b.basket_code,
+              ket:'Timbang karkas',
               masuk_qty:Number(b.qty_awal)||0, masuk_kg:Number(b.kg_awal)||0,
               keluar_qty:0, keluar_kg:0
             });
@@ -635,7 +643,8 @@ async function fetchAllEvents(productId, lokasi, dateTo){
         (data||[]).forEach(m=>{
           events.push({
             date:new Date(m.confirmed_at), tipe:'Transfer Masuk', tipeCls:'tp-masuk',
-            ket:`Dari ${lokasiLabel(m.dari_lokasi)} — keranjang ${m.baskets?.basket_code||'—'}`,
+            asalTujuan:asalTujuanLabel(m.dari_lokasi), basketCode:m.baskets?.basket_code||'—',
+            ket:'—',
             masuk_qty:Number(m.qty_pindah)||0, masuk_kg:Number(m.kg_pindah)||0,
             keluar_qty:0, keluar_kg:0
           });
@@ -643,20 +652,23 @@ async function fetchAllEvents(productId, lokasi, dateTo){
       })
   );
 
-  // C) Transfer keluar dari lokasi (basket_movements — semua status, dikurangi sejak dikirim)
+  // C) Transfer keluar dari lokasi (basket_movements CONFIRMED — hanya yang benar-benar
+  //    sudah dikonfirmasi penerima; PENDING/REJECTED tidak dihitung sebagai keluar,
+  //    sama seperti perbaikan di Laporan Rincian Transaksi Chiller 2026-08-03)
   queries.push(
     db.from('basket_movements')
-      .select('id,qty_pindah,kg_pindah,created_at,ke_lokasi,status,baskets!inner(basket_code,product_id)')
+      .select('id,qty_pindah,kg_pindah,confirmed_at,ke_lokasi,status,baskets!inner(basket_code,product_id)')
       .eq('baskets.product_id',productId)
       .eq('dari_lokasi',lokasi)
-      .lte('created_at',toBound)
+      .eq('status','CONFIRMED')
+      .lte('confirmed_at',toBound)
       .then(({data,error})=>{
         if(error){console.error('fetchAllEvents C',error);return}
         (data||[]).forEach(m=>{
-          const statusLbl = m.status==='PENDING' ? ' (Menunggu Konfirmasi)' : m.status==='REJECTED' ? ' (Ditolak)' : '';
           events.push({
-            date:new Date(m.created_at), tipe:'Transfer Keluar', tipeCls:'tp-keluar',
-            ket:`Ke ${lokasiLabel(m.ke_lokasi)} — keranjang ${m.baskets?.basket_code||'—'}${statusLbl}`,
+            date:new Date(m.confirmed_at), tipe:'Transfer Keluar', tipeCls:'tp-keluar',
+            asalTujuan:asalTujuanLabel(m.ke_lokasi), basketCode:m.baskets?.basket_code||'—',
+            ket:'—',
             masuk_qty:0, masuk_kg:0,
             keluar_qty:Number(m.qty_pindah)||0, keluar_kg:Number(m.kg_pindah)||0
           });
@@ -676,7 +688,8 @@ async function fetchAllEvents(productId, lokasi, dateTo){
         (data||[]).forEach(pi=>{
           events.push({
             date:new Date(pi.created_at), tipe:'Konsumsi Produksi', tipeCls:'tp-konsumsi',
-            ket:`Input WO ${pi.processing_orders?.order_code||'—'} — keranjang ${pi.baskets?.basket_code||'—'}`,
+            asalTujuan:asalTujuanLabel(pi.processing_orders?.tipe), basketCode:pi.baskets?.basket_code||'—',
+            ket:`WO ${pi.processing_orders?.order_code||'—'}`,
             masuk_qty:0, masuk_kg:0,
             keluar_qty:Number(pi.qty_input)||0, keluar_kg:Number(pi.kg_input)||0
           });
@@ -696,7 +709,8 @@ async function fetchAllEvents(productId, lokasi, dateTo){
         (data||[]).forEach(po=>{
           events.push({
             date:new Date(po.created_at), tipe:'Hasil Produksi', tipeCls:'tp-output',
-            ket:`Output WO ${po.processing_orders?.order_code||'—'} — keranjang baru ${po.baskets?.basket_code||'—'}`,
+            asalTujuan:asalTujuanLabel(lokasi), basketCode:po.baskets?.basket_code||'—',
+            ket:`WO ${po.processing_orders?.order_code||'—'} (keranjang baru)`,
             masuk_qty:Number(po.qty_output)||0, masuk_kg:Number(po.kg_output)||0,
             keluar_qty:0, keluar_kg:0
           });
@@ -736,7 +750,8 @@ async function fetchAllEvents(productId, lokasi, dateTo){
         const isKg = c.field_salah.startsWith('kg');
         events.push({
           date:new Date(c.reviewed_at), tipe:'Koreksi', tipeCls:'tp-koreksi',
-          ket:`Koreksi ${c.field_salah}: ${c.nilai_lama??'—'} → ${c.nilai_baru??'—'} — keranjang ${basketCodeById[c.record_id]||'—'}`,
+          asalTujuan:asalTujuanLabel(lokasi), basketCode:basketCodeById[c.record_id]||'—',
+          ket:`Koreksi ${c.field_salah}: ${c.nilai_lama??'—'} → ${c.nilai_baru??'—'}`,
           masuk_qty: (!isKg && delta>0) ? delta : 0,
           masuk_kg:  (isKg && delta>0) ? delta : 0,
           keluar_qty:(!isKg && delta<0) ? -delta : 0,
@@ -778,17 +793,19 @@ function renderSummary(saldoAwalQty, saldoAwalKg, masukQty, masukKg, keluarQty, 
 function renderLedgerTable(rows, saldoAwalQty, saldoAwalKg){
   const tbody=document.getElementById('tbody-ledger');
   let html = `<tr class="row-opening">
-    <td colspan="7">Saldo Awal</td>
+    <td colspan="9">Saldo Awal</td>
     <td class="num">${num(saldoAwalQty)}</td>
     <td class="num">${num(saldoAwalKg)}</td>
   </tr>`;
   if(!rows.length){
-    html += `<tr><td colspan="9"><div class="empty">Tidak ada pergerakan stok pada periode ini.</div></td></tr>`;
+    html += `<tr><td colspan="11"><div class="empty">Tidak ada pergerakan stok pada periode ini.</div></td></tr>`;
   } else {
     html += rows.map(r=>`
       <tr>
         <td style="white-space:nowrap">${fmtDT(r.date)}</td>
-        <td><span class="tipe-badge ${r.tipeCls}">${esc(r.tipe)}</span></td>
+        <td><span class="tipe-badge ${r.tipeCls}">${esc(r.asalTujuan)}</span></td>
+        <td>${esc(selectedProduk?.nama_produk||'—')}</td>
+        <td style="white-space:nowrap;font-family:monospace">${esc(r.basketCode||'—')}</td>
         <td>${esc(r.ket)}</td>
         <td class="num ${r.masuk_qty?'in-val':''}">${numOrDash(r.masuk_qty)}</td>
         <td class="num ${r.masuk_kg?'in-val':''}">${numOrDash(r.masuk_kg)}</td>
@@ -807,20 +824,22 @@ function renderLedgerTable(rows, saldoAwalQty, saldoAwalKg){
 function exportLedgerCSV(){
   if(!selectedProduk){showToast('Belum ada data untuk diekspor.','warning');return}
   const lokasi = document.getElementById('filter-lokasi').value;
-  const headers = ['Tanggal','Tipe','Keterangan','Masuk Qty','Masuk Kg','Keluar Qty','Keluar Kg','Saldo Qty','Saldo Kg'];
+  const namaProduk = selectedProduk.nama_produk;
+  const headers = ['Tanggal','Sumber/Tujuan','Produk','No Keranjang','Keterangan','Masuk Qty','Masuk Kg','Keluar Qty','Keluar Kg','Saldo Qty','Saldo Kg'];
   const rows = [
-    ['Saldo Awal','','', '', '', '', '', openingBalance.qty, openingBalance.kg],
-    ...ledgerRows.map(r=>[fmtDT(r.date), r.tipe, r.ket, r.masuk_qty||'', r.masuk_kg||'', r.keluar_qty||'', r.keluar_kg||'', r.saldo_qty, r.saldo_kg])
+    ['Saldo Awal','','','','', '', '', '', '', openingBalance.qty, openingBalance.kg],
+    ...ledgerRows.map(r=>[fmtDT(r.date), r.asalTujuan, namaProduk, r.basketCode||'', r.ket, r.masuk_qty||'', r.masuk_kg||'', r.keluar_qty||'', r.keluar_kg||'', r.saldo_qty, r.saldo_kg])
   ];
   exportCSV(headers, rows, todayFilename(`kartustok_${selectedProduk.product_code}_${lokasi}`) + 'csv');
 }
 function exportLedgerXLSX(){
   if(!selectedProduk){showToast('Belum ada data untuk diekspor.','warning');return}
   const lokasi = document.getElementById('filter-lokasi').value;
-  const headers = ['Tanggal','Tipe','Keterangan','Masuk Qty','Masuk Kg','Keluar Qty','Keluar Kg','Saldo Qty','Saldo Kg'];
+  const namaProduk = selectedProduk.nama_produk;
+  const headers = ['Tanggal','Sumber/Tujuan','Produk','No Keranjang','Keterangan','Masuk Qty','Masuk Kg','Keluar Qty','Keluar Kg','Saldo Qty','Saldo Kg'];
   const rows = [
-    ['Saldo Awal','','', '', '', '', '', openingBalance.qty, openingBalance.kg],
-    ...ledgerRows.map(r=>[fmtDT(r.date), r.tipe, r.ket, r.masuk_qty||'', r.masuk_kg||'', r.keluar_qty||'', r.keluar_kg||'', r.saldo_qty, r.saldo_kg])
+    ['Saldo Awal','','','','', '', '', '', '', openingBalance.qty, openingBalance.kg],
+    ...ledgerRows.map(r=>[fmtDT(r.date), r.asalTujuan, namaProduk, r.basketCode||'', r.ket, r.masuk_qty||'', r.masuk_kg||'', r.keluar_qty||'', r.keluar_kg||'', r.saldo_qty, r.saldo_kg])
   ];
   exportXLSX(headers, rows, 'Kartu Stok', todayFilename(`kartustok_${selectedProduk.product_code}_${lokasi}`) + 'xlsx');
 }

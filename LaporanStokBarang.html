@@ -478,7 +478,7 @@ async function tampilkanStokBarang(){
 // menggunakan model transaksi yang sama dengan Laporan Kartu Stok — namun tanpa filter produk,
 // lalu dikelompokkan per product_id.
 async function buildStokAggregate(lokasi, asOfDate){
-  const toBound = asOfDate+'T23:59:59';
+  const toBound = asOfDate+'T23:59:59+07:00';
   const agg = {}; // product_id -> {masuk_qty,masuk_kg,keluar_qty,keluar_kg}
   function add(pid, field, val){
     if(!pid || !val) return;

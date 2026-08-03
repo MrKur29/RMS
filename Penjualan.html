@@ -158,6 +158,25 @@ a{text-decoration:none}
 .item-row .item-remove:hover{background:#fee2e2}
 .items-total-row{display:grid;grid-template-columns:2fr 1fr 1fr 80px;gap:8px;padding:8px 10px;border-top:2px solid #e5e7eb;margin-top:4px;font-weight:700;font-size:13px}
 
+/* ===== ITEM CARD (scan-edit qty + resolusi selisih) ===== */
+.item-card{border:1px solid #e5e7eb;border-radius:8px;padding:10px;margin-bottom:6px}
+.item-card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.item-card-qty{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:8px}
+.item-card-qty label{font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase}
+.item-card-qty input[type=number]{width:76px;padding:6px 8px;border:1.5px solid #d1d5db;border-radius:6px;font-size:13px;font-weight:600}
+.item-card-hint{font-size:11px;color:#9ca3af}
+.item-card-selisih{background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:10px;margin-top:8px}
+.item-card-selisih .sel-title{font-size:12px;font-weight:800;color:#c2410c}
+.item-card-selisih .sel-opts{display:flex;gap:16px;margin-top:6px;flex-wrap:wrap}
+.item-card-selisih label.sel-opt{font-size:12px;font-weight:600;color:#374151;display:flex;align-items:center;gap:5px;cursor:pointer}
+.item-card-selisih input[type=text]{width:100%;margin-top:8px;padding:7px 10px;border:1.5px solid #fed7aa;border-radius:6px;font-size:12px}
+
+/* ===== PIN SUPERVISOR MODAL ===== */
+.modal-box.modal-sm{width:400px}
+.pin-input{width:100%;padding:14px;border:2px solid #d1d5db;border-radius:8px;font-size:22px;font-weight:800;letter-spacing:6px;text-align:center;color:#111827;font-family:monospace;transition:border-color .2s}
+.pin-input:focus{outline:none;border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.15)}
+.pin-error{color:#dc2626;font-size:12px;font-weight:700;margin-top:6px;display:none}
+
 /* ===== SUMMARY CARDS ===== */
 .cards-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px;margin-bottom:16px}
 .summary-card{background:white;border-radius:10px;padding:14px;border-left:4px solid #e5e7eb;box-shadow:0 1px 3px rgba(0,0,0,.06)}
@@ -194,10 +213,19 @@ a{text-decoration:none}
 /* ===== PRINT STYLES ===== */
 @media print {
   body{background:white;font-size:12px}
-  #app-screen,#login-screen{display:block !important;height:auto;overflow:visible}
+  /* HANYA #app-screen yang dipaksa tampil — #login-screen TIDAK boleh ikut,
+     sebelumnya kena override !important ini juga (padahal disembunyikan lewat
+     inline style setelah login), makanya layar login sempat muncul saat print. */
+  #app-screen{display:block !important;height:auto;overflow:visible}
   .sidebar,.topbar,.filter-bar,.cards-row,.panel-actions,
-  .modal-backdrop,.btn-hamburger,.sidebar-overlay,
+  .modal-backdrop:not(#modal-detail),.btn-hamburger,.sidebar-overlay,
   #toast-container,.no-print{display:none !important}
+  /* #modal-detail sendiri (tempat print-sheet Picking Slip berada) dikecualikan
+     di atas supaya tetap tampil — tapi tetap perlu dilepas dari fixed-position
+     terpusat + dibatalkan max-height/overflow-nya, kalau tidak isi yang lebih
+     panjang dari layar akan terpotong (cuma bagian yang ter-scroll yang print). */
+  #modal-detail{position:static !important;background:none !important}
+  #modal-detail .modal-box{width:auto !important;max-width:none !important;max-height:none !important;overflow:visible !important;box-shadow:none !important;border-radius:0}
   .main-area{overflow:visible}
   .content-area{overflow:visible;padding:0}
   .print-only{display:block !important}
@@ -362,7 +390,7 @@ a{text-decoration:none}
         <!-- KONFIRMASI PENERIMAAN -->
         <div class="panel no-print">
           <div class="panel-head">
-            <div class="panel-title">📥 Konfirmasi Penerimaan dari Chiller</div>
+            <div class="panel-title">📥 Menunggu Diproses dari Chiller (scan ke Picking Slip untuk konfirmasi)</div>
             <div style="display:flex;align-items:center;gap:8px">
               <div id="pending-count-pill" class="panel-pill warn">0 pending</div>
               <button class="btn-refresh" onclick="loadPendingMovements()">🔄</button>
@@ -378,7 +406,7 @@ a{text-decoration:none}
                   <th>Kg</th>
                   <th>Dikirim Oleh</th>
                   <th>Waktu</th>
-                  <th>Aksi</th>
+                  <th>Status</th>
                 </tr>
               </thead>
               <tbody id="pending-tbody">
@@ -407,6 +435,36 @@ a{text-decoration:none}
               </thead>
               <tbody id="loading-tbody">
                 <tr><td colspan="5"><div class="empty-state"><div class="es-icon">📦</div><p>Tidak ada stok di loading dock</p></div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- SELISIH MENUNGGU APPROVAL SUPERVISOR -->
+        <div class="panel no-print">
+          <div class="panel-head">
+            <div class="panel-title">⚠️ Selisih Menunggu Approval</div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <div id="selisih-count-pill" class="panel-pill warn">0 pending</div>
+              <button class="btn-refresh" onclick="loadSelisihPending()">🔄</button>
+            </div>
+          </div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>Kode Keranjang</th>
+                  <th>Item</th>
+                  <th>PS / Customer</th>
+                  <th>Selisih Ekor</th>
+                  <th>Selisih Kg</th>
+                  <th>Alasan</th>
+                  <th>Diajukan Oleh</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="selisih-tbody">
+                <tr><td colspan="8"><div class="empty-state"><div class="es-icon">✅</div><p>Tidak ada selisih menunggu approval</p></div></td></tr>
               </tbody>
             </table>
           </div>
@@ -522,10 +580,7 @@ a{text-decoration:none}
       </div>
 
       <!-- DAFTAR ITEM YANG SUDAH DIPILIH -->
-      <div style="margin-bottom:8px;font-size:12px;font-weight:700;color:#374151">KERANJANG DIPILIH:</div>
-      <div class="item-list-header">
-        <span>Keranjang / Item</span><span>Ekor</span><span>Kg</span><span></span>
-      </div>
+      <div style="margin-bottom:8px;font-size:12px;font-weight:700;color:#374151">KERANJANG DIPILIH — ekor/kg bisa diedit sesuai kenyataan:</div>
       <div id="buat-items-list"></div>
       <div class="items-total-row" id="buat-items-total" style="display:none">
         <span style="color:#6b7280">TOTAL</span>
@@ -540,7 +595,7 @@ a{text-decoration:none}
     </div>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModalBuat()">Batal</button>
-      <button class="btn btn-primary" id="btn-simpan-ps" onclick="simpanPickingSlip()">💾 Simpan Draft</button>
+      <button class="btn btn-primary" id="btn-simpan-ps" onclick="simpanPickingSlip()">✅ Simpan & Konfirmasi</button>
     </div>
   </div>
 </div>
@@ -559,6 +614,31 @@ a{text-decoration:none}
     </div>
     <div class="modal-foot no-print" id="detail-modal-foot">
       <!-- Tombol dirender oleh JS -->
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     MODAL: PIN SUPERVISOR (reusable — approve/reject selisih)
+     ============================================================ -->
+<div class="modal-backdrop" id="modal-pin-sup">
+  <div class="modal-box modal-sm">
+    <div class="modal-head">
+      <div class="modal-title" id="sup-pin-title">🔑 Konfirmasi Supervisor</div>
+      <button class="modal-close" onclick="closeSupervisorPin()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-field" style="margin-bottom:10px">
+        <label>PIN Supervisor</label>
+        <input type="password" class="pin-input" id="sup-pin-input" placeholder="••••••" maxlength="6"
+               onkeydown="if(event.key==='Enter')submitSupervisorPin()">
+        <div class="pin-error" id="sup-pin-err">PIN salah atau bukan Supervisor.</div>
+      </div>
+      <div id="sup-pin-desc" style="font-size:12px;color:#6b7280"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeSupervisorPin()">Batal</button>
+      <button class="btn btn-primary" id="sup-pin-btn-ok" onclick="submitSupervisorPin()">✅ Konfirmasi</button>
     </div>
   </div>
 </div>
@@ -689,7 +769,7 @@ function startApp(){
     document.getElementById('filter-tanggal').value = today;
   }
   RPA_STATE.bindScroll('Penjualan');
-  Promise.all([loadMasters(), loadPickingSlips(), loadPendingMovements(), loadLoadingStock()]);
+  Promise.all([loadMasters(), loadPickingSlips(), loadPendingMovements(), loadLoadingStock(), loadSelisihPending()]);
 }
 
 // Auto-login dari localStorage
@@ -882,22 +962,18 @@ async function loadPendingMovements(){
       <td>${m.users?.nama || '—'}</td>
       <td style="color:#9ca3af;font-size:11px">${formatRelTime(m.created_at)}</td>
       <td>
-        <button class="btn btn-success btn-sm" onclick="konfirmasiPenerimaan('${m.id}')">✓ Terima</button>
+        <span style="color:#9ca3af;font-size:11px">Scan di Picking Slip</span>
       </td>
     </tr>
   `).join('');
 }
 
-async function konfirmasiPenerimaan(movementId){
-  const { data, error } = await db.rpc('konfirmasi_movement', {
-    p_movement_id: movementId,
-    p_user_id:     currentUser?.id || null,
-  });
-  if(error){ toast('Gagal: ' + error.message, 'error'); return; }
-  if(data && data.ok === false){ toast('Gagal: ' + data.error, 'error'); return; }
-  toast('✅ Keranjang berhasil diterima di Loading Dock', 'success');
-  await Promise.all([loadPendingMovements(), loadLoadingStock()]);
-}
+// Catatan: tombol "✓ Terima" manual (konfirmasi_movement langsung dari sini)
+// SUDAH DIHAPUS per keputusan 2026-08-03 — konfirmasi terima dari Chiller
+// sekarang menyatu dengan scan ke Picking Slip (lihat doScanKeranjang() /
+// simpanPickingSlip()), supaya ada satu titik untuk cek selisih qty/kg.
+// Panel ini tetap tampil sebagai daftar read-only (visibilitas apa yang masih
+// dalam perjalanan dari Chiller), tapi baris di sini tidak bisa diklik.
 
 async function loadLoadingStock(){
   const { data, error } = await db
@@ -973,33 +1049,55 @@ async function refreshPsCode(){
 
 /* ============================================================
    LOADING STOCK PICKER (dalam modal)
+   Sejak alur "Terima" manual dihapus, ini juga menampilkan keranjang yang
+   masih PENDING dikirim dari Chiller (belum dikonfirmasi) — bukan cuma yang
+   sudah resmi berlokasi LOADING. Konfirmasi terima terjadi otomatis saat
+   Picking Slip ini disimpan (lihat simpanPickingSlip()).
    ============================================================ */
 async function refreshLoadingStock(){
   const container = document.getElementById('loading-stock-picker');
   container.innerHTML = '<div style="padding:16px;text-align:center;color:#9ca3af;font-size:12px">Memuat…</div>';
 
-  const { data } = await db
-    .from('baskets')
-    .select('id,basket_code,qty_sisa,kg_sisa,product_master(nama_produk)')
-    .eq('lokasi','LOADING')
-    .eq('status','AKTIF')
-    .order('basket_code');
+  const [atLoadingRes, pendingRes] = await Promise.all([
+    db.from('baskets')
+      .select('id,basket_code,qty_sisa,kg_sisa,product_id,product_master(nama_produk)')
+      .eq('lokasi','LOADING').eq('status','AKTIF').order('basket_code'),
+    db.from('basket_movements')
+      .select('id,basket_id,qty_pindah,kg_pindah,baskets!inner(basket_code,product_id,product_master(nama_produk))')
+      .eq('dari_lokasi','CHILLER').eq('ke_lokasi','LOADING').eq('status','PENDING')
+      .order('created_at',{ascending:true})
+  ]);
 
-  if(!data || !data.length){
+  const rows = [
+    ...(atLoadingRes.data||[]).map(b => ({
+      basket_id: b.id, basket_code: b.basket_code, product_id: b.product_id,
+      nama_item: b.product_master?.nama_produk || '—',
+      qty_awal: b.qty_sisa || 0, kg_awal: +(b.kg_sisa || 0),
+      pending_movement_id: null, pending: false
+    })),
+    ...(pendingRes.data||[]).map(m => ({
+      basket_id: m.basket_id, basket_code: m.baskets?.basket_code, product_id: m.baskets?.product_id,
+      nama_item: m.baskets?.product_master?.nama_produk || '—',
+      qty_awal: m.qty_pindah || 0, kg_awal: +(m.kg_pindah || 0),
+      pending_movement_id: m.id, pending: true
+    }))
+  ];
+
+  if(!rows.length){
     container.innerHTML = '<div style="padding:16px;text-align:center;color:#9ca3af;font-size:12px">Tidak ada stok di loading dock</div>';
     return;
   }
 
-  container.innerHTML = data.map(b => {
-    const alreadyAdded = buatItems.some(i => i.basket_id === b.id);
+  container.innerHTML = rows.map(b => {
+    const alreadyAdded = buatItems.some(i => i.basket_id === b.basket_id);
     return `
       <div style="display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:8px;padding:8px 12px;border-bottom:1px solid #f3f4f6;align-items:center">
         <div>
-          <div style="font-size:12px;font-weight:700;font-family:monospace">${b.basket_code}</div>
-          <div style="font-size:11px;color:#6b7280">${b.product_master?.nama_produk || '—'}</div>
+          <div style="font-size:12px;font-weight:700;font-family:monospace">${b.basket_code}${b.pending ? ' <span style="color:#d97706;font-weight:600">(belum dikonfirmasi)</span>' : ''}</div>
+          <div style="font-size:11px;color:#6b7280">${b.nama_item}</div>
         </div>
-        <div style="font-size:12px;font-weight:600">${b.qty_sisa || 0} ekor</div>
-        <div style="font-size:12px;font-weight:600">${(+(b.kg_sisa||0)).toFixed(2)} kg</div>
+        <div style="font-size:12px;font-weight:600">${b.qty_awal} ekor</div>
+        <div style="font-size:12px;font-weight:600">${b.kg_awal.toFixed(2)} kg</div>
         <button class="btn btn-ghost btn-sm" onclick='addBasketToList(${JSON.stringify(b)})'
           ${alreadyAdded ? 'disabled style="opacity:.4"' : ''}>
           ${alreadyAdded ? '✓' : '+ Pilih'}
@@ -1009,16 +1107,21 @@ async function refreshLoadingStock(){
 }
 
 function addBasketToList(b){
-  if(buatItems.some(i => i.basket_id === b.id)){
+  if(buatItems.some(i => i.basket_id === b.basket_id)){
     toast('Keranjang sudah ada di daftar', 'info'); return;
   }
   buatItems.push({
-    basket_id:   b.id,
-    basket_code: b.basket_code,
-    product_id:  b.product_master?.id || null,
-    nama_item:   b.product_master?.nama_produk || '—',
-    qty_ekor:    b.qty_sisa || 0,
-    berat_kg:    +(b.kg_sisa || 0),
+    basket_id:           b.basket_id,
+    basket_code:         b.basket_code,
+    product_id:          b.product_id || null,
+    nama_item:           b.nama_item || '—',
+    pending_movement_id: b.pending_movement_id || null,
+    qty_awal:            b.qty_awal,
+    kg_awal:             +(b.kg_awal || 0),
+    qty_final:           b.qty_awal,
+    kg_final:            +(b.kg_awal || 0),
+    resolusi:            'NONE',
+    alasan:              ''
   });
   renderBuatItems();
   refreshLoadingStock();
@@ -1026,6 +1129,10 @@ function addBasketToList(b){
 
 /* ============================================================
    SCAN KERANJANG (dalam modal)
+   Cari dulu di stok LOADING yang sudah resmi; kalau tidak ada, cari di
+   movement PENDING dari Chiller (keranjang yang sudah dikirim tapi belum
+   sempat "diterima" manual) — scan ke Picking Slip inilah yang jadi momen
+   konfirmasi terimanya, dieksekusi saat Simpan.
    ============================================================ */
 function clearModalScanResult(){
   const el = document.getElementById('modal-scan-result');
@@ -1040,28 +1147,45 @@ async function doScanKeranjang(){
   resEl.className = 'scan-result visible';
   resEl.innerHTML = '⏳ Mencari keranjang…';
 
-  const { data, error } = await db
+  let found = null;
+
+  const { data: atLoading } = await db
     .from('baskets')
     .select('id,basket_code,qty_sisa,kg_sisa,lokasi,status,product_id,product_master(nama_produk)')
     .eq('basket_code', kode)
     .maybeSingle();
 
-  if(error || !data){
+  if(atLoading && atLoading.status === 'AKTIF' && atLoading.lokasi === 'LOADING'){
+    found = {
+      basket_id: atLoading.id, basket_code: atLoading.basket_code, product_id: atLoading.product_id,
+      nama_item: atLoading.product_master?.nama_produk || '—',
+      qty_awal: atLoading.qty_sisa || 0, kg_awal: +(atLoading.kg_sisa || 0),
+      pending_movement_id: null, pending: false
+    };
+  } else {
+    const { data: pendingMv } = await db
+      .from('basket_movements')
+      .select('id,basket_id,qty_pindah,kg_pindah,baskets!inner(basket_code,product_id,product_master(nama_produk))')
+      .eq('dari_lokasi','CHILLER').eq('ke_lokasi','LOADING').eq('status','PENDING')
+      .eq('baskets.basket_code', kode)
+      .order('created_at',{ascending:true})
+      .maybeSingle();
+    if(pendingMv){
+      found = {
+        basket_id: pendingMv.basket_id, basket_code: pendingMv.baskets?.basket_code, product_id: pendingMv.baskets?.product_id,
+        nama_item: pendingMv.baskets?.product_master?.nama_produk || '—',
+        qty_awal: pendingMv.qty_pindah || 0, kg_awal: +(pendingMv.kg_pindah || 0),
+        pending_movement_id: pendingMv.id, pending: true
+      };
+    }
+  }
+
+  if(!found){
     resEl.className = 'scan-result visible scan-err';
-    resEl.innerHTML = `❌ Keranjang <strong>${kode}</strong> tidak ditemukan`;
+    resEl.innerHTML = `❌ Keranjang <strong>${kode}</strong> tidak ditemukan / tidak tersedia (bukan di Loading Dock, dan tidak ada kiriman pending dari Chiller)`;
     return;
   }
-  if(data.status !== 'ACTIVE'){
-    resEl.className = 'scan-result visible scan-err';
-    resEl.innerHTML = `❌ Keranjang <strong>${kode}</strong> tidak aktif (${data.status})`;
-    return;
-  }
-  if(data.lokasi !== 'LOADING'){
-    resEl.className = 'scan-result visible scan-err';
-    resEl.innerHTML = `❌ Keranjang <strong>${kode}</strong> bukan di Loading Dock (lokasi: ${data.lokasi})`;
-    return;
-  }
-  if(buatItems.some(i => i.basket_id === data.id)){
+  if(buatItems.some(i => i.basket_id === found.basket_id)){
     resEl.className = 'scan-result visible scan-err';
     resEl.innerHTML = `⚠️ Keranjang <strong>${kode}</strong> sudah ada di daftar`;
     return;
@@ -1069,18 +1193,12 @@ async function doScanKeranjang(){
 
   resEl.className = 'scan-result visible scan-ok';
   resEl.innerHTML = `
-    <div style="font-size:13px;font-weight:800;font-family:monospace">${data.basket_code}</div>
+    <div style="font-size:13px;font-weight:800;font-family:monospace">${found.basket_code}${found.pending ? ' <span style="color:#d97706;font-weight:600">(belum dikonfirmasi)</span>' : ''}</div>
     <div style="font-size:12px;color:#374151;margin-top:4px">
-      ${data.product_master?.nama_produk || '—'} — ${data.qty_sisa} ekor — ${(+data.kg_sisa).toFixed(2)} kg
+      ${found.nama_item} — ${found.qty_awal} ekor — ${found.kg_awal.toFixed(2)} kg
     </div>
     <div style="margin-top:8px">
-      <button class="btn btn-success btn-sm" onclick='addBasketToList(${JSON.stringify({
-        id: data.id,
-        basket_code: data.basket_code,
-        qty_sisa: data.qty_sisa,
-        kg_sisa: data.kg_sisa,
-        product_master: data.product_master
-      })});clearModalScanResult();document.getElementById("modal-scan-input").value=""'>
+      <button class="btn btn-success btn-sm" onclick='addBasketToList(${JSON.stringify(found)});clearModalScanResult();document.getElementById("modal-scan-input").value=""'>
         ✓ Tambahkan ke Picking Slip
       </button>
     </div>`;
@@ -1089,6 +1207,11 @@ async function doScanKeranjang(){
 
 /* ============================================================
    RENDER ITEM LIST DI MODAL
+   ============================================================ */
+/* ============================================================
+   RENDER ITEM LIST DI MODAL — qty/kg editable, muncul opsi resolusi
+   selisih (Kembali ke Chiller / Ajukan Selisih) kalau angka final beda
+   dari yang tercatat saat scan.
    ============================================================ */
 function renderBuatItems(){
   const list   = document.getElementById('buat-items-list');
@@ -1106,22 +1229,67 @@ function renderBuatItems(){
 
   let totEkor = 0, totKg = 0;
   list.innerHTML = buatItems.map((item, idx) => {
-    totEkor += item.qty_ekor;
-    totKg   += item.berat_kg;
+    totEkor += item.qty_final;
+    totKg   += item.kg_final;
+    const adaSelisih = item.qty_final !== item.qty_awal || item.kg_final !== item.kg_awal;
+    const selisihQty = Math.max(0, item.qty_awal - item.qty_final);
+    const selisihKg  = Math.max(0, +(item.kg_awal - item.kg_final).toFixed(2));
+
     return `
-      <div class="item-row">
-        <div>
-          <div class="item-code">${item.basket_code}</div>
-          <div class="item-sub">${item.nama_item}</div>
+      <div class="item-card">
+        <div class="item-card-top">
+          <div>
+            <div class="item-code">${item.basket_code}</div>
+            <div class="item-sub">${item.nama_item}</div>
+          </div>
+          <button class="item-remove" onclick="removeItem(${idx})" title="Hapus">×</button>
         </div>
-        <div class="item-num">${item.qty_ekor}</div>
-        <div class="item-num">${item.berat_kg.toFixed(2)}</div>
-        <button class="item-remove" onclick="removeItem(${idx})" title="Hapus">×</button>
+        <div class="item-card-qty">
+          <label>Ekor</label>
+          <input type="number" min="0" max="${item.qty_awal}" value="${item.qty_final}"
+                 onchange="updateItemFinal(${idx},'qty_final',this.value)">
+          <label>Kg</label>
+          <input type="number" min="0" max="${item.kg_awal}" step="0.01" value="${item.kg_final}"
+                 onchange="updateItemFinal(${idx},'kg_final',this.value)">
+          <span class="item-card-hint">tercatat: ${item.qty_awal} ekor / ${item.kg_awal.toFixed(2)} kg</span>
+        </div>
+        ${adaSelisih ? `
+        <div class="item-card-selisih">
+          <div class="sel-title">⚠️ Selisih ${selisihQty} ekor / ${selisihKg.toFixed(2)} kg — pilih tindakan:</div>
+          <div class="sel-opts">
+            <label class="sel-opt"><input type="radio" name="resolusi-${idx}" value="RETUR" ${item.resolusi==='RETUR'?'checked':''} onchange="updateItemResolusi(${idx},'RETUR')"> Kembali ke Chiller</label>
+            <label class="sel-opt"><input type="radio" name="resolusi-${idx}" value="SELISIH" ${item.resolusi==='SELISIH'?'checked':''} onchange="updateItemResolusi(${idx},'SELISIH')"> Ajukan Selisih</label>
+          </div>
+          <input type="text" placeholder="Alasan (wajib)…" value="${item.alasan||''}" oninput="updateItemAlasan(${idx},this.value)">
+        </div>` : ''}
       </div>`;
   }).join('');
 
   document.getElementById('buat-total-ekor').textContent = totEkor;
   document.getElementById('buat-total-kg').textContent   = totKg.toFixed(2);
+}
+
+function updateItemFinal(idx, field, value){
+  const item = buatItems[idx];
+  if(!item) return;
+  let v = parseFloat(value);
+  if(isNaN(v) || v < 0) v = 0;
+  const max = field === 'qty_final' ? item.qty_awal : item.kg_awal;
+  if(v > max) v = max;
+  item[field] = field === 'qty_final' ? Math.round(v) : +v.toFixed(2);
+  // kalau sudah balik sama seperti semula, reset resolusi/alasan
+  if(item.qty_final === item.qty_awal && item.kg_final === item.kg_awal){
+    item.resolusi = 'NONE'; item.alasan = '';
+  }
+  renderBuatItems();
+}
+
+function updateItemResolusi(idx, val){
+  if(buatItems[idx]) buatItems[idx].resolusi = val;
+}
+
+function updateItemAlasan(idx, val){
+  if(buatItems[idx]) buatItems[idx].alasan = val;
 }
 
 function removeItem(idx){
@@ -1131,8 +1299,26 @@ function removeItem(idx){
 }
 
 /* ============================================================
-   SIMPAN PICKING SLIP
+   SIMPAN PICKING SLIP — satu aksi final (tidak ada tahap DRAFT lagi):
+   sekaligus mengonfirmasi terima dari Chiller untuk keranjang yang masih
+   PENDING, menuntaskan resolusi selisih per item, dan basket langsung SOLD.
+   Lewat RPC buat_picking_slip_final() (migrasi 66) supaya atomik.
    ============================================================ */
+function validasiBuatItems(){
+  for(const item of buatItems){
+    const adaSelisih = item.qty_final !== item.qty_awal || item.kg_final !== item.kg_awal;
+    if(adaSelisih){
+      if(item.resolusi === 'NONE'){
+        return `Keranjang ${item.basket_code} ada selisih — pilih "Kembali ke Chiller" atau "Ajukan Selisih" dulu.`;
+      }
+      if(!item.alasan || !item.alasan.trim()){
+        return `Keranjang ${item.basket_code} — alasan wajib diisi.`;
+      }
+    }
+  }
+  return null;
+}
+
 async function simpanPickingSlip(){
   const pelangganSel = document.getElementById('buat-pelanggan');
   const supirSel     = document.getElementById('buat-supir');
@@ -1145,65 +1331,56 @@ async function simpanPickingSlip(){
   if(!pelangganSel.value){ toast('Pilih customer terlebih dahulu', 'error'); return; }
   if(!buatItems.length){ toast('Tambahkan minimal 1 keranjang', 'error'); return; }
 
+  const errValidasi = validasiBuatItems();
+  if(errValidasi){ toast(errValidasi, 'error', 5000); return; }
+
   const namaPelanggan = pelangganSel.options[pelangganSel.selectedIndex].dataset.nama;
   const namaSupir     = supirSel.value
     ? supirSel.options[supirSel.selectedIndex].dataset.nama
     : null;
 
-  const totKarung = buatItems.length;
-  const totEkor   = buatItems.reduce((s,i) => s + i.qty_ekor, 0);
-  const totKg     = buatItems.reduce((s,i) => s + i.berat_kg, 0);
-
   const btn = document.getElementById('btn-simpan-ps');
   btn.disabled = true; btn.textContent = 'Menyimpan…';
 
   try {
-    // Insert header
-    const { data: psData, error: psErr } = await db
-      .from('picking_slips')
-      .insert({
-        ps_code:        psCode,
-        tanggal:        tgl,
-        tujuan:         tujuan || null,
-        pelanggan_id:   pelangganSel.value,
-        nama_pelanggan: namaPelanggan,
-        supir_id:       supirSel.value || null,
-        nama_supir:     namaSupir,
-        no_polisi:      nopol || null,
-        catatan:        catatan || null,
-        status:         'DRAFT',
-        total_karung:   totKarung,
-        total_ekor:     totEkor,
-        total_kg:       totKg,
-        created_by:     currentUser?.id || null,
-      })
-      .select()
-      .single();
-
-    if(psErr) throw psErr;
-
-    // Insert items
-    const itemRows = buatItems.map(i => ({
-      ps_id:       psData.id,
-      basket_id:   i.basket_id,
-      basket_code: i.basket_code,
-      product_id:  i.product_id,
-      nama_item:   i.nama_item,
-      qty_ekor:    i.qty_ekor,
-      berat_kg:    i.berat_kg,
+    const p_items = buatItems.map(i => ({
+      basket_id:            i.basket_id,
+      pending_movement_id:  i.pending_movement_id || null,
+      product_id:           i.product_id,
+      nama_item:            i.nama_item,
+      qty_awal:             i.qty_awal,
+      kg_awal:              i.kg_awal,
+      qty_final:            i.qty_final,
+      kg_final:             i.kg_final,
+      resolusi:             i.resolusi,
+      alasan:               i.alasan || null,
     }));
 
-    const { error: itemErr } = await db.from('picking_slip_items').insert(itemRows);
-    if(itemErr) throw itemErr;
+    const { data, error } = await db.rpc('buat_picking_slip_final', {
+      p_ps_code:        psCode,
+      p_tanggal:        tgl,
+      p_tujuan:         tujuan || null,
+      p_pelanggan_id:   pelangganSel.value,
+      p_nama_pelanggan: namaPelanggan,
+      p_supir_id:       supirSel.value || null,
+      p_nama_supir:     namaSupir,
+      p_no_polisi:      nopol || null,
+      p_catatan:        catatan || null,
+      p_user_id:        currentUser?.id || null,
+      p_items:          p_items,
+    });
 
-    toast(`✅ Picking Slip ${psCode} berhasil dibuat`, 'success');
+    if(error) throw error;
+    if(!data?.ok){ toast('Gagal: ' + data?.msg, 'error', 6000); return; }
+
+    toast(`✅ ${data.ps_code} tersimpan & terkonfirmasi — ${data.total_karung} karung / ${data.total_ekor} ekor / ${(+data.total_kg).toFixed(2)} kg`, 'success', 5000);
     closeModalBuat();
-    await Promise.all([loadPickingSlips(), loadPendingMovements(), loadLoadingStock()]);
+    await Promise.all([loadPickingSlips(), loadPendingMovements(), loadLoadingStock(), loadSelisihPending()]);
 
   } catch(e){
     toast('Gagal simpan: ' + e.message, 'error');
   } finally {
-    btn.disabled = false; btn.textContent = '💾 Simpan Draft';
+    btn.disabled = false; btn.textContent = '✅ Simpan & Konfirmasi';
   }
 }
 
@@ -1220,6 +1397,117 @@ async function confirmPs(psId){
   if(!data?.ok){ toast('Gagal: ' + data?.msg, 'error'); return; }
   toast(`✅ ${data.ps_code} dikonfirmasi — ${data.total_karung} karung / ${data.total_ekor} ekor / ${(+data.total_kg).toFixed(2)} kg`, 'success', 5000);
   await Promise.all([loadPickingSlips(), loadPendingMovements(), loadLoadingStock()]);
+}
+
+/* ============================================================
+   MODAL PIN SUPERVISOR — reusable
+   Pemakaian: showSupervisorPin({ title, desc, onConfirm(supervisor) })
+   ============================================================ */
+let _supPinCallback = null;
+async function verifySupervisorPin(pin){
+  if(!pin) return null;
+  const { data: sup } = await db.from('users')
+    .select('id,nama').eq('pin', pin).eq('aktif', true)
+    .or('role.eq.SUPERVISOR,is_system_admin.eq.true').maybeSingle();
+  return sup || null;
+}
+function showSupervisorPin({ title = '🔑 Konfirmasi Supervisor', desc = '', onConfirm }){
+  _supPinCallback = onConfirm;
+  document.getElementById('sup-pin-title').textContent = title;
+  document.getElementById('sup-pin-desc').textContent = desc;
+  document.getElementById('sup-pin-input').value = '';
+  document.getElementById('sup-pin-err').style.display = 'none';
+  document.getElementById('modal-pin-sup').classList.add('open');
+  setTimeout(() => document.getElementById('sup-pin-input').focus(), 150);
+}
+function closeSupervisorPin(){
+  document.getElementById('modal-pin-sup').classList.remove('open');
+  _supPinCallback = null;
+}
+async function submitSupervisorPin(){
+  const pin = document.getElementById('sup-pin-input').value.trim();
+  const errEl = document.getElementById('sup-pin-err');
+  errEl.style.display = 'none';
+  if(!pin) return;
+  const btn = document.getElementById('sup-pin-btn-ok');
+  btn.disabled = true; btn.textContent = 'Memverifikasi…';
+  try {
+    const sup = await verifySupervisorPin(pin);
+    if(!sup){ errEl.style.display = 'block'; return; }
+    const cb = _supPinCallback;
+    closeSupervisorPin();
+    if(cb) await cb(sup);
+  } finally {
+    btn.disabled = false; btn.textContent = '✅ Konfirmasi';
+  }
+}
+
+/* ============================================================
+   SELISIH MENUNGGU APPROVAL
+   ============================================================ */
+async function loadSelisihPending(){
+  const { data, error } = await db
+    .from('penjualan_selisih')
+    .select(`
+      id, basket_code, qty_selisih, kg_selisih, alasan, diajukan_at,
+      product_master(nama_produk),
+      picking_slips(ps_code, nama_pelanggan),
+      users!penjualan_selisih_diajukan_oleh_fkey(nama)
+    `)
+    .eq('status', 'PENDING')
+    .order('diajukan_at', { ascending: true });
+
+  const tbody = document.getElementById('selisih-tbody');
+  const pill  = document.getElementById('selisih-count-pill');
+  if(error){ console.warn('loadSelisihPending:', error); return; }
+
+  const rows = data || [];
+  pill.textContent = `${rows.length} pending`;
+  pill.className = rows.length ? 'panel-pill warn' : 'panel-pill ok';
+
+  if(!rows.length){
+    tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state"><div class="es-icon">✅</div><p>Tidak ada selisih menunggu approval</p></div></td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows.map(s => `
+    <tr>
+      <td><strong style="font-family:monospace">${s.basket_code}</strong></td>
+      <td>${s.product_master?.nama_produk || '—'}</td>
+      <td>${s.picking_slips?.ps_code || '—'}<br><span style="font-size:11px;color:#6b7280">${s.picking_slips?.nama_pelanggan || '—'}</span></td>
+      <td style="text-align:right">${s.qty_selisih}</td>
+      <td style="text-align:right">${(+s.kg_selisih).toFixed(2)}</td>
+      <td style="font-size:12px">${s.alasan || '—'}</td>
+      <td>${s.users?.nama || '—'}</td>
+      <td>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-success btn-sm" onclick="prosesSelisih('${s.id}', true)">✓ Approve</button>
+          <button class="btn btn-ghost btn-sm" onclick="prosesSelisih('${s.id}', false)">✕ Reject</button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function prosesSelisih(selisihId, approve){
+  showSupervisorPin({
+    title: approve ? '🔑 Approve Selisih' : '🔑 Reject Selisih',
+    desc: approve
+      ? 'Menyetujui akan langsung mencatat write-off selisih ini di pembukuan Chiller.'
+      : 'Menolak hanya menandai selisih ini sebagai ditolak — tidak ada perubahan pembukuan.',
+    onConfirm: async (sup) => {
+      const { data, error } = await db.rpc('approve_penjualan_selisih', {
+        p_selisih_id: selisihId,
+        p_user_id:    sup.id,
+        p_approve:    approve,
+        p_catatan:    null,
+      });
+      if(error){ toast('Gagal: ' + error.message, 'error'); return; }
+      if(!data?.ok){ toast('Gagal: ' + data?.msg, 'error'); return; }
+      toast(approve ? '✅ Selisih disetujui & dicatat' : '🚫 Selisih ditolak', approve ? 'success' : 'info');
+      await loadSelisihPending();
+    }
+  });
 }
 
 /* ============================================================

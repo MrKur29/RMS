@@ -1166,6 +1166,7 @@ let outgoingPending  = [];   // dari MARINASI, status PENDING (belum dikonfirmas
 let marinasiStock     = [];   // baskets lokasi=MARINASI, status=AKTIF
 let activeWOs        = [];   // processing_orders tipe=MARINASI, IN_PROGRESS/OPEN
 let closedWOs        = [];   // processing_orders tipe=MARINASI, COMPLETED/CANCELLED
+let todayOutputKg     = 0;   // total kg_output hari ini, TERLEPAS dari status WO (lihat loadTodayOutputKg)
 let selectedWsId          = null; // workstation dipilih di modal pindah → workstation
 let lastConfirmedBasketId = null; // basket_id dari movement yang baru dikonfirmasi
 let allWorkstations  = [];   // MARINASI type workstations
@@ -1316,7 +1317,8 @@ async function loadAll() {
     loadWorkstations(),
     loadProducts(),
     loadWSWorkers(),
-    loadWSOutputsToday()
+    loadWSOutputsToday(),
+    loadTodayOutputKg()
   ]);
   renderSummaryCards();
   renderPendingList();
@@ -1386,6 +1388,25 @@ async function loadActiveWOs() {
   if (!error) {
     activeWOs = await attachWOStages(data || [], 'MARINASI');
   }
+}
+
+// "Output Hari Ini" (kartu ringkasan) — query LANGSUNG ke processing_outputs by
+// tanggal_produksi, TIDAK lewat activeWOs. Sebelumnya dihitung dari activeWOs,
+// yang cuma berisi WO berstatus OPEN/IN_PROGRESS — begitu WO ditutup (COMPLETED)
+// di hari yang sama, outputnya langsung hilang dari kartu ini padahal produksinya
+// beneran terjadi hari itu. Filter output_type==='PRIMARY' tetap dipertahankan
+// persis seperti logika lama (exclude output non-primary/by-product dari kartu ini).
+async function loadTodayOutputKg() {
+  const todayStr = todayISO();
+  const { data, error } = await db
+    .from('processing_outputs')
+    .select('kg_output, output_type, processing_orders!inner(tipe)')
+    .in('processing_orders.tipe', ['MARINASI', 'MULTI'])
+    .eq('tanggal_produksi', todayStr);
+  if (error) { console.error('loadTodayOutputKg', error); todayOutputKg = 0; return; }
+  todayOutputKg = (data || [])
+    .filter(o => o.output_type === 'PRIMARY')
+    .reduce((s, o) => s + (Number(o.kg_output) || 0), 0);
 }
 
 // Detect "table doesn't exist yet" style errors regardless of exact wording
@@ -1462,8 +1483,8 @@ async function loadClosedWOs() {
     .in('status', ['COMPLETED','CANCELLED'])
     .order('updated_at', { ascending: false });
 
-  if (fromEl?.value) q = q.gte('updated_at', fromEl.value + 'T00:00:00');
-  if (toEl?.value)   q = q.lte('updated_at', toEl.value   + 'T23:59:59');
+  if (fromEl?.value) q = q.gte('updated_at', fromEl.value + 'T00:00:00+07:00');
+  if (toEl?.value)   q = q.lte('updated_at', toEl.value   + 'T23:59:59+07:00');
 
   const { data, error } = await q;
   if (!error) closedWOs = await attachWOStages(data || [], 'MARINASI');
@@ -1600,13 +1621,8 @@ function renderSummaryCards() {
   setEl('sc-stok',     marinasiStock.length);
   setEl('sc-wo-aktif', activeWOs.filter(w=>w.status==='IN_PROGRESS').length);
 
-  // Output hari ini (kg primary)
-  const todayStr = todayISO();
-  const todayOutputKg = activeWOs.reduce((sum, wo) => {
-    return sum + (wo.processing_outputs||[])
-      .filter(o => o.output_type==='PRIMARY' && (o.tanggal_produksi||'').startsWith(todayStr))
-      .reduce((s,o) => s + (Number(o.kg_output)||0), 0);
-  }, 0);
+  // Output hari ini — dari loadTodayOutputKg(), TIDAK bergantung status WO
+  // (lihat komentar di loadTodayOutputKg soal kenapa ini dipisah dari activeWOs).
   setEl('sc-output-kg', fmtKg(todayOutputKg));
 
   setEl('sc-approv', activeWOs.filter(w=>w.status==='IN_PROGRESS').length);

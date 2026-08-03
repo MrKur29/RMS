@@ -361,16 +361,21 @@ function daysAgoISO(n){const d=new Date();d.setDate(d.getDate()-n);return d.toIS
 const LOKASI_LABEL = {
   LANTAI:'Lantai', CHILLER:'Chiller', PARTING:'Parting', BONELESS:'Boneless',
   MARINASI:'Marinasi', BLASTING:'Blasting', LOADING:'Loading', SOLD:'Terjual (Sold)',
-  BYPRODUCT_DIRECT:'By-product Langsung', MUSNAH:'Musnah'
+  BYPRODUCT_DIRECT:'By-product Langsung', MUSNAH:'Musnah', SELISIH:'Selisih'
 };
 function lokasiLabel(k){return LOKASI_LABEL[k]||k||'—'}
 
-// Label lokasi khusus untuk kolom Sumber/Tujuan — nama singkat, SOLD ditampilkan sebagai "Jual",
-// LANTAI (tempat basket karkas baru lahir dari Produksi Karkas) ditampilkan sebagai "Karkas".
+// Label lokasi khusus untuk kolom Sumber/Tujuan — nama singkat. LOADING & SOLD
+// keduanya ditampilkan sebagai "Jual" (LOADING eksklusif dipakai modul Penjualan —
+// baik pengiriman awal ke Loading maupun retur baliknya sama-sama bagian dari
+// transaksi penjualan hari itu, lihat modul Selisih Penjualan / migrasi 66).
+// SELISIH = write-off selisih penjualan yang sudah disetujui Supervisor, terpisah
+// dari MUSNAH (waste produksi). LANTAI (tempat basket karkas baru lahir dari
+// Produksi Karkas) ditampilkan sebagai "Karkas".
 const ASAL_TUJUAN_LABEL = {
   LANTAI:'Karkas', CHILLER:'Chiller', PARTING:'Parting', BONELESS:'Boneless',
-  MARINASI:'Marinasi', BLASTING:'Blasting', LOADING:'Loading', SOLD:'Jual',
-  BYPRODUCT_DIRECT:'By-product Langsung', MUSNAH:'Musnah'
+  MARINASI:'Marinasi', BLASTING:'Blasting', LOADING:'Jual', SOLD:'Jual',
+  BYPRODUCT_DIRECT:'By-product Langsung', MUSNAH:'Musnah', SELISIH:'Selisih'
 };
 function asalTujuanLabel(k){return ASAL_TUJUAN_LABEL[k]||k||'—'}
 
@@ -503,8 +508,8 @@ async function tampilkanRincianTransaksi(){
 
 // Ambil semua sumber transaksi lokasi CHILLER, semua produk, dalam rentang tanggal dateFrom..dateTo.
 async function fetchAllEventsSemuaProduk(dateFrom, dateTo){
-  const fromBound = dateFrom+'T00:00:00';
-  const toBound   = dateTo+'T23:59:59';
+  const fromBound = dateFrom+'T00:00:00+07:00';
+  const toBound   = dateTo+'T23:59:59+07:00';
   const events=[];
 
   const queries = [];

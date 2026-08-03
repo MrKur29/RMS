@@ -1600,8 +1600,8 @@ async function loadChillerStok() {
 
 async function loadKeluarHariIni() {
   const filterDate = document.getElementById('inp-filter-date').value || todayISO();
-  const dateStart  = filterDate + 'T00:00:00.000Z';
-  const dateEnd    = filterDate + 'T23:59:59.999Z';
+  const dateStart  = filterDate + 'T00:00:00+07:00';
+  const dateEnd    = filterDate + 'T23:59:59+07:00';
 
   const { data, error } = await db.from('basket_movements')
     .select(`

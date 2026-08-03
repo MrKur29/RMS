@@ -441,8 +441,8 @@ function onModuleChange(){
 async function tampilkanLaporan(){
   const tanggal = document.getElementById('filter-tanggal').value;
   if(!tanggal){showToast('Pilih tanggal terlebih dahulu.');return}
-  const fromBound = tanggal+'T00:00:00';
-  const toBound   = tanggal+'T23:59:59';
+  const fromBound = tanggal+'T00:00:00+07:00';
+  const toBound   = tanggal+'T23:59:59+07:00';
   const m = MODULES[currentTipe];
 
   document.getElementById('report-body').style.display='block';

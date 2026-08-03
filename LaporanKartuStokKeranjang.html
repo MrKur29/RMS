@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Laporan Kartu Stok Keranjang — Kurnia's Food</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="permissions.js"></script>
+<script src="viewstate.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f2f5;color:#111827;font-size:14px}
+button{cursor:pointer;font-family:inherit}
+a{text-decoration:none}
+
+/* LOGIN */
+#login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(135deg,#0f172a 0%,#134e4a 60%,#0d9488 100%)}
+.login-card{background:white;border-radius:16px;padding:44px 40px;width:400px;box-shadow:0 25px 60px rgba(0,0,0,.4)}
+.login-logo{text-align:center;margin-bottom:36px}
+.login-logo .icon{font-size:48px;display:block;margin-bottom:12px}
+.login-logo h1{font-size:22px;font-weight:800;color:#111827}
+.login-logo p{font-size:13px;color:#6b7280;margin-top:4px}
+.form-group{margin-bottom:20px}
+.form-group label{display:block;font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
+.form-group input,.form-group select{width:100%;padding:11px 14px;border:1.5px solid #d1d5db;border-radius:8px;font-size:15px;transition:border-color .2s,box-shadow .2s;color:#111827;background:white;font-family:inherit}
+.form-group input:focus,.form-group select:focus{outline:none;border-color:#0d9488;box-shadow:0 0 0 3px rgba(13,148,136,.12)}
+.btn-login{width:100%;padding:13px;background:#0d9488;color:white;border:none;border-radius:8px;font-size:15px;font-weight:700;transition:background .2s}
+.btn-login:hover{background:#0f766e}
+.btn-login:disabled{background:#5eead4;cursor:not-allowed}
+.login-error{background:#fee2e2;color:#dc2626;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:18px;border:1px solid #fecaca;display:none}
+.login-version{text-align:center;margin-top:20px;font-size:11px;color:#9ca3af}
+
+/* APP LAYOUT */
+#app-screen{display:none;height:100vh;overflow:hidden}
+.app-layout{display:flex;height:100%}
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:90}
+.sidebar-overlay.visible{display:block}
+
+/* SIDEBAR */
+.sidebar{width:230px;flex-shrink:0;background:#0f172a;color:white;display:flex;flex-direction:column;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.1) transparent;transition:transform .28s cubic-bezier(.4,0,.2,1);z-index:100}
+.sidebar-brand{padding:20px 18px 16px;border-bottom:1px solid rgba(255,255,255,.08)}
+.sidebar-nav{flex:1;padding:10px 0}
+.nav-section-label{font-size:10px;font-weight:700;color:rgba(255,255,255,.3);text-transform:uppercase;letter-spacing:1px;padding:12px 18px 4px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 18px;font-size:13px;color:rgba(255,255,255,.65);cursor:pointer;transition:all .15s;border-left:3px solid transparent}
+.nav-item:hover:not(.disabled){background:rgba(255,255,255,.07);color:white}
+.nav-item.active{background:rgba(13,148,136,.2);color:#5eead4;border-left-color:#0d9488}
+.nav-item.disabled{opacity:.3;cursor:not-allowed}
+.nav-icon{font-size:15px;width:22px;text-align:center;flex-shrink:0}
+.nav-label-text{flex:1}
+.sidebar-footer{padding:14px 18px;border-top:1px solid rgba(255,255,255,.08)}
+.user-card{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.user-avatar{width:34px;height:34px;border-radius:50%;background:#0d9488;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:white;flex-shrink:0}
+.user-info-text .user-name{font-size:13px;font-weight:700;color:#f8fafc}
+.user-info-text .user-role{font-size:11px;color:rgba(255,255,255,.45);margin-top:1px}
+.btn-logout{width:100%;padding:8px 12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.6);border-radius:6px;font-size:12px;font-weight:600;transition:all .15s}
+.btn-logout:hover{background:rgba(220,38,38,.25);border-color:rgba(220,38,38,.5);color:#fca5a5}
+
+/* MAIN */
+.main-area{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.topbar{background:white;height:58px;padding:0 20px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e5e7eb;box-shadow:0 1px 4px rgba(0,0,0,.05);gap:12px}
+.topbar-left{display:flex;align-items:center;gap:12px;min-width:0}
+.topbar-left h1{font-size:17px;font-weight:800;color:#111827;white-space:nowrap}
+.topbar-left p{font-size:12px;color:#9ca3af;margin-top:1px}
+.topbar-left-text{min-width:0}
+.topbar-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.btn-hamburger{display:none;align-items:center;justify-content:center;width:40px;height:40px;border-radius:8px;background:#f3f4f6;border:1.5px solid #e5e7eb;font-size:18px;color:#374151;flex-shrink:0}
+.btn-hamburger:hover{background:#e5e7eb}
+.clock-display{font-size:14px;font-weight:700;color:#374151;background:#f9fafb;padding:6px 10px;border-radius:6px;border:1px solid #e5e7eb;white-space:nowrap}
+
+/* CONTENT */
+.content-area{flex:1;overflow-y:auto;padding:20px 24px 32px}
+
+/* PANEL */
+.panel{background:white;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden;margin-bottom:14px}
+.panel:last-child{margin-bottom:0}
+.panel-head{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:1px solid #f3f4f6;gap:8px;flex-wrap:wrap}
+.panel-title{font-size:14px;font-weight:800;color:#111827}
+.panel-body{padding:16px}
+
+.form-row{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
+.form-row .form-group{flex:1;margin-bottom:0;min-width:220px}
+.hint{font-size:11px;color:#9ca3af;margin-top:6px}
+.empty{text-align:center;padding:28px 16px;color:#9ca3af;font-size:13px}
+
+.scan-field-wrap{position:relative}
+.scan-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:18px;pointer-events:none}
+.scan-input{padding-left:40px !important;border:2px solid #2563eb !important;background:#f0f7ff !important;font-weight:700;letter-spacing:.5px;text-transform:uppercase}
+.scan-input:focus{box-shadow:0 0 0 3px rgba(37,99,235,.2) !important}
+.scan-input::placeholder{font-weight:400;letter-spacing:0;text-transform:none}
+
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:10px 16px;border-radius:6px;border:none;font-size:13px;font-weight:700;transition:all .15s;min-height:44px;touch-action:manipulation;white-space:nowrap}
+.btn-primary{background:#0d9488;color:white}
+.btn-primary:hover{background:#0f766e}
+.btn-ghost{background:#f3f4f6;color:#374151}
+.btn-ghost:hover{background:#e5e7eb}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-csv{background:#f0fdf4;color:#15803d;border:1.5px solid #86efac;padding:7px 12px;border-radius:6px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px;cursor:pointer;white-space:nowrap}
+.btn-csv:hover{background:#dcfce7}
+.btn-xlsx{background:#eff6ff;color:#1d4ed8;border:1.5px solid #93c5fd;padding:7px 12px;border-radius:6px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px;cursor:pointer;white-space:nowrap}
+.btn-xlsx:hover{background:#dbeafe}
+
+/* BADGES */
+.badge{display:inline-flex;align-items:center;padding:3px 9px;border-radius:12px;font-size:11px;font-weight:700;white-space:nowrap}
+.b-aktif{background:#d1fae5;color:#065f46}
+.b-habis{background:#f3f4f6;color:#6b7280}
+.b-void{background:#fee2e2;color:#dc2626}
+.b-review{background:#fef3c7;color:#92400e}
+.b-override{background:#dbeafe;color:#1e40af}
+.b-lokasi{background:#f3f4f6;color:#374151}
+.b-parting{background:#ede9fe;color:#5b21b6}
+.b-boneless{background:#fce7f3;color:#9d174d}
+.b-marinasi{background:#ffedd5;color:#9a3412}
+
+/* BASKET IDENTITY CARD */
+.basket-card{border-radius:10px;background:#fafbfc;border:2px solid #0d9488;box-shadow:0 2px 10px rgba(13,148,136,.12);padding:16px}
+.bc-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.bc-code{font-family:monospace;font-weight:800;font-size:17px;color:#111827;letter-spacing:.5px}
+.bc-product{font-size:13px;font-weight:700;color:#111827;margin-top:2px}
+.bc-badges{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.bc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-top:10px;font-size:12px}
+.bc-grid .g-item{background:white;border:1px solid #f0f2f5;border-radius:6px;padding:6px 9px}
+.bc-grid .g-label{font-size:9px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px}
+.bc-grid .g-val{font-weight:700;color:#111827;margin-top:1px}
+.bc-flag-box{background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:8px 12px;margin-top:10px;font-size:12px;color:#991b1b}
+
+/* SUMMARY CARDS */
+.ledger-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;padding:16px}
+.ls-card{border-radius:10px;padding:14px 16px;background:#f9fafb;border:1.5px solid #f0f2f5}
+.ls-card .ls-label{font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px}
+.ls-card .ls-val{font-size:17px;font-weight:800;color:#111827}
+.ls-card .ls-sub{font-size:11px;color:#9ca3af;margin-top:2px}
+.ls-in .ls-val{color:#15803d}
+.ls-out .ls-val{color:#dc2626}
+
+/* TABLE */
+.tbl-wrap{overflow-x:auto}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl thead th{text-align:left;padding:9px 12px;background:#f9fafb;font-size:10.5px;font-weight:800;color:#6b7280;text-transform:uppercase;letter-spacing:.3px;border-bottom:1.5px solid #e5e7eb;white-space:nowrap}
+.tbl tbody td{padding:9px 12px;border-bottom:1px solid #f3f4f6;vertical-align:top}
+.tbl tbody tr:hover{background:#fafafa}
+.tbl tbody tr.row-opening{background:#f0fdfa}
+.tbl tbody tr.row-opening td{font-weight:800;color:#0f766e}
+.tbl tbody tr.row-info{background:#fcfcfd}
+.tbl tbody tr.row-info td{color:#6b7280}
+.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.in-val{color:#15803d;font-weight:700}
+.out-val{color:#dc2626;font-weight:700}
+.tipe-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10.5px;font-weight:700;white-space:nowrap}
+.tp-produksi{background:#dbeafe;color:#1e40af}
+.tp-masuk{background:#d1fae5;color:#065f46}
+.tp-keluar{background:#fee2e2;color:#991b1b}
+.tp-konsumsi{background:#fef3c7;color:#92400e}
+.tp-koreksi{background:#f3e8ff;color:#6b21a8}
+.tp-pindah{background:#e0e7ff;color:#3730a3}
+.tp-pending{background:#fef9c3;color:#854d0e}
+.tp-rejected{background:#fee2e2;color:#7f1d1d}
+.tp-sold{background:#ede9fe;color:#5b21b6}
+.tp-blasting{background:#cffafe;color:#155e75}
+.tp-void{background:#fee2e2;color:#7f1d1d}
+.ket-sub{color:#9ca3af;font-size:11px;margin-top:2px}
+
+.rpt-info{font-size:12px;color:#6b7280;margin-top:4px}
+.rpt-note{font-size:11.5px;color:#9ca3af;padding:12px 16px;border-top:1px solid #f3f4f6;line-height:1.6}
+.recon-warn{background:#fffbeb;border:1px solid #fde68a;color:#92400e;font-size:12px;padding:10px 14px;margin:0 16px 16px;border-radius:8px;line-height:1.6}
+
+@media (max-width:900px){
+  .btn-hamburger{display:flex}
+  .sidebar{position:fixed;top:0;bottom:0;left:0;transform:translateX(-100%)}
+  .sidebar.open{transform:translateX(0)}
+  .form-row{flex-direction:column;align-items:stretch}
+  .form-row .btn{width:100%;justify-content:center}
+}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <span class="icon">📒</span>
+      <h1>RPA Management System</h1>
+      <p>Kartu Stok Keranjang — Login</p>
+    </div>
+    <div class="login-error" id="login-error"></div>
+    <div class="form-group">
+      <label>Username</label>
+      <input type="text" id="inp-username" placeholder="Masukkan username" autocomplete="username"
+             onkeydown="if(event.key==='Enter')document.getElementById('inp-password').focus()">
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input type="password" id="inp-password" placeholder="Masukkan password" autocomplete="current-password"
+             onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button class="btn-login" id="btn-login" onclick="doLogin()">Masuk →</button>
+    <p class="login-version">v1.0 — RPA System</p>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app-screen">
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+<div class="app-layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <img src="logo.png" style="height:36px;width:auto;object-fit:contain;">
+        <span style="font-size:15px;font-weight:800;color:#f8fafc;">Kurnia's Food</span>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section-label">Utama</div>
+      <div class="nav-item" onclick="navTo('Dashboard.html')">
+        <span class="nav-icon">🏠</span><span class="nav-label-text">Dashboard</span>
+      </div>
+      <div class="nav-section-label">Produksi</div>
+      <div class="nav-item" onclick="navTo('BatchAyamHidup.html')">
+        <span class="nav-icon">🐔</span><span class="nav-label-text">Batch Ayam Hidup</span>
+      </div>
+      <div class="nav-item" onclick="navTo('ProduksiKarkas.html')">
+        <span class="nav-icon">⚙️</span><span class="nav-label-text">Produksi Karkas</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Thawing.html')">
+        <span class="nav-icon">🌡️</span><span class="nav-label-text">Thawing</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Chiller.html')">
+        <span class="nav-icon">❄️</span><span class="nav-label-text">Chiller</span>
+      </div>
+      <div class="nav-item" onclick="navTo('WorkOrder.html')">
+        <span class="nav-icon">📋</span><span class="nav-label-text">Work Order</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Parting.html')">
+        <span class="nav-icon">✂️</span><span class="nav-label-text">Parting</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Boneless.html')">
+        <span class="nav-icon">🥩</span><span class="nav-label-text">Boneless</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Marinasi.html')">
+        <span class="nav-icon">🌶️</span><span class="nav-label-text">Marinasi</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Blasting.html')">
+        <span class="nav-icon">🧊</span><span class="nav-label-text">Blasting</span>
+      </div>
+      <div class="nav-item" onclick="navTo('ByProductKarkas.html')">
+        <span class="nav-icon">📦</span><span class="nav-label-text">By-product Karkas</span>
+      </div>
+      <div class="nav-section-label">Penjualan</div>
+      <div class="nav-item" onclick="navTo('Penjualan.html')"><span class="nav-icon">🛒</span><span class="nav-label-text">Penjualan</span></div>
+      <div class="nav-section-label">Manajemen</div>
+      <div class="nav-item" onclick="navTo('Koreksi.html')">
+        <span class="nav-icon">✅</span><span class="nav-label-text">Koreksi & Approval</span>
+      </div>
+      <div class="nav-item active" onclick="navTo('Laporan.html')">
+        <span class="nav-icon">📊</span><span class="nav-label-text">Laporan</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Tracing.html')">
+        <span class="nav-icon">🔍</span><span class="nav-label-text">Tracing Produk</span>
+      </div>
+      <div class="nav-item" onclick="navTo('MasterData.html')">
+        <span class="nav-icon">🗂️</span><span class="nav-label-text">Master Data</span>
+      </div>
+      <div class="nav-item" id="nav-revisi-batch" style="display:none" onclick="navTo('RevisiBatch.html')">
+          <span class="nav-icon">🔀</span><span class="nav-label-text">Revisi Batch Keranjang</span>
+      </div>
+      <div class="nav-item" id="nav-user-mgmt" style="display:none" onclick="navTo('UserManagement.html')">
+        <span class="nav-icon">👥</span><span class="nav-label-text">Manajemen User</span>
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-card">
+        <div class="user-avatar" id="user-avatar">?</div>
+        <div class="user-info-text">
+          <div class="user-name" id="sidebar-name">—</div>
+          <div class="user-role" id="sidebar-role">—</div>
+        </div>
+      </div>
+      <button class="btn-logout" onclick="doLogout()">⬅ Keluar</button>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="main-area">
+    <div class="topbar">
+      <div class="topbar-left">
+        <button class="btn-hamburger" onclick="toggleSidebar()">☰</button>
+        <div class="topbar-left-text">
+          <h1>Laporan Kartu Stok Keranjang</h1>
+          <p id="topbar-date">—</p>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <div class="clock-display" id="clock">—</div>
+      </div>
+    </div>
+
+    <div class="content-area">
+
+      <!-- FILTER PANEL -->
+      <div class="panel">
+        <div class="panel-head">
+          <span class="panel-title">🔎 Cari Keranjang</span>
+        </div>
+        <div class="panel-body">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Kode Keranjang (Basket)</label>
+              <div class="scan-field-wrap">
+                <span class="scan-icon">📦</span>
+                <input type="text" class="scan-input" id="basket-input" placeholder="Ketik / scan kode keranjang…"
+                       onkeydown="if(event.key==='Enter'){event.preventDefault();cariKeranjang()}">
+              </div>
+            </div>
+            <div class="form-group" style="flex:0">
+              <button class="btn btn-primary" onclick="cariKeranjang()">📒 Tampilkan Kartu Stok</button>
+            </div>
+          </div>
+          <div class="hint">Masukkan satu kode keranjang untuk melihat seluruh riwayat masuk &amp; keluarnya — mulai dari asalnya (produksi/transfer/opname), setiap kali dipakai ke Work Order atau dipindah sebagian ke lokasi lain, sampai koreksi yang disetujui. Kode juga bisa dibaca dari alat scanner USB/Bluetooth (ketik lalu Enter).</div>
+        </div>
+      </div>
+
+      <!-- RESULT -->
+      <div class="panel" id="panel-result" style="display:none">
+        <div class="panel-body" style="padding-bottom:0">
+          <div class="basket-card" id="basket-card"></div>
+        </div>
+
+        <div class="panel-head" style="margin-top:4px">
+          <span class="panel-title">Riwayat Masuk &amp; Keluar</span>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn-csv" onclick="exportLedgerCSV()">⬇ CSV</button>
+            <button class="btn-xlsx" onclick="exportLedgerXLSX()">⬇ Excel</button>
+          </div>
+        </div>
+
+        <div class="ledger-summary" id="ledger-summary"></div>
+
+        <div class="recon-warn" id="recon-warn" style="display:none"></div>
+
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>Tanggal</th>
+                <th>Tipe</th>
+                <th>Keterangan</th>
+                <th class="num">Masuk Qty</th>
+                <th class="num">Masuk Kg</th>
+                <th class="num">Keluar Qty</th>
+                <th class="num">Keluar Kg</th>
+                <th class="num">Saldo Qty</th>
+                <th class="num">Saldo Kg</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-ledger">
+              <tr><td colspan="9"><div class="empty">Cari kode keranjang di atas untuk memulai.</div></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="rpt-note">
+          Catatan: baris bertipe <b>Terjual</b>, <b>Pindah Lokasi</b>, <b>Alokasi Blasting</b>, <b>Menunggu Konfirmasi</b>, dan <b>Ditolak</b> bersifat informasi saja (kolom Masuk/Keluar dikosongkan) karena tidak mengubah Qty Sisa keranjang ini secara langsung di sistem saat ini — beda dengan <b>Konsumsi Produksi</b>, <b>Transfer Keluar (Sebagian)</b>, <b>Stok Awal</b>, dan <b>Koreksi</b> yang benar-benar menambah/mengurangi saldo.
+          Deteksi asal "Split Transfer Masuk" (keranjang hasil kirim sebagian, kode berakhiran "-N") memerlukan Migration 60 sudah dijalankan di Supabase — jika belum, keranjang split akan tampil sebagai "Asal tidak diketahui".
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<script>
+const SUPABASE_URL = 'https://dxixqyokuqrdprupsvic.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR4aXhxeW9rdXFyZHBydXBzdmljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5NjM3ODcsImV4cCI6MjA5MjUzOTc4N30.D_yaPwNbe4FFg_hmDeJ9cuxzbNvXZT8l1_TyZuq1t1M';
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ── STATE ──
+let currentUser   = null;
+let currentBasket = null;
+let ledgerRows    = [];  // rows currently rendered (for export)
+
+// ── UTILS ──
+async function sha256(str){
+  const buf=new TextEncoder().encode(str);
+  const hash=await crypto.subtle.digest('SHA-256',buf);
+  return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+function esc(s){return (s==null?'':String(s)).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function fmt(n,d=0){if(n==null||n==='')return'—';return Number(n).toLocaleString('id-ID',{minimumFractionDigits:d,maximumFractionDigits:d})}
+function fmtKg(n){if(n==null)return'—';return Number(n).toLocaleString('id-ID',{minimumFractionDigits:1,maximumFractionDigits:1})+' kg'}
+function fmtDate(s){if(!s)return'—';return new Date(s).toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'})}
+function fmtDT(s){if(!s)return'—';return new Date(s).toLocaleString('id-ID',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}
+function numOrDash(n){return (!n && n!==0) ? '' : fmt(n)}
+function showToast(msg,type='success'){const t=document.getElementById('toast');t.textContent=msg;t.className=`show ${type}`;setTimeout(()=>{t.className=''},3800)}
+function navTo(url){closeSidebar();if(currentUser){localStorage.setItem('rpa_user',JSON.stringify(currentUser));sessionStorage.setItem('rpa_user',JSON.stringify(currentUser))}window.location.href=url}
+function todayFilename(prefix){return `${prefix}_${new Date().toISOString().slice(0,10)}.`}
+
+const LOKASI_LABEL = {
+  LANTAI:'Lantai', CHILLER:'Chiller', PARTING:'Parting', BONELESS:'Boneless',
+  MARINASI:'Marinasi', BLASTING:'Blasting', LOADING:'Loading', SOLD:'Terjual (Sold)',
+  BYPRODUCT_DIRECT:'By-product Langsung', MUSNAH:'Musnah', SELISIH:'Selisih'
+};
+function lokasiLabel(k){return LOKASI_LABEL[k]||k||'—'}
+
+// Label khusus untuk narasi pergerakan (dari_lokasi/ke_lokasi di basket_movements) —
+// beda dari LOKASI_LABEL yang dipakai untuk badge status keranjang saat ini.
+// LOADING & SOLD sama-sama ditampilkan "Jual" (modul Penjualan/Selisih Penjualan,
+// migrasi 66); SELISIH = write-off selisih penjualan yang sudah disetujui Supervisor.
+const ASAL_TUJUAN_LABEL = {
+  LANTAI:'Lantai', CHILLER:'Chiller', PARTING:'Parting', BONELESS:'Boneless',
+  MARINASI:'Marinasi', BLASTING:'Blasting', LOADING:'Jual', SOLD:'Jual',
+  BYPRODUCT_DIRECT:'By-product Langsung', MUSNAH:'Musnah', SELISIH:'Selisih'
+};
+function asalTujuanLabel(k){return ASAL_TUJUAN_LABEL[k]||k||'—'}
+function tipeLabel(t){const m={PARTING:{label:'Parting',cls:'b-parting'},BONELESS:{label:'Boneless',cls:'b-boneless'},MARINASI:{label:'Marinasi',cls:'b-marinasi'}};return m[t]||{label:t||'—',cls:'b-lokasi'}}
+
+function exportCSV(headers, rows, filename){
+  const escCsv = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const lines = [headers.map(escCsv).join(','), ...rows.map(r => r.map(escCsv).join(','))];
+  const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+}
+function exportXLSX(headers, rows, sheetName, filename){
+  if (typeof XLSX === 'undefined') { showToast('Library Excel belum dimuat. Coba refresh.', 'error'); return; }
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  XLSX.writeFile(wb, filename);
+}
+
+// ── SIDEBAR ──
+function toggleSidebar(){const s=document.getElementById('sidebar'),o=document.getElementById('sidebar-overlay');s.classList.toggle('open');o.classList.toggle('visible')}
+function closeSidebar(){document.getElementById('sidebar')?.classList.remove('open');document.getElementById('sidebar-overlay')?.classList.remove('visible')}
+
+// ── AUTH ──
+async function doLogin(){
+  const username=document.getElementById('inp-username').value.trim();
+  const password=document.getElementById('inp-password').value;
+  const errEl=document.getElementById('login-error');
+  errEl.style.display='none';
+  if(!username||!password){errEl.textContent='Username dan password wajib diisi.';errEl.style.display='block';return}
+  const btn=document.getElementById('btn-login');
+  btn.disabled=true;btn.textContent='Memproses…';
+  try{
+    const hash=await sha256(password);
+    const{data,error}=await db.from('users').select('id,nama,username,role,aktif,pin,is_system_admin').eq('username',username).eq('password_hash',hash).eq('aktif',true).maybeSingle();
+    if(error)throw error;
+    if(!data){errEl.textContent='Username atau password salah.';errEl.style.display='block';return}
+    data.permissions=await RPA_PERM.fetchPermissions(db,data.id);
+    currentUser=data;localStorage.setItem('rpa_user',JSON.stringify(data));startApp();
+  }catch(e){errEl.textContent='Gagal terhubung ke server.';errEl.style.display='block';}
+  finally{btn.disabled=false;btn.textContent='Masuk →'}
+}
+function doLogout(){localStorage.removeItem('rpa_user');sessionStorage.removeItem('rpa_user');currentUser=null;document.getElementById('app-screen').style.display='none';document.getElementById('login-screen').style.display='flex'}
+
+function startApp(){
+  const moduleRole=RPA_PERM.enforceModuleAccess(currentUser,'laporan');
+  if(!moduleRole)return;
+  currentUser.moduleRole=moduleRole;
+
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('app-screen').style.display='block';
+  const av=document.getElementById('user-avatar');
+  if(av)av.textContent=(currentUser.nama||'?')[0].toUpperCase();
+  document.getElementById('sidebar-name').textContent=currentUser.nama;
+  document.getElementById('sidebar-role').textContent=currentUser.role+(currentUser.is_system_admin?' (Admin)':'');
+  if(currentUser.is_system_admin){const el=document.getElementById('nav-user-mgmt');if(el)el.style.display='flex'}
+  if (RPA_PERM.getModuleRole(currentUser, 'revisi_batch') !== null) { const rbEl = document.getElementById('nav-revisi-batch'); if (rbEl) rbEl.style.display = 'flex'; }
+  RPA_STATE.bindScroll('LaporanKartuStokKeranjang');
+  const fields=RPA_STATE.getFields('LaporanKartuStokKeranjang');
+  if(fields['basket-input']) document.getElementById('basket-input').value=fields['basket-input'];
+  document.getElementById('basket-input').addEventListener('change',e=>RPA_STATE.saveField('LaporanKartuStokKeranjang','basket-input',e.target.value));
+  startClock();
+  document.getElementById('basket-input').focus();
+}
+
+function startClock(){
+  function tick(){
+    const now=new Date();
+    document.getElementById('clock').textContent=now.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    document.getElementById('topbar-date').textContent=now.toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  }
+  tick();setInterval(tick,1000);
+}
+
+// ── AUTO LOGIN ──
+window.addEventListener('DOMContentLoaded',async ()=>{
+  const saved=localStorage.getItem('rpa_user')||sessionStorage.getItem('rpa_user');
+  if(saved){try{currentUser=await RPA_PERM.restoreSession(db);if(currentUser)startApp();}catch{}}
+});
+
+// ══════════════════════════════════════════════════════════════
+// CARI KERANJANG
+// ══════════════════════════════════════════════════════════════
+async function cariKeranjang(){
+  const code=document.getElementById('basket-input').value.trim();
+  if(!code){showToast('Masukkan atau scan kode keranjang dulu.','warning');return}
+  RPA_STATE.saveField('LaporanKartuStokKeranjang','basket-input',code);
+
+  const panel=document.getElementById('panel-result');
+  panel.style.display='block';
+  document.getElementById('basket-card').innerHTML='<div class="empty">⏳ Mencari keranjang…</div>';
+  document.getElementById('ledger-summary').innerHTML='';
+  document.getElementById('recon-warn').style.display='none';
+  document.getElementById('tbody-ledger').innerHTML='<tr><td colspan="9"><div class="empty">Memuat…</div></td></tr>';
+
+  try{
+    const{data:basket,error}=await db.from('baskets')
+      .select(`id,basket_code,product_id,basket_type,qty_awal,qty_sisa,kg_awal,kg_sisa,lokasi,status,tanggal_produksi,needs_review,override,batch_id,created_at,
+        revised_by,revised_at,revised_alasan,revision_count,voided_by,voided_at,voided_alasan,
+        product_master(nama_produk,product_code,kategori,satuan_qty),
+        creator:users!created_by(nama), voider:users!voided_by(nama), revisor:users!revised_by(nama),
+        live_chicken_batches(batch_code,tanggal,no_polisi,nama_supir),
+        saldo_awal_sessions(tanggal_opname,catatan)`)
+      .ilike('basket_code',code).maybeSingle();
+    if(error)throw error;
+    if(!basket){
+      document.getElementById('basket-card').innerHTML=`<div class="empty">❌ Keranjang dengan kode <b>${esc(code)}</b> tidak ditemukan.</div>`;
+      document.getElementById('tbody-ledger').innerHTML='<tr><td colspan="9"><div class="empty">—</div></td></tr>';
+      return;
+    }
+    currentBasket=basket;
+    await tampilkanLedger(basket);
+  }catch(e){
+    console.error(e);
+    document.getElementById('basket-card').innerHTML='<div class="empty">⚠️ Gagal memuat data keranjang.</div>';
+    showToast('Gagal memuat: '+(e.message||''),'error');
+  }
+}
+
+function renderBasketCard(b){
+  const satuan=b.product_master?.satuan_qty||'';
+  let badges=`<span class="badge ${b.status==='AKTIF'?'b-aktif':b.status==='HABIS'?'b-habis':'b-void'}">${esc(b.status||'—')}</span>`;
+  badges+=`<span class="badge b-lokasi">${esc(lokasiLabel(b.lokasi))}</span>`;
+  if(b.needs_review)badges+=`<span class="badge b-review">⚠️ Perlu Review</span>`;
+  if(b.override)badges+=`<span class="badge b-override">Override</span>`;
+
+  let html=`<div class="bc-head">
+      <div>
+        <div class="bc-code">📦 ${esc(b.basket_code)}</div>
+        <div class="bc-product">${esc(b.product_master?.nama_produk||'—')} <span style="font-weight:400;color:#9ca3af">(${esc(b.product_master?.kategori||'—')})</span></div>
+      </div>
+      <div class="bc-badges">${badges}</div>
+    </div>`;
+  html+=`<div class="bc-grid">
+      <div class="g-item"><div class="g-label">Qty Awal</div><div class="g-val">${fmt(b.qty_awal)} ${esc(satuan)}</div></div>
+      <div class="g-item"><div class="g-label">Qty Sisa</div><div class="g-val">${fmt(b.qty_sisa)} ${esc(satuan)}</div></div>
+      <div class="g-item"><div class="g-label">Kg Awal</div><div class="g-val">${fmtKg(b.kg_awal)}</div></div>
+      <div class="g-item"><div class="g-label">Kg Sisa</div><div class="g-val">${fmtKg(b.kg_sisa)}</div></div>
+      <div class="g-item"><div class="g-label">Tgl Produksi</div><div class="g-val">${fmtDate(b.tanggal_produksi)}</div></div>
+      <div class="g-item"><div class="g-label">Dibuat</div><div class="g-val">${fmtDT(b.created_at)}</div></div>
+    </div>`;
+  if(b.voided_at){
+    html+=`<div class="bc-flag-box">🚫 <b>Di-void</b> oleh ${esc(b.voider?.nama||'—')} pada ${fmtDT(b.voided_at)}${b.voided_alasan?' — '+esc(b.voided_alasan):''}</div>`;
+  }
+  if(b.revision_count>0){
+    html+=`<div class="bc-flag-box" style="background:#fffbeb;border-color:#fde68a;color:#92400e">✏️ Direvisi ${b.revision_count}× — terakhir oleh ${esc(b.revisor?.nama||'—')} pada ${fmtDT(b.revised_at)}${b.revised_alasan?' — '+esc(b.revised_alasan):''}</div>`;
+  }
+  document.getElementById('basket-card').innerHTML=html;
+}
+
+// ══════════════════════════════════════════════════════════════
+// ORIGIN (asal / stok awal keranjang) — satu event "masuk"
+// ══════════════════════════════════════════════════════════════
+async function detectOrigin(basket){
+  const base={date:new Date(basket.created_at),tipe:'Stok Awal',tipeCls:'tp-produksi',
+    masuk_qty:Number(basket.qty_awal)||0,masuk_kg:Number(basket.kg_awal)||0,
+    keluar_qty:0,keluar_kg:0,isInfo:false};
+
+  if(basket.basket_type==='SALDO_AWAL'){
+    const s=basket.saldo_awal_sessions;
+    return{...base,ket:`Saldo Awal (Stok Opname) — ${fmtDate(s?.tanggal_opname)}${s?.catatan?' — '+esc(s.catatan):''}`};
+  }
+  if(basket.basket_type==='THAWING'){
+    const{data:tOut,error:tErr}=await db.from('thawing_outputs')
+      .select('destinasi,thawing_sessions(session_code,tanggal)')
+      .eq('basket_id',basket.id).maybeSingle();
+    if(tErr)console.error('[KartuStokKeranjang] thawing_outputs gagal:',tErr);
+    return{...base,ket:`Distribusi Thawing — Sesi ${esc(tOut?.thawing_sessions?.session_code||'—')} (${fmtDate(tOut?.thawing_sessions?.tanggal)}), destinasi ${esc(asalTujuanLabel(tOut?.destinasi))}`};
+  }
+
+  // Split-transfer destination (migration 60) — HARUS dicek sebelum by-product/processing/karkas,
+  // karena basket hasil split meng-copy batch_id/product_id dst dari basket sumber via row-type
+  // assignment, jadi bisa salah kedeteksi sebagai KARKAS kalau dicek belakangan.
+  const{data:splitLog,error:splitErr}=await db.from('audit_log')
+    .select('id,created_at,data_sesudah,users(nama)')
+    .eq('aksi','MOVEMENT_CONFIRMED')
+    .eq('data_sesudah->>basket_id_hasil',basket.id)
+    .maybeSingle();
+  if(splitErr)console.error('[KartuStokKeranjang] audit_log split lookup gagal:',splitErr);
+  if(splitLog){
+    const d=splitLog.data_sesudah||{};
+    let sourceCode='—';
+    if(d.basket_id_asal){
+      const{data:srcB}=await db.from('baskets').select('basket_code').eq('id',d.basket_id_asal).maybeSingle();
+      sourceCode=srcB?.basket_code||'—';
+    }
+    return{...base,date:new Date(splitLog.created_at),tipe:'Split Transfer Masuk',tipeCls:'tp-masuk',
+      ket:`Hasil kirim sebagian dari keranjang ${esc(sourceCode)} (${esc(asalTujuanLabel(d.dari_lokasi))} → ${esc(asalTujuanLabel(d.ke_lokasi))}), dikonfirmasi oleh ${esc(splitLog.users?.nama||'—')}`};
+  }
+
+  const{data:byprodSession,error:byErr}=await db.from('byproduct_collection_sessions')
+    .select('session_code,tanggal,byproduct_session_contributions(order_id)')
+    .eq('basket_id',basket.id).maybeSingle();
+  if(byErr)console.error('[KartuStokKeranjang] byproduct_collection_sessions gagal:',byErr);
+  if(byprodSession){
+    const n=(byprodSession.byproduct_session_contributions||[]).length;
+    return{...base,ket:`By-product — ditimbang sekali, Sesi ${esc(byprodSession.session_code)} (${fmtDate(byprodSession.tanggal)}), terkait ${n} Work Order`};
+  }
+
+  const{data:outRows,error:outErr}=await db.from('processing_outputs')
+    .select('order_id,processing_orders(order_code,tipe,tanggal)')
+    .eq('basket_id',basket.id);
+  if(outErr)console.error('[KartuStokKeranjang] processing_outputs gagal:',outErr);
+  if(outRows&&outRows.length>1){
+    return{...base,ket:`Hasil Produksi — gabungan ${outRows.length} Work Order (by-product lama)`};
+  }
+  if(outRows&&outRows.length===1){
+    const p=outRows[0].processing_orders;
+    const tl=tipeLabel(p?.tipe);
+    return{...base,ket:`Hasil Produksi — WO ${esc(p?.order_code||'—')} (${esc(tl.label)}), ${fmtDate(p?.tanggal)}`};
+  }
+
+  const{data:byRow,error:byRowErr}=await db.from('processing_byproducts')
+    .select('order_id,processing_orders(order_code,tipe,tanggal)')
+    .eq('basket_id',basket.id).maybeSingle();
+  if(byRowErr)console.error('[KartuStokKeranjang] processing_byproducts gagal:',byRowErr);
+  if(byRow){
+    const p=byRow.processing_orders;
+    const tl=tipeLabel(p?.tipe);
+    return{...base,ket:`Hasil Produksi (By-product) — WO ${esc(p?.order_code||'—')} (${esc(tl.label)}), ${fmtDate(p?.tanggal)}`};
+  }
+
+  if(basket.batch_id){
+    const b=basket.live_chicken_batches;
+    return{...base,ket:`Timbang Karkas — Batch ${esc(b?.batch_code||'—')} (${fmtDate(b?.tanggal)}), No. Polisi ${esc(b?.no_polisi||'—')}`};
+  }
+
+  return{...base,ket:'Asal tidak diketahui — kemungkinan input manual / data lama, atau keranjang hasil split (Migration 60) yang belum tersinkron.'};
+}
+
+// ══════════════════════════════════════════════════════════════
+// LEDGER — kumpulkan semua event masuk/keluar untuk SATU keranjang
+// ══════════════════════════════════════════════════════════════
+async function tampilkanLedger(basket){
+  renderBasketCard(basket);
+  const satuan=basket.product_master?.satuan_qty||'';
+  const events=[];
+
+  // 1) Asal / stok awal
+  events.push(await detectOrigin(basket));
+
+  // 2) Konsumsi ke Work Order
+  const{data:inputRows,error:inpErr}=await db.from('processing_inputs')
+    .select('id,qty_input,kg_input,kg_diambil,created_at,processing_orders(order_code,tipe)')
+    .eq('basket_id',basket.id);
+  if(inpErr)console.error('[KartuStokKeranjang] processing_inputs gagal:',inpErr);
+  (inputRows||[]).forEach(r=>{
+    const tl=tipeLabel(r.processing_orders?.tipe);
+    events.push({date:new Date(r.created_at),tipe:'Konsumsi Produksi',tipeCls:'tp-konsumsi',
+      ket:`Input WO ${esc(r.processing_orders?.order_code||'—')} (${esc(tl.label)})`,
+      masuk_qty:0,masuk_kg:0,keluar_qty:Number(r.qty_input)||0,keluar_kg:Number(r.kg_diambil??r.kg_input)||0,isInfo:false});
+  });
+
+  // 3) basket_movements — transfer sebagian (keluar nyata), transfer penuh/pindah (informasi),
+  //    plus status PENDING/REJECTED (informasi, belum berpengaruh ke saldo)
+  const{data:movRows,error:movErr}=await db.from('basket_movements')
+    .select('id,dari_lokasi,ke_lokasi,qty_pindah,kg_pindah,status,is_partial,created_at,confirmed_at,rejected_at,reject_alasan')
+    .eq('basket_id',basket.id);
+  if(movErr)console.error('[KartuStokKeranjang] basket_movements gagal:',movErr);
+  (movRows||[]).forEach(m=>{
+    if(m.is_partial&&m.status==='CONFIRMED'){
+      events.push({date:new Date(m.confirmed_at||m.created_at),tipe:'Transfer Keluar (Sebagian)',tipeCls:'tp-keluar',
+        ket:`Kirim sebagian ke ${esc(asalTujuanLabel(m.ke_lokasi))} — dikonfirmasi, menjadi keranjang baru di tujuan`,
+        masuk_qty:0,masuk_kg:0,keluar_qty:Number(m.qty_pindah)||0,keluar_kg:Number(m.kg_pindah)||0,isInfo:false});
+    }else if(m.is_partial&&m.status==='PENDING'){
+      events.push({date:new Date(m.created_at),tipe:'Menunggu Konfirmasi',tipeCls:'tp-pending',
+        ket:`Rencana kirim sebagian ${fmt(m.qty_pindah)} ${esc(satuan)} · ${fmtKg(m.kg_pindah)} ke ${esc(asalTujuanLabel(m.ke_lokasi))} — belum dikonfirmasi`,
+        masuk_qty:0,masuk_kg:0,keluar_qty:0,keluar_kg:0,isInfo:true});
+    }else if(m.is_partial&&m.status==='REJECTED'){
+      events.push({date:new Date(m.rejected_at||m.created_at),tipe:'Ditolak',tipeCls:'tp-rejected',
+        ket:`Rencana kirim sebagian ke ${esc(asalTujuanLabel(m.ke_lokasi))} ditolak${m.reject_alasan?': '+esc(m.reject_alasan):''}`,
+        masuk_qty:0,masuk_kg:0,keluar_qty:0,keluar_kg:0,isInfo:true});
+    }else if(!m.is_partial&&m.status==='CONFIRMED'){
+      events.push({date:new Date(m.confirmed_at||m.created_at),tipe:'Pindah Lokasi',tipeCls:'tp-pindah',
+        ket:`${esc(asalTujuanLabel(m.dari_lokasi))} → ${esc(asalTujuanLabel(m.ke_lokasi))} — keranjang yang sama berpindah (bukan split), qty tercatat saat pindah: ${fmt(m.qty_pindah)} ${esc(satuan)}`,
+        masuk_qty:0,masuk_kg:0,keluar_qty:0,keluar_kg:0,isInfo:true});
+    }else if(!m.is_partial&&m.status==='PENDING'){
+      events.push({date:new Date(m.created_at),tipe:'Menunggu Konfirmasi',tipeCls:'tp-pending',
+        ket:`Rencana pindah penuh ke ${esc(asalTujuanLabel(m.ke_lokasi))} — belum dikonfirmasi`,
+        masuk_qty:0,masuk_kg:0,keluar_qty:0,keluar_kg:0,isInfo:true});
+    }else if(!m.is_partial&&m.status==='REJECTED'){
+      events.push({date:new Date(m.rejected_at||m.created_at),tipe:'Ditolak',tipeCls:'tp-rejected',
+        ket:`Rencana pindah ke ${esc(asalTujuanLabel(m.ke_lokasi))} ditolak${m.reject_alasan?': '+esc(m.reject_alasan):''}`,
+        masuk_qty:0,masuk_kg:0,keluar_qty:0,keluar_kg:0,isInfo:true});
+    }
+  });
+
+  // 4) Terjual (picking_slip_items) — informasi. CATATAN (2026-08-03, migrasi 66):
+  //    baris LAMA (dibuat sebelum migrasi 66) memang tidak pernah mengurangi
+  //    qty_sisa keranjang lewat jalur ini (confirm_picking_slip versi lama).
+  //    Baris BARU (lewat buat_picking_slip_final) SUDAH mengurangi qty_sisa
+  //    keranjang secara langsung — tapi effect itu di-representasikan lewat
+  //    basket_movements (bagian 3 di atas), bukan dari sini, supaya tidak
+  //    dobel-hitung saat masuk_qty/keluar_qty dijumlah untuk saldo berjalan.
+  //    Belum diverifikasi ulang saldo berjalannya utuh untuk data campuran
+  //    lama+baru — kalau kelihatan ganjil, cek dulu di sini.
+  const{data:pickRows,error:pickErr}=await db.from('picking_slip_items')
+    .select('id,qty_ekor,berat_kg,picking_slips(ps_code,tanggal,status,nama_pelanggan)')
+    .eq('basket_id',basket.id);
+  if(pickErr)console.error('[KartuStokKeranjang] picking_slip_items gagal:',pickErr);
+  (pickRows||[]).forEach(r=>{
+    events.push({date:new Date(r.picking_slips?.tanggal||basket.created_at),tipe:'Terjual',tipeCls:'tp-sold',
+      ket:`Picking Slip ${esc(r.picking_slips?.ps_code||'—')} — ${esc(r.picking_slips?.nama_pelanggan||'—')} (status ${esc(r.picking_slips?.status||'—')}) · ${fmt(r.qty_ekor)} ${esc(satuan)} · ${fmtKg(r.berat_kg)}`,
+      masuk_qty:0,masuk_kg:0,keluar_qty:0,keluar_kg:0,isInfo:true});
+  });
+
+  // 5) Alokasi Blasting — reservasi lunak, tidak mengurangi qty_sisa
+  const{data:blastRows,error:blastErr}=await db.from('blasting_rack_allocations')
+    .select('id,ekor,kg,status,created_at,blasting_racks(nomor_rak),blasting_batches(batch_code)')
+    .eq('basket_id',basket.id);
+  if(blastErr)console.error('[KartuStokKeranjang] blasting_rack_allocations gagal:',blastErr);
+  (blastRows||[]).forEach(r=>{
+    events.push({date:new Date(r.created_at||basket.created_at),tipe:'Alokasi Blasting',tipeCls:'tp-blasting',
+      ket:`Rak ${esc(r.blasting_racks?.nomor_rak||'—')}, Batch ${esc(r.blasting_batches?.batch_code||'(belum diassign)')} — status ${esc(r.status)} · ${fmt(r.ekor)} ekor · ${fmtKg(r.kg)}`,
+      masuk_qty:0,masuk_kg:0,keluar_qty:0,keluar_kg:0,isInfo:true});
+  });
+
+  // 6) Koreksi disetujui (mengubah qty_awal/kg_awal/qty_sisa/kg_sisa keranjang ini)
+  const{data:corrRows,error:corrErr}=await db.from('corrections')
+    .select('id,field_salah,nilai_lama,nilai_baru,reviewed_at')
+    .eq('tabel_terkait','baskets')
+    .eq('record_id',basket.id)
+    .eq('status','APPROVED')
+    .in('field_salah',['qty_sisa','kg_sisa','qty_awal','kg_awal']);
+  if(corrErr)console.error('[KartuStokKeranjang] corrections gagal:',corrErr);
+  (corrRows||[]).forEach(c=>{
+    const lama=parseFloat(c.nilai_lama);const baru=parseFloat(c.nilai_baru);
+    const delta=(isNaN(baru)?0:baru)-(isNaN(lama)?0:lama);
+    if(!delta)return;
+    const isKg=c.field_salah.startsWith('kg');
+    events.push({date:new Date(c.reviewed_at),tipe:'Koreksi',tipeCls:'tp-koreksi',
+      ket:`Koreksi ${esc(c.field_salah)}: ${c.nilai_lama??'—'} → ${c.nilai_baru??'—'}`,
+      masuk_qty:(!isKg&&delta>0)?delta:0,masuk_kg:(isKg&&delta>0)?delta:0,
+      keluar_qty:(!isKg&&delta<0)?-delta:0,keluar_kg:(isKg&&delta<0)?-delta:0,isInfo:false});
+  });
+
+  // 7) Void — informasi
+  if(basket.voided_at){
+    events.push({date:new Date(basket.voided_at),tipe:'Void',tipeCls:'tp-void',
+      ket:`Keranjang di-void oleh ${esc(basket.voider?.nama||'—')}${basket.voided_alasan?': '+esc(basket.voided_alasan):''}`,
+      masuk_qty:0,masuk_kg:0,keluar_qty:0,keluar_kg:0,isInfo:true});
+  }
+
+  // ── urutkan & hitung saldo berjalan (hanya event non-info yang mengubah saldo) ──
+  events.sort((a,b)=>a.date-b.date);
+  let runQty=0,runKg=0;
+  events.forEach(ev=>{
+    if(!ev.isInfo){runQty+=(ev.masuk_qty||0)-(ev.keluar_qty||0);runKg+=(ev.masuk_kg||0)-(ev.keluar_kg||0);}
+    ev.saldo_qty=runQty;ev.saldo_kg=runKg;
+  });
+
+  ledgerRows=events;
+  renderSummary(events,runQty,runKg,basket);
+  renderLedgerTable(events);
+  renderReconciliation(runQty,runKg,basket);
+}
+
+function renderSummary(events,runQty,runKg,basket){
+  let masukQty=0,masukKg=0,keluarQty=0,keluarKg=0;
+  events.forEach(ev=>{if(!ev.isInfo){masukQty+=ev.masuk_qty||0;masukKg+=ev.masuk_kg||0;keluarQty+=ev.keluar_qty||0;keluarKg+=ev.keluar_kg||0;}});
+  document.getElementById('ledger-summary').innerHTML=`
+    <div class="ls-card">
+      <div class="ls-label">Stok Awal</div>
+      <div class="ls-val">${fmt(basket.qty_awal)} <span style="font-size:12px;font-weight:600">ekor</span></div>
+      <div class="ls-sub">${fmtKg(basket.kg_awal)}</div>
+    </div>
+    <div class="ls-card ls-in">
+      <div class="ls-label">Total Masuk</div>
+      <div class="ls-val">${fmt(masukQty)} <span style="font-size:12px;font-weight:600">ekor</span></div>
+      <div class="ls-sub">${fmtKg(masukKg)}</div>
+    </div>
+    <div class="ls-card ls-out">
+      <div class="ls-label">Total Keluar</div>
+      <div class="ls-val">${fmt(keluarQty)} <span style="font-size:12px;font-weight:600">ekor</span></div>
+      <div class="ls-sub">${fmtKg(keluarKg)}</div>
+    </div>
+    <div class="ls-card">
+      <div class="ls-label">Sisa Saat Ini (Database)</div>
+      <div class="ls-val">${fmt(basket.qty_sisa)} <span style="font-size:12px;font-weight:600">ekor</span></div>
+      <div class="ls-sub">${fmtKg(basket.kg_sisa)}</div>
+    </div>
+  `;
+}
+
+function renderReconciliation(runQty,runKg,basket){
+  const box=document.getElementById('recon-warn');
+  const diffQty=Math.abs(runQty-(Number(basket.qty_sisa)||0));
+  const diffKg=Math.abs(runKg-(Number(basket.kg_sisa)||0));
+  if(diffQty>0.5||diffKg>0.5){
+    box.style.display='block';
+    box.innerHTML=`⚠️ <b>Saldo hasil hitung ledger (${fmt(runQty)} ekor · ${fmtKg(runKg)})</b> berbeda dari <b>Qty Sisa keranjang di database (${fmt(basket.qty_sisa)} ekor · ${fmtKg(basket.kg_sisa)})</b>. Ini bisa terjadi karena baris bertipe informasi (mis. Terjual / Pindah Lokasi) yang sebenarnya mengubah qty tapi belum tercakup di rumus saldo ledger ini, atau data lama sebelum sebuah migration dijalankan. Angka <b>Qty Sisa dari database tetap yang berlaku</b> untuk operasional.`;
+  }else{
+    box.style.display='none';
+  }
+}
+
+function renderLedgerTable(rows){
+  const tbody=document.getElementById('tbody-ledger');
+  let html=`<tr class="row-opening">
+    <td colspan="7">Sebelum Ada (Keranjang Belum Dibuat)</td>
+    <td class="num">0</td>
+    <td class="num">0</td>
+  </tr>`;
+  if(!rows.length){
+    html+=`<tr><td colspan="9"><div class="empty">Tidak ada riwayat tercatat untuk keranjang ini.</div></td></tr>`;
+  }else{
+    html+=rows.map(r=>`
+      <tr class="${r.isInfo?'row-info':''}">
+        <td style="white-space:nowrap">${fmtDT(r.date)}</td>
+        <td><span class="tipe-badge ${r.tipeCls}">${esc(r.tipe)}</span></td>
+        <td>${esc(r.ket)}</td>
+        <td class="num ${r.masuk_qty?'in-val':''}">${r.isInfo?'—':numOrDash(r.masuk_qty)}</td>
+        <td class="num ${r.masuk_kg?'in-val':''}">${r.isInfo?'—':numOrDash(r.masuk_kg)}</td>
+        <td class="num ${r.keluar_qty?'out-val':''}">${r.isInfo?'—':numOrDash(r.keluar_qty)}</td>
+        <td class="num ${r.keluar_kg?'out-val':''}">${r.isInfo?'—':numOrDash(r.keluar_kg)}</td>
+        <td class="num">${fmt(r.saldo_qty)}</td>
+        <td class="num">${fmtKg(r.saldo_kg)}</td>
+      </tr>`).join('');
+  }
+  tbody.innerHTML=html;
+}
+
+// ══════════════════════════════════════════════════════════════
+// EXPORT
+// ══════════════════════════════════════════════════════════════
+function exportLedgerCSV(){
+  if(!currentBasket){showToast('Belum ada data untuk diekspor.','warning');return}
+  const headers=['Tanggal','Tipe','Keterangan','Masuk Qty','Masuk Kg','Keluar Qty','Keluar Kg','Saldo Qty','Saldo Kg'];
+  const rows=ledgerRows.map(r=>[fmtDT(r.date),r.tipe,r.ket,r.isInfo?'':(r.masuk_qty||''),r.isInfo?'':(r.masuk_kg||''),r.isInfo?'':(r.keluar_qty||''),r.isInfo?'':(r.keluar_kg||''),r.saldo_qty,r.saldo_kg]);
+  exportCSV(headers,rows,todayFilename(`kartustok_keranjang_${currentBasket.basket_code}`)+'csv');
+}
+function exportLedgerXLSX(){
+  if(!currentBasket){showToast('Belum ada data untuk diekspor.','warning');return}
+  const headers=['Tanggal','Tipe','Keterangan','Masuk Qty','Masuk Kg','Keluar Qty','Keluar Kg','Saldo Qty','Saldo Kg'];
+  const rows=ledgerRows.map(r=>[fmtDT(r.date),r.tipe,r.ket,r.isInfo?'':(r.masuk_qty||''),r.isInfo?'':(r.masuk_kg||''),r.isInfo?'':(r.keluar_qty||''),r.isInfo?'':(r.keluar_kg||''),r.saldo_qty,r.saldo_kg]);
+  exportXLSX(headers,rows,'Kartu Stok Keranjang',todayFilename(`kartustok_keranjang_${currentBasket.basket_code}`)+'xlsx');
+}
+</script>
+</body>
+</html>
