@@ -217,8 +217,11 @@ a{text-decoration:none}
       <div class="nav-item" onclick="navTo('MasterData.html')">
         <span class="nav-icon">🗂️</span><span class="nav-label-text">Master Data</span>
       </div>
-      <div class="nav-item" id="nav-revisi-batch" style="display:none" onclick="navTo('RevisiBatch.html')">
+<div class="nav-item" id="nav-revisi-batch" style="display:none" onclick="navTo('RevisiBatch.html')">
           <span class="nav-icon">🔀</span><span class="nav-label-text">Revisi Batch Keranjang</span>
+      </div>
+      <div class="nav-item" id="nav-void-keranjang" style="display:none" onclick="navTo('VoidKeranjang.html')">
+          <span class="nav-icon">🗑️</span><span class="nav-label-text">Void Keranjang</span>
       </div>
       <div class="nav-item" id="nav-user-mgmt" style="display:none" onclick="navTo('UserManagement.html')">
         <span class="nav-icon">👥</span><span class="nav-label-text">Manajemen User</span>
@@ -455,6 +458,7 @@ async function startApp(){
   document.getElementById('sidebar-role').textContent=currentUser.role+(currentUser.is_system_admin?' (Admin)':'');
   if(currentUser.is_system_admin){const el=document.getElementById('nav-user-mgmt');if(el)el.style.display='flex'}
   if (RPA_PERM.getModuleRole(currentUser, 'revisi_batch') !== null) { const rbEl = document.getElementById('nav-revisi-batch'); if (rbEl) rbEl.style.display = 'flex'; }
+    if (RPA_PERM.getModuleRole(currentUser, 'void_keranjang') !== null) { const vkEl = document.getElementById('nav-void-keranjang'); if (vkEl) vkEl.style.display = 'flex'; }
   if (RPA_PERM.getModuleRole(currentUser, 'saldo_awal') !== null) { const saEl = document.getElementById('nav-saldo-awal'); if (saEl) saEl.style.display = 'flex'; }
   document.getElementById('filter-tgl-dari').value = daysAgoISO(30);
   document.getElementById('filter-tgl-sampai').value = todayISO();
@@ -617,6 +621,7 @@ async function fetchAllEvents(productId, lokasi, dateTo){
       db.from('baskets')
         .select('id,basket_code,qty_awal,kg_awal,created_at,carcass_baskets!inner(id)')
         .eq('product_id',productId)
+        .neq('status','VOID')
         .lte('created_at',toBound)
         .then(({data,error})=>{
           if(error){console.error('fetchAllEvents A',error);return}
@@ -731,7 +736,8 @@ async function fetchAllEvents(productId, lokasi, dateTo){
       const { data: baskets, error: bErr } = await db.from('baskets')
         .select('id,basket_code')
         .eq('product_id',productId)
-        .eq('lokasi',lokasi);
+        .eq('lokasi',lokasi)
+        .neq('status','VOID');
       if(bErr){console.error('fetchAllEvents F (baskets)',bErr);return}
       const basketIds = (baskets||[]).map(b=>b.id);
       if(!basketIds.length) return;

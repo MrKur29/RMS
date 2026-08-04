@@ -209,8 +209,11 @@ a{text-decoration:none}
       <div class="nav-item" onclick="navTo('MasterData.html')">
         <span class="nav-icon">🗂️</span><span class="nav-label-text">Master Data</span>
       </div>
-      <div class="nav-item" id="nav-revisi-batch" style="display:none" onclick="navTo('RevisiBatch.html')">
+<div class="nav-item" id="nav-revisi-batch" style="display:none" onclick="navTo('RevisiBatch.html')">
           <span class="nav-icon">🔀</span><span class="nav-label-text">Revisi Batch Keranjang</span>
+      </div>
+      <div class="nav-item" id="nav-void-keranjang" style="display:none" onclick="navTo('VoidKeranjang.html')">
+          <span class="nav-icon">🗑️</span><span class="nav-label-text">Void Keranjang</span>
       </div>
       <div class="nav-item" id="nav-user-mgmt" style="display:none" onclick="navTo('UserManagement.html')">
         <span class="nav-icon">👥</span><span class="nav-label-text">Manajemen User</span>
@@ -433,6 +436,7 @@ function startApp(){
   document.getElementById('sidebar-role').textContent=currentUser.role+(currentUser.is_system_admin?' (Admin)':'');
   if(currentUser.is_system_admin){const el=document.getElementById('nav-user-mgmt');if(el)el.style.display='flex'}
   if (RPA_PERM.getModuleRole(currentUser, 'revisi_batch') !== null) { const rbEl = document.getElementById('nav-revisi-batch'); if (rbEl) rbEl.style.display = 'flex'; }
+    if (RPA_PERM.getModuleRole(currentUser, 'void_keranjang') !== null) { const vkEl = document.getElementById('nav-void-keranjang'); if (vkEl) vkEl.style.display = 'flex'; }
   if (RPA_PERM.getModuleRole(currentUser, 'saldo_awal') !== null) { const saEl = document.getElementById('nav-saldo-awal'); if (saEl) saEl.style.display = 'flex'; }
   const today = todayISO();
   document.getElementById('filter-sampai').value = today;
@@ -483,6 +487,7 @@ async function computeSaldoKumulatif(cutoffDate){
   tasks.push(
     db.from('baskets')
       .select('product_id,qty_awal,kg_awal,created_at,carcass_baskets!inner(id)')
+      .neq('status','VOID')
       .lte('created_at', toBound)
       .then(({data,error})=>{
         if(error){console.error('kumulatif karkas',error);return}
@@ -506,6 +511,7 @@ async function computeSaldoKumulatif(cutoffDate){
     db.from('baskets')
       .select('product_id,qty_awal,kg_awal,created_at')
       .eq('basket_type','THAWING')
+      .neq('status','VOID')
       .lte('created_at', toBound)
       .then(({data,error})=>{
         if(error){console.error('kumulatif thawing',error);return}
@@ -518,6 +524,7 @@ async function computeSaldoKumulatif(cutoffDate){
     db.from('baskets')
       .select('product_id,qty_awal,kg_awal,saldo_awal_sessions!inner(status,tanggal_opname)')
       .eq('basket_type','SALDO_AWAL')
+      .neq('status','VOID')
       .eq('saldo_awal_sessions.status','FINAL')
       .lte('saldo_awal_sessions.tanggal_opname', cutoffDate)
       .then(({data,error})=>{
@@ -574,6 +581,7 @@ async function computePeriodBreakdown(fromDate, toDate){
   tasks.push(
     db.from('baskets')
       .select('product_id,qty_awal,kg_awal,created_at,carcass_baskets!inner(id)')
+      .neq('status','VOID')
       .gte('created_at', fromBound).lte('created_at', toBound)
       .then(({data,error})=>{
         if(error){console.error('period karkas_in',error);return}
@@ -601,6 +609,7 @@ async function computePeriodBreakdown(fromDate, toDate){
     db.from('baskets')
       .select('product_id,qty_awal,kg_awal,created_at')
       .eq('basket_type','THAWING')
+      .neq('status','VOID')
       .gte('created_at', fromBound).lte('created_at', toBound)
       .then(({data,error})=>{
         if(error){console.error('period thawing_in',error);return}
