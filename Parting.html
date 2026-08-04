@@ -1774,7 +1774,12 @@ function renderPendingList() {
 // ============================================================
 function clearScanMasukResult() {
   const r = document.getElementById('scan-masuk-result');
-  if (r) { r.className = 'scan-result'; r.style.display = 'none'; }
+  // PENTING: jangan set r.style.display di sini — inline style akan
+  // menimpa/mengalahkan class 'visible' yang di-set nanti oleh doScanMasuk(),
+  // sehingga hasil scan tidak akan pernah muncul lagi setelah panggilan
+  // pertama. Cukup reset className, biarkan CSS (.scan-result / .visible)
+  // yang mengatur tampil/sembunyi.
+  if (r) { r.className = 'scan-result'; }
 }
 
 // Sebagian barcode reader tablet (mode IME/keyboard-wedge) tidak memicu
@@ -1784,39 +1789,46 @@ function clearScanMasukResult() {
 let scanMasukTimer = null;
 let scanMasukLastRun = 0;
 function onScanMasukInput(val) {
+  if (typeof scanDebug === 'function') scanDebug(`oninput fired, val="${val}"`);
   clearTimeout(scanMasukTimer);
   // Abaikan event input kosong (mis. sisa 'Enter' penutup dari scanner
   // IME-mode Android) — jangan sampai menghapus hasil scan yang baru tampil.
-  if (!val || !val.trim()) return;
+  if (!val || !val.trim()) { if (typeof scanDebug === 'function') scanDebug('  -> diabaikan: val kosong'); return; }
   // Abaikan juga event susulan yang datang tepat setelah scan sebelumnya
   // selesai diproses (sisa karakter/IME dari scanner) — jangan sampai
   // clearScanMasukResult() di bawah ini menghapus hasil yang baru tampil.
-  if (Date.now() - scanMasukLastRun < 300) return;
+  if (Date.now() - scanMasukLastRun < 300) { if (typeof scanDebug === 'function') scanDebug('  -> diabaikan: terlalu cepat setelah scan terakhir (guard oninput)'); return; }
   clearScanMasukResult();
+  if (typeof scanDebug === 'function') scanDebug('  -> jadwalkan doScanMasuk() dlm 200ms');
   scanMasukTimer = setTimeout(() => doScanMasuk(), 200);
 }
 
 async function doScanMasuk() {
   const input = document.getElementById('scan-masuk-input');
   const code  = input.value.trim();
-  if (!code) return;
+  if (typeof scanDebug === 'function') scanDebug(`doScanMasuk() dipanggil, input.value="${input.value}", code="${code}"`);
+  if (!code) { if (typeof scanDebug === 'function') scanDebug('  -> keluar: code kosong'); return; }
   // Abaikan pemanggilan ulang yang menyusul terlalu cepat (mis. Enter ganda,
   // atau event input susulan yang telat diproses browser) — supaya proses
   // duplikat tidak menimpa/menghapus hasil scan yang baru saja tampil.
   const now = Date.now();
-  if (now - scanMasukLastRun < 300) return;
+  if (now - scanMasukLastRun < 300) { if (typeof scanDebug === 'function') scanDebug('  -> keluar: guard doScanMasuk (terlalu cepat)'); return; }
   scanMasukLastRun = now;
   const r = document.getElementById('scan-masuk-result');
+  if (typeof scanDebug === 'function') scanDebug(`  -> elemen #scan-masuk-result ditemukan? ${!!r}, pendingMovements.length=${(pendingMovements||[]).length}`);
 
   // Cari movement PENDING dengan basket_code tsb
   const mv = pendingMovements.find(m => (m.baskets?.basket_code||'').toLowerCase() === code.toLowerCase());
   if (!mv) {
+    if (typeof scanDebug === 'function') scanDebug('  -> TIDAK DITEMUKAN, render kotak merah (scan-err)');
     r.className = 'scan-result visible scan-err';
     document.getElementById('smr-code').textContent = code;
     document.getElementById('smr-detail').textContent = 'Keranjang tidak ditemukan dalam antrian masuk Parting.';
     document.getElementById('smr-actions').innerHTML = '';
+    if (typeof scanDebug === 'function') scanDebug(`  -> setelah render: r.className="${r.className}", display=${getComputedStyle(r).display}`);
     return;
   }
+  if (typeof scanDebug === 'function') scanDebug(`  -> DITEMUKAN basket_code=${mv.baskets?.basket_code}, render kotak hijau (scan-ok)`);
   const b  = mv.baskets || {};
   const pm = b.product_master || {};
   r.className = 'scan-result visible scan-ok';
@@ -1825,10 +1837,12 @@ async function doScanMasuk() {
     <strong>${pm.nama_produk||'—'}</strong> (${pm.product_code||''})<br>
     ${fmt(mv.qty_pindah)} ekor &nbsp;·&nbsp; ${fmtKg(mv.kg_pindah)}<br>
     Dari: ${lokasiLabel(mv.dari_lokasi)}`;
+  if (typeof scanDebug === 'function') scanDebug(`  -> setelah render: r.className="${r.className}", display=${getComputedStyle(r).display}`);
   document.getElementById('smr-actions').innerHTML  = `
     <button class="btn btn-green btn-sm" onclick="openKonfirmasi('${mv.id}')">✅ Konfirmasi Masuk</button>
     <button class="btn btn-red btn-sm"   onclick="openTolak('${mv.id}','${b.basket_code||''}')">✗ Tolak</button>`;
   input.value = '';
+  if (typeof scanDebug === 'function') scanDebug('  -> input.value dikosongkan, doScanMasuk() SELESAI');
 }
 
 // ============================================================
@@ -4723,5 +4737,24 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
 });
 </script>
+<!-- === TEMP DEBUG (hapus setelah bug scan ditemukan) === -->
+<div id="scan-debug-box" style="position:fixed;left:0;right:0;bottom:0;max-height:38vh;overflow-y:auto;background:rgba(17,24,39,.95);color:#4ade80;font:11px/1.5 monospace;padding:8px 10px;z-index:99999;white-space:pre-wrap;border-top:2px solid #16a34a">
+  <div style="color:#fbbf24;font-weight:700;margin-bottom:4px">🐞 SCAN DEBUG TRACE (sementara)</div>
+  <div id="scan-debug-log"></div>
+</div>
+<script>
+function scanDebug(msg) {
+  const box = document.getElementById('scan-debug-log');
+  if (!box) return;
+  const t = new Date().toLocaleTimeString('id-ID', {hour12:false});
+  const line = document.createElement('div');
+  line.textContent = `[${t}] ${msg}`;
+  box.appendChild(line);
+  while (box.children.length > 40) box.removeChild(box.firstChild);
+  const scrollBox = document.getElementById('scan-debug-box');
+  if (scrollBox) scrollBox.scrollTop = scrollBox.scrollHeight;
+}
+</script>
+<!-- === /TEMP DEBUG === -->
 </body>
 </html>
