@@ -516,48 +516,23 @@ a{text-decoration:none}
      MODAL: BUAT RETUR PENJUALAN
      ============================================================ -->
 <div class="modal-backdrop" id="modal-retur">
-  <div class="modal-box" style="width:640px">
+  <div class="modal-box" style="width:680px">
     <div class="modal-head">
       <div class="modal-title">↩️ Buat Retur Penjualan</div>
       <button class="modal-close" onclick="closeModalRetur()">✕</button>
     </div>
     <div class="modal-body">
-      <div style="margin-bottom:8px;font-size:12px;font-weight:700;color:#374151">PILIH ITEM YANG DIRETUR:</div>
+      <div style="margin-bottom:8px;font-size:12px;font-weight:700;color:#374151">PILIH ITEM YANG DIRETUR — bisa lebih dari 1 produk, akan dicetak jadi 1 Retur Slip:</div>
       <div id="retur-item-picker" style="max-height:160px;overflow-y:auto;border:1.5px solid #e5e7eb;border-radius:8px;margin-bottom:14px">
         <div style="padding:16px;text-align:center;color:#9ca3af;font-size:12px">Memuat item…</div>
       </div>
 
-      <div id="retur-form-fields" style="display:none">
-        <div class="form-row full">
-          <div class="form-field">
-            <label>Jenis Retur *</label>
-            <select id="retur-jenis">
-              <option value="">— Pilih Jenis —</option>
-              <option value="RUSAK_CACAT">Rusak / Cacat</option>
-              <option value="KOMPLAIN_KUALITAS">Komplain Kualitas</option>
-              <option value="SALAH_KIRIM">Salah Kirim</option>
-              <option value="KELEBIHAN_KIRIM">Kelebihan Kirim</option>
-            </select>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-field">
-            <label>Ekor *</label>
-            <input type="number" id="retur-ekor" min="0">
-          </div>
-          <div class="form-field">
-            <label>Kg *</label>
-            <input type="number" id="retur-kg" min="0" step="0.01">
-          </div>
-        </div>
-        <div class="form-row full">
-          <div class="form-field">
-            <label>Keterangan</label>
-            <textarea id="retur-keterangan" rows="2" placeholder="Opsional…"></textarea>
-          </div>
-        </div>
-        <div style="font-size:11px;color:#9ca3af">Setelah disimpan, Retur Slip akan langsung siap dicetak sebagai surat jalan ke Chiller.</div>
+      <div style="margin-bottom:8px;font-size:12px;font-weight:700;color:#374151">ITEM DIRETUR — isi jenis, ekor, kg per produk:</div>
+      <div id="retur-items-list"></div>
+      <div id="retur-items-empty" style="padding:24px;text-align:center;color:#9ca3af;font-size:13px;border:1.5px dashed #e5e7eb;border-radius:8px">
+        Belum ada item dipilih
       </div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:10px">Setelah disimpan, Retur Slip akan langsung siap dicetak sebagai surat jalan ke Chiller.</div>
     </div>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModalRetur()">Batal</button>
@@ -1661,8 +1636,9 @@ const RETUR_STATUS_BADGE = {
 let allProductsAktif = [];
 let returPsId = null;
 let returPsItems = [];
-let returSelectedItem = null;
+let returSelectedItems = []; // bisa lebih dari 1 produk per sesi "Buat Retur"
 let returPendingApproveId = null; // dipakai antara modal-retur-resolusi -> PIN
+let returListRows = []; // cache hasil loadReturList(), dipakai reprintReturSlip()
 
 async function loadProductsAktif(){
   const { data, error } = await db.from('product_master')
@@ -1671,18 +1647,14 @@ async function loadProductsAktif(){
   allProductsAktif = data || [];
 }
 
-/* ---------- MODAL: BUAT RETUR ---------- */
+/* ---------- MODAL: BUAT RETUR (bisa lebih dari 1 produk sekaligus) ---------- */
 async function openRetur(psId){
   returPsId = psId;
-  returSelectedItem = null;
-  document.getElementById('retur-form-fields').style.display = 'none';
-  document.getElementById('retur-jenis').value = '';
-  document.getElementById('retur-ekor').value = '';
-  document.getElementById('retur-kg').value = '';
-  document.getElementById('retur-keterangan').value = '';
+  returSelectedItems = [];
 
   const picker = document.getElementById('retur-item-picker');
   picker.innerHTML = '<div style="padding:16px;text-align:center;color:#9ca3af;font-size:12px">Memuat item…</div>';
+  renderReturSelectedItems();
   document.getElementById('modal-retur').classList.add('open');
 
   const { data, error } = await db.from('picking_slip_items').select('*').eq('ps_id', psId).order('basket_code');
@@ -1700,57 +1672,115 @@ function renderReturItemPicker(){
     return;
   }
   picker.innerHTML = returPsItems.map(it => {
-    const active = returSelectedItem && returSelectedItem.id === it.id;
+    const added = returSelectedItems.some(s => s.ps_item_id === it.id);
     return `
-      <div style="display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:8px;padding:8px 12px;border-bottom:1px solid #f3f4f6;align-items:center;${active?'background:#eff6ff':''}">
+      <div style="display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:8px;padding:8px 12px;border-bottom:1px solid #f3f4f6;align-items:center">
         <div>
           <div style="font-size:12px;font-weight:700;font-family:monospace">${it.basket_code}</div>
           <div style="font-size:11px;color:#6b7280">${it.nama_item}</div>
         </div>
         <div style="font-size:12px;font-weight:600">${it.qty_ekor} ekor</div>
         <div style="font-size:12px;font-weight:600">${(+it.berat_kg).toFixed(2)} kg</div>
-        <button class="btn ${active?'btn-success':'btn-ghost'} btn-sm" onclick='selectReturItem(${JSON.stringify(it.id)})'>${active?'✓ Dipilih':'Pilih'}</button>
+        <button class="btn btn-ghost btn-sm" onclick='addReturItem(${JSON.stringify(it.id)})' ${added?'disabled style="opacity:.4"':''}>${added?'✓':'+ Tambah'}</button>
       </div>`;
   }).join('');
 }
-function selectReturItem(itemId){
-  returSelectedItem = returPsItems.find(i => i.id === itemId) || null;
+function addReturItem(itemId){
+  if(returSelectedItems.some(s => s.ps_item_id === itemId)){ toast('Item sudah ditambahkan', 'info'); return; }
+  const it = returPsItems.find(i => i.id === itemId);
+  if(!it) return;
+  returSelectedItems.push({
+    ps_item_id: it.id, basket_code: it.basket_code, nama_item: it.nama_item,
+    max_ekor: it.qty_ekor, max_kg: +it.berat_kg,
+    jenis_retur: '', ekor: it.qty_ekor, kg: +it.berat_kg, keterangan: ''
+  });
   renderReturItemPicker();
-  const fields = document.getElementById('retur-form-fields');
-  if(returSelectedItem){
-    fields.style.display = 'block';
-    document.getElementById('retur-ekor').max = returSelectedItem.qty_ekor;
-    document.getElementById('retur-kg').max = returSelectedItem.berat_kg;
+  renderReturSelectedItems();
+}
+function removeReturItem(idx){
+  returSelectedItems.splice(idx, 1);
+  renderReturItemPicker();
+  renderReturSelectedItems();
+}
+function updateReturItemField(idx, field, value){
+  const item = returSelectedItems[idx];
+  if(!item) return;
+  if(field === 'ekor'){
+    let v = parseInt(value) || 0;
+    if(v < 0) v = 0; if(v > item.max_ekor) v = item.max_ekor;
+    item.ekor = v;
+  } else if(field === 'kg'){
+    let v = parseFloat(value) || 0;
+    if(v < 0) v = 0; if(v > item.max_kg) v = item.max_kg;
+    item.kg = v;
   } else {
-    fields.style.display = 'none';
+    item[field] = value;
   }
 }
+function renderReturSelectedItems(){
+  const list  = document.getElementById('retur-items-list');
+  const empty = document.getElementById('retur-items-empty');
+  if(!returSelectedItems.length){
+    list.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+  list.innerHTML = returSelectedItems.map((item, idx) => `
+    <div class="item-card">
+      <div class="item-card-top">
+        <div>
+          <div class="item-code">${item.basket_code}</div>
+          <div class="item-sub">${item.nama_item}</div>
+        </div>
+        <button class="item-remove" onclick="removeReturItem(${idx})" title="Hapus">×</button>
+      </div>
+      <div class="form-row full" style="margin-top:8px;margin-bottom:0">
+        <div class="form-field">
+          <label>Jenis Retur *</label>
+          <select onchange="updateReturItemField(${idx},'jenis_retur',this.value)">
+            <option value="">— Pilih Jenis —</option>
+            <option value="RUSAK_CACAT" ${item.jenis_retur==='RUSAK_CACAT'?'selected':''}>Rusak / Cacat</option>
+            <option value="KOMPLAIN_KUALITAS" ${item.jenis_retur==='KOMPLAIN_KUALITAS'?'selected':''}>Komplain Kualitas</option>
+            <option value="SALAH_KIRIM" ${item.jenis_retur==='SALAH_KIRIM'?'selected':''}>Salah Kirim</option>
+            <option value="KELEBIHAN_KIRIM" ${item.jenis_retur==='KELEBIHAN_KIRIM'?'selected':''}>Kelebihan Kirim</option>
+          </select>
+        </div>
+      </div>
+      <div class="item-card-qty">
+        <label>Ekor</label>
+        <input type="number" min="0" max="${item.max_ekor}" value="${item.ekor}" onchange="updateReturItemField(${idx},'ekor',this.value)">
+        <label>Kg</label>
+        <input type="number" min="0" max="${item.max_kg}" step="0.01" value="${item.kg}" onchange="updateReturItemField(${idx},'kg',this.value)">
+        <span class="item-card-hint">maks: ${item.max_ekor} ekor / ${item.max_kg.toFixed(2)} kg</span>
+      </div>
+      <input type="text" placeholder="Keterangan (opsional)…" value="${item.keterangan||''}" oninput="updateReturItemField(${idx},'keterangan',this.value)"
+             style="width:100%;margin-top:8px;padding:7px 10px;border:1.5px solid #e5e7eb;border-radius:6px;font-size:12px">
+    </div>`).join('');
+}
 async function submitBuatRetur(){
-  if(!returSelectedItem){ toast('Pilih item yang diretur dulu', 'error'); return; }
-  const jenis = document.getElementById('retur-jenis').value;
-  const ekor  = parseInt(document.getElementById('retur-ekor').value) || 0;
-  const kg    = parseFloat(document.getElementById('retur-kg').value) || 0;
-  const ket   = document.getElementById('retur-keterangan').value.trim();
-  if(!jenis){ toast('Pilih jenis retur', 'error'); return; }
-  if(ekor <= 0 || kg <= 0){ toast('Ekor dan Kg harus lebih dari 0', 'error'); return; }
+  if(!returSelectedItems.length){ toast('Pilih minimal 1 item yang diretur', 'error'); return; }
+  for(const item of returSelectedItems){
+    if(!item.jenis_retur){ toast(`Keranjang ${item.basket_code}: pilih jenis retur dulu`, 'error'); return; }
+    if(item.ekor <= 0 || item.kg <= 0){ toast(`Keranjang ${item.basket_code}: Ekor dan Kg harus lebih dari 0`, 'error'); return; }
+  }
 
   const btn = document.getElementById('btn-simpan-retur');
   btn.disabled = true; btn.textContent = 'Menyimpan…';
   try {
-    const { data, error } = await db.rpc('buat_retur_penjualan', {
-      p_ps_item_id: returSelectedItem.id,
-      p_jenis_retur: jenis,
-      p_ekor: ekor,
-      p_kg: kg,
-      p_keterangan: ket || null,
-      p_user_id: currentUser?.id || null,
+    const p_items = returSelectedItems.map(item => ({
+      ps_item_id: item.ps_item_id, jenis_retur: item.jenis_retur,
+      ekor: item.ekor, kg: item.kg, keterangan: item.keterangan || null
+    }));
+    const { data, error } = await db.rpc('buat_retur_penjualan_batch', {
+      p_items, p_user_id: currentUser?.id || null,
     });
     if(error) throw error;
     if(!data?.ok){ toast('Gagal: ' + data?.msg, 'error', 6000); return; }
 
-    toast(`✅ ${data.retur_code} tersimpan — siap dicetak & dikirim ke Chiller`, 'success', 5000);
+    toast(`✅ ${data.items.length} item retur tersimpan — siap dicetak & dikirim ke Chiller`, 'success', 5000);
     closeModalRetur();
-    openReturSlipPrint({ ...data, jenis_retur: jenis, ekor, kg, keterangan: ket });
+    openReturSlipPrint({ ps_code: data.ps_code, nama_pelanggan: data.nama_pelanggan }, data.items);
     await loadReturList();
   } catch(e){
     toast('Gagal simpan: ' + e.message, 'error');
@@ -1759,36 +1789,54 @@ async function submitBuatRetur(){
   }
 }
 
-/* ---------- PRINT RETUR SLIP (reuse #modal-detail) ---------- */
-function openReturSlipPrint(r){
+/* ---------- PRINT RETUR SLIP (reuse #modal-detail) — 1 slip, bisa banyak item ---------- */
+function openReturSlipPrint(header, items){
   const tglFmt = new Date().toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'});
-  document.getElementById('detail-modal-title').textContent = `Retur Slip — ${r.retur_code}`;
+  const kodeGabungan = items.map(i => i.retur_code).join(', ');
+  const totalEkor = items.reduce((s,i) => s + (+i.ekor||0), 0);
+  const totalKg   = items.reduce((s,i) => s + (+i.kg||0), 0);
+
+  document.getElementById('detail-modal-title').textContent = `Retur Slip — ${kodeGabungan}`;
   document.getElementById('detail-modal-body').innerHTML = `
     <div class="print-sheet">
-      <h2 style="font-size:18px;font-weight:900;margin-bottom:12px">Retur Slip — ${r.retur_code}</h2>
+      <h2 style="font-size:18px;font-weight:900;margin-bottom:12px">Retur Slip — ${kodeGabungan}</h2>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:16px;font-size:13px">
         <div><strong>Tanggal:</strong> ${tglFmt}</div>
-        <div><strong>Picking Slip Asal:</strong> ${r.ps_code || '—'}</div>
-        <div><strong>Customer:</strong> ${r.nama_pelanggan || '—'}</div>
-        <div><strong>Jenis Retur:</strong> ${JENIS_RETUR_LABEL[r.jenis_retur] || r.jenis_retur}</div>
-        <div><strong>Keranjang Asal:</strong> ${r.basket_asal_code || '—'}</div>
-        <div><strong>Item:</strong> ${r.nama_produk || '—'}</div>
+        <div><strong>Picking Slip Asal:</strong> ${header.ps_code || '—'}</div>
+        <div><strong>Customer:</strong> ${header.nama_pelanggan || '—'}</div>
+        <div></div>
       </div>
       <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px">
         <thead>
           <tr style="background:#f3f4f6">
-            <th style="text-align:left;padding:7px 10px;border:1px solid #d1d5db">Ekor</th>
-            <th style="text-align:left;padding:7px 10px;border:1px solid #d1d5db">Kg</th>
+            <th style="text-align:left;padding:7px 10px;border:1px solid #d1d5db">Kode Retur</th>
+            <th style="text-align:left;padding:7px 10px;border:1px solid #d1d5db">Keranjang Asal</th>
+            <th style="text-align:left;padding:7px 10px;border:1px solid #d1d5db">Item</th>
+            <th style="text-align:left;padding:7px 10px;border:1px solid #d1d5db">Jenis</th>
+            <th style="text-align:right;padding:7px 10px;border:1px solid #d1d5db">Ekor</th>
+            <th style="text-align:right;padding:7px 10px;border:1px solid #d1d5db">Kg</th>
+            <th style="text-align:left;padding:7px 10px;border:1px solid #d1d5db">Keterangan</th>
           </tr>
         </thead>
         <tbody>
+          ${items.map(i => `
           <tr>
-            <td style="padding:7px 10px;border:1px solid #d1d5db">${r.ekor}</td>
-            <td style="padding:7px 10px;border:1px solid #d1d5db">${(+r.kg).toFixed(2)}</td>
+            <td style="padding:7px 10px;border:1px solid #d1d5db;font-family:monospace">${i.retur_code}</td>
+            <td style="padding:7px 10px;border:1px solid #d1d5db;font-family:monospace">${i.basket_asal_code||'—'}</td>
+            <td style="padding:7px 10px;border:1px solid #d1d5db">${i.nama_produk||'—'}</td>
+            <td style="padding:7px 10px;border:1px solid #d1d5db">${JENIS_RETUR_LABEL[i.jenis_retur]||i.jenis_retur}</td>
+            <td style="text-align:right;padding:7px 10px;border:1px solid #d1d5db">${i.ekor}</td>
+            <td style="text-align:right;padding:7px 10px;border:1px solid #d1d5db">${(+i.kg).toFixed(2)}</td>
+            <td style="padding:7px 10px;border:1px solid #d1d5db;font-size:12px">${i.keterangan||'—'}</td>
+          </tr>`).join('')}
+          <tr style="font-weight:900;background:#f9fafb">
+            <td colspan="4" style="padding:7px 10px;border:1px solid #d1d5db">TOTAL</td>
+            <td style="text-align:right;padding:7px 10px;border:1px solid #d1d5db">${totalEkor}</td>
+            <td style="text-align:right;padding:7px 10px;border:1px solid #d1d5db">${totalKg.toFixed(2)}</td>
+            <td style="padding:7px 10px;border:1px solid #d1d5db"></td>
           </tr>
         </tbody>
       </table>
-      ${r.keterangan ? `<div style="font-size:13px;margin-bottom:16px"><strong>Keterangan:</strong> ${r.keterangan}</div>` : ''}
       <div style="font-size:12px;color:#6b7280;margin-bottom:24px">Surat jalan ini menyertai barang fisik ke Chiller untuk diverifikasi & diterima. Belum ada keranjang/label baru — akan dibuat oleh Chiller saat barang diterima.</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:32px;font-size:13px">
         <div style="text-align:center">
@@ -1812,8 +1860,8 @@ async function loadReturList(){
   const { data, error } = await db
     .from('retur_penjualan')
     .select(`
-      id, retur_code, jenis_retur, ekor_dicatat, kg_dicatat, ekor_diterima, kg_diterima,
-      basket_asal_code, nama_produk, nama_pelanggan, status, resolusi_final, catatan_review,
+      id, retur_code, batch_id, jenis_retur, ekor_dicatat, kg_dicatat, ekor_diterima, kg_diterima,
+      basket_asal_code, nama_produk, nama_pelanggan, keterangan, status, resolusi_final, catatan_review,
       picking_slips(ps_code),
       baskets!retur_penjualan_basket_final_id_fkey(basket_code)
     `)
@@ -1825,6 +1873,7 @@ async function loadReturList(){
   if(error){ console.warn('loadReturList:', error); return; }
 
   const rows = data || [];
+  returListRows = rows;
   pill.textContent = `${rows.length} retur`;
   const menunggu = rows.filter(r => r.status === 'MENUNGGU_SUPERVISOR').length;
   pill.className = menunggu ? 'panel-pill warn' : 'panel-pill info';
@@ -1862,9 +1911,34 @@ async function loadReturList(){
         <td style="text-align:right">${ekorTampil} ekor<br>${(+kgTampil).toFixed(2)} kg</td>
         <td><span class="badge ${RETUR_STATUS_BADGE[r.status]||'badge-draft'}">${RETUR_STATUS_LABEL[r.status]||r.status}</span></td>
         <td>${basketBaru}</td>
-        <td>${aksi}</td>
+        <td>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            <button class="btn btn-ghost btn-sm" onclick="reprintReturSlip('${r.id}')" title="Cetak ulang Retur Slip">🖨️ Slip</button>
+            ${aksi === '—' ? '' : aksi}
+          </div>
+        </td>
       </tr>`;
   }).join('');
+}
+
+/* ---------- REPRINT RETUR SLIP ---------- */
+function reprintReturSlip(returId){
+  const r = returListRows.find(x => x.id === returId);
+  if(!r){ toast('Data retur tidak ditemukan, coba refresh dulu.', 'error'); return; }
+  const batchRows = returListRows.filter(x => x.batch_id === r.batch_id);
+  const items = batchRows.map(x => ({
+    retur_code: x.retur_code,
+    jenis_retur: x.jenis_retur,
+    basket_asal_code: x.basket_asal_code,
+    nama_produk: x.nama_produk,
+    ekor: x.ekor_dicatat,
+    kg: x.kg_dicatat,
+    keterangan: x.keterangan,
+  }));
+  openReturSlipPrint({
+    ps_code: r.picking_slips?.ps_code || '—',
+    nama_pelanggan: r.nama_pelanggan,
+  }, items);
 }
 
 /* ---------- APPROVE / REJECT RETUR (Supervisor) ---------- */
