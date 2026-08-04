@@ -452,7 +452,7 @@ a{text-decoration:none}
                 <input type="text" class="scan-input" id="scan-masuk-input"
                        placeholder="Scan QR / ketik kode keranjang…"
                        autocomplete="off"
-                       onkeydown="if(event.key==='Enter'){clearTimeout(scanMasukTimer);doScanMasuk();}"
+                       onkeydown="if(event.key==='Enter'){event.preventDefault();clearTimeout(scanMasukTimer);doScanMasuk();}"
                        oninput="onScanMasukInput(this.value)">
               </div>
               <div class="scan-hint">Arahkan barcode reader ke QR label keranjang — otomatis terbaca, atau tekan Enter</div>
@@ -1782,6 +1782,7 @@ function clearScanMasukResult() {
 // tombol Enter, kita juga auto-trigger scan setelah jeda singkat (scanner
 // mengetik jauh lebih cepat daripada manusia).
 let scanMasukTimer = null;
+let scanMasukLastRun = 0;
 function onScanMasukInput(val) {
   clearTimeout(scanMasukTimer);
   // Abaikan event input kosong (mis. sisa 'Enter' penutup dari scanner
@@ -1795,6 +1796,12 @@ async function doScanMasuk() {
   const input = document.getElementById('scan-masuk-input');
   const code  = input.value.trim();
   if (!code) return;
+  // Abaikan pemanggilan ulang yang menyusul terlalu cepat (mis. Enter ganda,
+  // atau event input susulan yang telat diproses browser) — supaya proses
+  // duplikat tidak menimpa/menghapus hasil scan yang baru saja tampil.
+  const now = Date.now();
+  if (now - scanMasukLastRun < 300) return;
+  scanMasukLastRun = now;
   const r = document.getElementById('scan-masuk-result');
 
   // Cari movement PENDING dengan basket_code tsb

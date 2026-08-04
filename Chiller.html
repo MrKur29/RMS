@@ -478,7 +478,7 @@ a{text-decoration:none}
               <input type="text" class="scan-input" id="scan-masuk-input"
                      placeholder="Scan QR / ketik kode keranjang…"
                      autocomplete="off"
-                     onkeydown="if(event.key==='Enter'){clearTimeout(scanMasukTimer);doScanMasuk();}"
+                     onkeydown="if(event.key==='Enter'){event.preventDefault();clearTimeout(scanMasukTimer);doScanMasuk();}"
                      oninput="onScanMasukInput(this.value)">
             </div>
             <div class="scan-hint">Arahkan barcode reader ke QR label — otomatis terbaca, atau tekan Enter</div>
@@ -501,7 +501,7 @@ a{text-decoration:none}
               <input type="text" class="scan-input" id="scan-keluar-input"
                      placeholder="Scan QR keranjang yang akan dipindah…"
                      autocomplete="off"
-                     onkeydown="if(event.key==='Enter'){clearTimeout(scanKeluarTimer);doScanKeluar();}"
+                     onkeydown="if(event.key==='Enter'){event.preventDefault();clearTimeout(scanKeluarTimer);doScanKeluar();}"
                      oninput="onScanKeluarInput(this.value)">
             </div>
             <div class="scan-hint">Scan keranjang di Chiller — otomatis terbaca, atau tekan Enter, lalu pilih tujuan Parting / Boneless / Blasting</div>
@@ -2013,6 +2013,8 @@ function clearScanResult(resultId) {
 // tombol Enter, kita juga auto-trigger scan setelah jeda singkat (scanner
 // mengetik jauh lebih cepat daripada manusia).
 let scanMasukTimer = null;
+let scanMasukLastRun = 0;
+let scanMasukGen = 0;
 function onScanMasukInput(val) {
   clearTimeout(scanMasukTimer);
   // Abaikan event input kosong (mis. sisa 'Enter' penutup dari scanner
@@ -2023,6 +2025,8 @@ function onScanMasukInput(val) {
 }
 
 let scanKeluarTimer = null;
+let scanKeluarLastRun = 0;
+let scanKeluarGen = 0;
 function onScanKeluarInput(val) {
   clearTimeout(scanKeluarTimer);
   if (!val || !val.trim()) return;
@@ -2034,6 +2038,14 @@ async function doScanMasuk() {
   const inp  = document.getElementById('scan-masuk-input');
   const code = inp.value.trim().toUpperCase();
   if (!code) return;
+  // Abaikan pemanggilan ulang yang menyusul terlalu cepat (mis. Enter ganda,
+  // atau event input susulan yang telat diproses browser) — dan pastikan
+  // hanya hasil dari scan TERBARU yang boleh dirender (fetch ini pakai await,
+  // jadi scan susulan bisa "menyalip" sebelum fetch lama selesai).
+  const now = Date.now();
+  if (now - scanMasukLastRun < 300) return;
+  scanMasukLastRun = now;
+  const myGen = ++scanMasukGen;
 
   const resEl    = document.getElementById('scan-masuk-result');
   const codeEl   = document.getElementById('smr-code');
@@ -2051,6 +2063,10 @@ async function doScanMasuk() {
       .select('id, basket_code, lokasi, status, qty_sisa, kg_sisa, batch_id, product_master(nama_produk,product_code,grade), live_chicken_batches(batch_code)')
       .eq('basket_code', code).maybeSingle();
 
+    // Scan baru sudah menyalip (misal user/scanner memicu pemindaian lagi
+    // sebelum fetch ini selesai) — buang hasil basi ini, jangan dirender.
+    if (myGen !== scanMasukGen) return;
+
     if (!basket) {
       resEl.className = 'scan-result scan-err';
       detailEl.innerHTML = '❌ Keranjang tidak ditemukan dalam sistem.';
@@ -2061,6 +2077,8 @@ async function doScanMasuk() {
       .select('id, dari_lokasi, ke_lokasi, qty_pindah, kg_pindah, status')
       .eq('basket_id', basket.id).eq('ke_lokasi', 'CHILLER').eq('status', 'PENDING')
       .maybeSingle();
+
+    if (myGen !== scanMasukGen) return;
 
     const pm  = basket.product_master;
     const lcb = basket.live_chicken_batches;
@@ -2110,6 +2128,12 @@ async function doScanKeluar() {
   const inp  = document.getElementById('scan-keluar-input');
   const code = inp.value.trim().toUpperCase();
   if (!code) return;
+  // Sama seperti doScanMasuk: cegah pemanggilan ulang terlalu cepat, dan
+  // pastikan hanya hasil fetch dari scan TERBARU yang boleh dirender.
+  const now = Date.now();
+  if (now - scanKeluarLastRun < 300) return;
+  scanKeluarLastRun = now;
+  const myGen = ++scanKeluarGen;
 
   const resEl    = document.getElementById('scan-keluar-result');
   const codeEl   = document.getElementById('skr-code');
@@ -2126,6 +2150,8 @@ async function doScanKeluar() {
     const { data: basket } = await db.from('baskets')
       .select('id, basket_code, lokasi, status, qty_sisa, kg_sisa, batch_id, tanggal_produksi, product_master(nama_produk,product_code,grade), live_chicken_batches(batch_code)')
       .eq('basket_code', code).maybeSingle();
+
+    if (myGen !== scanKeluarGen) return;
 
     if (!basket) {
       resEl.className = 'scan-result scan-err';
