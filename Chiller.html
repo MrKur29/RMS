@@ -648,6 +648,36 @@ a{text-decoration:none}
       </div>
 
       <!-- ============================================================ -->
+      <!-- SECTION 4C: RETUR PELANGGAN — MENUNGGU DITERIMA -->
+      <!-- ============================================================ -->
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title">↩️ Retur Pelanggan — Menunggu Diterima</div>
+          <div class="panel-actions">
+            <span class="panel-pill" id="pill-retur-count">0 retur</span>
+          </div>
+        </div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>Kode Retur</th>
+                <th>Produk Asal</th>
+                <th>Jenis</th>
+                <th>Ekor / Kg Dicatat</th>
+                <th>Keterangan</th>
+                <th>Waktu Kirim</th>
+                <th>Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-retur-masuk">
+              <tr><td colspan="7"><div class="empty"><div class="e-icon">↩️</div>Tidak ada retur pelanggan menunggu diterima</div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
       <!-- SECTION 4: RIWAYAT KELUAR (full-width) -->
       <!-- ============================================================ -->
       <div class="panel">
@@ -852,6 +882,38 @@ a{text-decoration:none}
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('modal-pindah')">Batal</button>
       <button class="btn btn-primary" id="mp-btn-ok" onclick="doPindahKeluar()">📤 Pindah Keluar</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ==================== MODAL: TERIMA RETUR PELANGGAN ==================== -->
+<div class="modal-overlay" id="modal-retur-terima">
+  <div class="modal-box modal-sm">
+    <div class="modal-title">↩️ Terima Retur Pelanggan</div>
+    <div class="modal-desc">Catat jumlah yang benar-benar diterima secara fisik — bisa beda dari yang dicatat Loading.</div>
+    <div class="modal-info-box">
+      <div class="modal-info-row"><span class="modal-info-label">Kode Retur</span><span class="modal-info-val" id="rt-code">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Produk</span><span class="modal-info-val" id="rt-produk">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Jenis</span><span class="modal-info-val" id="rt-jenis">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Dicatat Loading</span><span class="modal-info-val" id="rt-dicatat">—</span></div>
+    </div>
+    <div class="form-group">
+      <label>Ekor Diterima <span style="color:#dc2626">*</span></label>
+      <input type="text" inputmode="numeric" pattern="[0-9]*" id="rt-ekor-diterima">
+    </div>
+    <div class="form-group">
+      <label>Kg Diterima <span style="color:#dc2626">*</span></label>
+      <input type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" id="rt-kg-diterima">
+    </div>
+    <div class="form-group" style="margin-bottom:0">
+      <label>Catatan Kondisi Fisik (Opsional)</label>
+      <textarea id="rt-catatan" placeholder="Kondisi barang saat diterima…" rows="2"></textarea>
+    </div>
+    <div id="rt-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-top:8px;display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-retur-terima')">Batal</button>
+      <button class="btn btn-green" id="rt-btn-ok" onclick="doTerimaRetur()">✅ Terima</button>
     </div>
   </div>
 </div>
@@ -1430,7 +1492,8 @@ async function loadAll() {
     loadPendingMasuk(),
     loadChillerStok(),
     loadKeluarHariIni(),
-    loadBpkAntrian()
+    loadBpkAntrian(),
+    loadReturMasuk()
   ]);
   // Laporan dirender dari data yang sudah ada
   renderLaporanProduk();
@@ -1549,6 +1612,106 @@ async function bpkKonfirmasiSemua() {
   loadBpkAntrian();
 }
 
+// ---- RETUR PELANGGAN — MENUNGGU DITERIMA ----
+const RT_JENIS_LABEL = {
+  RUSAK_CACAT: 'Rusak/Cacat', KOMPLAIN_KUALITAS: 'Komplain Kualitas',
+  SALAH_KIRIM: 'Salah Kirim', KELEBIHAN_KIRIM: 'Kelebihan Kirim'
+};
+let returMasukList = [];
+
+async function loadReturMasuk() {
+  const { data, error } = await db.from('retur_penjualan')
+    .select('id,retur_code,jenis_retur,ekor_dicatat,kg_dicatat,keterangan,nama_produk,diajukan_at')
+    .eq('status', 'DIKIRIM')
+    .order('diajukan_at', { ascending: true });
+  if(error){ console.error('loadReturMasuk:', error); return; }
+  returMasukList = data || [];
+  renderReturMasuk();
+}
+
+function renderReturMasuk() {
+  const tbody = document.getElementById('tbody-retur-masuk');
+  const pill  = document.getElementById('pill-retur-count');
+  pill.textContent = `${returMasukList.length} retur`;
+  pill.className = `panel-pill ${returMasukList.length > 0 ? 'alert' : 'ok'}`;
+
+  if(!returMasukList.length){
+    tbody.innerHTML = '<tr><td colspan="7"><div class="empty"><div class="e-icon">↩️</div>Tidak ada retur pelanggan menunggu diterima</div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = returMasukList.map(r => {
+    const waktu = new Date(r.diajukan_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'});
+    return `<tr>
+      <td style="font-family:monospace;font-weight:700;color:#2563eb">${r.retur_code}</td>
+      <td>${r.nama_produk}</td>
+      <td>${RT_JENIS_LABEL[r.jenis_retur] || r.jenis_retur}</td>
+      <td>${r.ekor_dicatat} ekor / ${parseFloat(r.kg_dicatat).toFixed(2)} kg</td>
+      <td>${r.keterangan || '<span style="color:#d1d5db">—</span>'}</td>
+      <td>${waktu}</td>
+      <td><button class="btn btn-green btn-sm" onclick="openTerimaRetur('${r.id}')">✅ Terima</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function openTerimaRetur(id) {
+  const r = returMasukList.find(x => x.id === id);
+  if(!r) return;
+  document.getElementById('rt-btn-ok')._returId = r.id;
+  document.getElementById('rt-code').textContent = r.retur_code;
+  document.getElementById('rt-produk').textContent = r.nama_produk;
+  document.getElementById('rt-jenis').textContent = RT_JENIS_LABEL[r.jenis_retur] || r.jenis_retur;
+  document.getElementById('rt-dicatat').textContent = `${r.ekor_dicatat} ekor / ${parseFloat(r.kg_dicatat).toFixed(2)} kg`;
+  document.getElementById('rt-ekor-diterima').value = r.ekor_dicatat;
+  document.getElementById('rt-kg-diterima').value = parseFloat(r.kg_dicatat).toFixed(2);
+  document.getElementById('rt-catatan').value = '';
+  document.getElementById('rt-err').style.display = 'none';
+  openModal('modal-retur-terima');
+}
+
+async function doTerimaRetur() {
+  const btn = document.getElementById('rt-btn-ok');
+  const returId = btn._returId;
+  const r = returMasukList.find(x => x.id === returId);
+  const errEl = document.getElementById('rt-err');
+  errEl.style.display = 'none';
+  const ekor = parseInt(document.getElementById('rt-ekor-diterima').value) || 0;
+  const kg   = parseFloat((document.getElementById('rt-kg-diterima').value||'').replace(',','.')) || 0;
+  const catatan = document.getElementById('rt-catatan').value.trim();
+  if(ekor <= 0 || kg <= 0){ errEl.textContent = 'Ekor dan Kg diterima harus lebih dari 0.'; errEl.style.display='block'; return; }
+
+  btn.disabled = true; btn.textContent = 'Memproses…';
+  try {
+    const { data, error } = await db.rpc('terima_retur_penjualan', {
+      p_retur_id: returId,
+      p_ekor_diterima: ekor,
+      p_kg_diterima: kg,
+      p_catatan: catatan || null,
+      p_user_id: currentUser.id,
+    });
+    if(error) throw error;
+    if(!data?.ok){ errEl.textContent = 'Gagal: ' + data?.msg; errEl.style.display='block'; return; }
+
+    closeModal('modal-retur-terima');
+    if(data.butuh_cetak_label && r){
+      RPALabel.printStandardLabel({
+        code: data.basket_code,
+        namaProduk: r.nama_produk,
+        qtyText: `${ekor} ekor`, kgText: `${kg.toFixed(2)} kg`,
+        tglText: new Date().toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}),
+        refLabel: 'Retur', refValue: r.retur_code
+      });
+      showToast(`${r.retur_code} diterima — keranjang ${data.basket_code} dibuat & label dicetak`, 'success');
+    } else {
+      showToast(`${r?.retur_code || ''} diterima — menunggu approval Supervisor di modul Penjualan`, 'success');
+    }
+    await Promise.all([loadReturMasuk(), loadChillerStok()]);
+  } catch(e) {
+    errEl.textContent = 'Gagal: ' + e.message; errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = '✅ Terima';
+  }
+}
+
 async function loadPendingMasuk() {
   // Tampilkan SEMUA movement PENDING ke CHILLER (tidak filter batch)
   const { data, error } = await db.from('basket_movements')
@@ -1570,17 +1733,35 @@ async function loadPendingMasuk() {
 async function loadChillerStok() {
   // tanggal_produksi = tgl pemotongan (dari batch), dipakai untuk hitung umur produk
   // masuk_chiller_at tetap di-fetch untuk info display di modal (kapan masuk Chiller)
-  const { data, error } = await db.from('baskets')
-    .select(`
-      id, basket_code, lokasi, status, qty_sisa, kg_sisa, batch_id, tanggal_produksi,
-      product_master ( nama_produk, product_code, grade, kg_min, kg_max ),
-      live_chicken_batches ( batch_code ),
-      basket_movements ( ke_lokasi, status, created_at )
-    `)
-    .eq('lokasi', 'CHILLER')
-    .eq('status', 'AKTIF');
+  //
+  // PENTING: PostgREST/Supabase membatasi setiap request maksimal 1000 baris
+  // secara default. Kalau stok aktif di Chiller sudah lewat 1000 keranjang,
+  // query tanpa .range() diam-diam terpotong di baris ke-1000 — keranjang yang
+  // baru (termasuk hasil Retur Penjualan) bisa jadi tidak ikut kebawa kalau
+  // urutan defaultnya kebetulan menaruhnya di luar batas itu. Fix: fetch
+  // bertahap per 1000 baris (di-urutkan pakai id supaya konsisten antar
+  // request) sampai batch terakhir kembali lebih pendek dari PAGE_SIZE.
+  const PAGE_SIZE = 1000;
+  let data = [];
+  let from = 0;
+  while (true) {
+    const { data: page, error } = await db.from('baskets')
+      .select(`
+        id, basket_code, lokasi, status, qty_sisa, kg_sisa, batch_id, tanggal_produksi,
+        product_master ( nama_produk, product_code, grade, kg_min, kg_max ),
+        live_chicken_batches ( batch_code ),
+        basket_movements ( ke_lokasi, status, created_at )
+      `)
+      .eq('lokasi', 'CHILLER')
+      .eq('status', 'AKTIF')
+      .order('id', { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
 
-  if (error) { console.error('loadChillerStok:', error); return; }
+    if (error) { console.error('loadChillerStok:', error); return; }
+    data = data.concat(page || []);
+    if (!page || page.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
 
   // Tetap hitung masuk_chiller_at untuk ditampilkan di modal detail / pindah
   const processed = (data || []).map(b => {

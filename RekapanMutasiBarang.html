@@ -533,6 +533,22 @@ async function computeSaldoKumulatif(cutoffDate){
       })
   );
 
+  // 4b) Retur dari Pelanggan — basket baru lahir langsung ke CHILLER saat retur
+  // diterima/disetujui (lihat migration 68). RETUR->MUSNAH (Catat Barang Rusak)
+  // SENGAJA tidak diikutkan di sini — barang itu tidak pernah masuk stok jual,
+  // konsisten dengan MUSNAH dari produksi karkas yang juga tidak dapat sumber
+  // "masuk" tersendiri di rekap ini.
+  tasks.push(
+    db.from('basket_movements')
+      .select('qty_pindah,kg_pindah,confirmed_at,baskets!inner(product_id)')
+      .eq('dari_lokasi','RETUR').eq('ke_lokasi','CHILLER').eq('status','CONFIRMED')
+      .lte('confirmed_at', toBound)
+      .then(({data,error})=>{
+        if(error){console.error('kumulatif retur',error);return}
+        (data||[]).forEach(m=>bump(masuk, m.baskets?.product_id, m.qty_pindah, m.kg_pindah));
+      })
+  );
+
   // 5) Konsumsi ke Work Order (semua tipe — Parting/Boneless/Marinasi/MULTI)
   tasks.push(
     db.from('processing_inputs')
@@ -572,7 +588,7 @@ async function computeSaldoKumulatif(cutoffDate){
 async function computePeriodBreakdown(fromDate, toDate){
   const fromBound = boundStart(fromDate), toBound = boundEnd(toDate);
   const buckets = {
-    karkas_in:{}, parting_in:{}, boneless_in:{}, marinasi_in:{}, thawing_in:{},
+    karkas_in:{}, parting_in:{}, boneless_in:{}, marinasi_in:{}, thawing_in:{}, retur_in:{},
     parting_out:{}, boneless_out:{}, marinasi_out:{}, jual_out:{}, selisih_out:{}
   };
   const tasks = [];
@@ -632,6 +648,20 @@ async function computePeriodBreakdown(fromDate, toDate){
     );
   });
 
+  // Masuk: Retur dari Pelanggan (RETUR -> CHILLER, lihat migration 68). RETUR ->
+  // MUSNAH (Catat Barang Rusak) sengaja tidak diikutkan — lihat catatan di
+  // computeSaldoKumulatif().
+  tasks.push(
+    db.from('basket_movements')
+      .select('qty_pindah,kg_pindah,confirmed_at,baskets!inner(product_id)')
+      .eq('dari_lokasi','RETUR').eq('ke_lokasi','CHILLER').eq('status','CONFIRMED')
+      .gte('confirmed_at', fromBound).lte('confirmed_at', toBound)
+      .then(({data,error})=>{
+        if(error){console.error('period retur_in',error);return}
+        (data||[]).forEach(m=>bump(buckets.retur_in, m.baskets?.product_id, m.qty_pindah, m.kg_pindah));
+      })
+  );
+
   // Keluar: Jual (Loading -> Sold, sudah net dari retur/selisih dock)
   tasks.push(
     db.from('basket_movements')
@@ -687,7 +717,7 @@ async function tampilkanRekap(){
       ...Object.keys(saldoAwalMap),
       ...Object.keys(periode.karkas_in), ...Object.keys(periode.parting_in),
       ...Object.keys(periode.boneless_in), ...Object.keys(periode.marinasi_in),
-      ...Object.keys(periode.thawing_in),
+      ...Object.keys(periode.thawing_in), ...Object.keys(periode.retur_in),
       ...Object.keys(periode.parting_out), ...Object.keys(periode.boneless_out),
       ...Object.keys(periode.marinasi_out), ...Object.keys(periode.jual_out),
       ...Object.keys(periode.selisih_out)
@@ -714,7 +744,7 @@ async function tampilkanRekap(){
         boneless: periode.boneless_in[pid] || {qty:0,kg:0},
         marinasi: periode.marinasi_in[pid] || {qty:0,kg:0},
         thawing:  periode.thawing_in[pid]  || {qty:0,kg:0},
-        retur:    {qty:0,kg:0} // fitur Retur dari Pelanggan belum tersedia
+        retur:    periode.retur_in[pid]    || {qty:0,kg:0} // migration 68, RETUR->CHILLER saja
       };
       const keluar = {
         parting:  periode.parting_out[pid]  || {qty:0,kg:0},

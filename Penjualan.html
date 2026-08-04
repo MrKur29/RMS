@@ -7,6 +7,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="permissions.js"></script>
 <script src="viewstate.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="labelPrint.js"></script>
 <style>
 /* ===== RESET & BASE ===== */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -131,7 +133,7 @@ a{text-decoration:none}
 /* ===== MODAL ===== */
 .modal-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:center;justify-content:center}
 .modal-backdrop.open{display:flex}
-.modal-box{background:white;border-radius:14px;width:680px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.25)}
+.modal-box{background:white;border-radius:14px;width:680px;max-width:95vw;max-height:90vh;overflow-y:auto;overflow-x:hidden;box-shadow:0 20px 60px rgba(0,0,0,.25)}
 .modal-head{display:flex;align-items:center;justify-content:space-between;padding:18px 20px;border-bottom:1px solid #f3f4f6}
 .modal-title{font-size:16px;font-weight:800;color:#111827}
 .modal-close{background:none;border:none;font-size:20px;color:#9ca3af;cursor:pointer;padding:4px;line-height:1}
@@ -475,8 +477,130 @@ a{text-decoration:none}
           </div>
         </div>
 
+        <!-- RETUR PENJUALAN PELANGGAN -->
+        <div class="panel no-print">
+          <div class="panel-head">
+            <div class="panel-title">↩️ Retur Penjualan Pelanggan</div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <div id="retur-count-pill" class="panel-pill info">0 retur</div>
+              <button class="btn-refresh" onclick="loadReturList()">🔄</button>
+            </div>
+          </div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>Kode Retur</th>
+                  <th>PS / Customer</th>
+                  <th>Item Asal</th>
+                  <th>Jenis</th>
+                  <th>Ekor / Kg</th>
+                  <th>Status</th>
+                  <th>Keranjang Baru</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="retur-tbody">
+                <tr><td colspan="8"><div class="empty-state"><div class="es-icon">↩️</div><p>Belum ada retur</p></div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
       </div><!-- /content-area -->
     </div><!-- /main-area -->
+  </div>
+</div>
+
+<!-- ============================================================
+     MODAL: BUAT RETUR PENJUALAN
+     ============================================================ -->
+<div class="modal-backdrop" id="modal-retur">
+  <div class="modal-box" style="width:640px">
+    <div class="modal-head">
+      <div class="modal-title">↩️ Buat Retur Penjualan</div>
+      <button class="modal-close" onclick="closeModalRetur()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="margin-bottom:8px;font-size:12px;font-weight:700;color:#374151">PILIH ITEM YANG DIRETUR:</div>
+      <div id="retur-item-picker" style="max-height:160px;overflow-y:auto;border:1.5px solid #e5e7eb;border-radius:8px;margin-bottom:14px">
+        <div style="padding:16px;text-align:center;color:#9ca3af;font-size:12px">Memuat item…</div>
+      </div>
+
+      <div id="retur-form-fields" style="display:none">
+        <div class="form-row full">
+          <div class="form-field">
+            <label>Jenis Retur *</label>
+            <select id="retur-jenis">
+              <option value="">— Pilih Jenis —</option>
+              <option value="RUSAK_CACAT">Rusak / Cacat</option>
+              <option value="KOMPLAIN_KUALITAS">Komplain Kualitas</option>
+              <option value="SALAH_KIRIM">Salah Kirim</option>
+              <option value="KELEBIHAN_KIRIM">Kelebihan Kirim</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-field">
+            <label>Ekor *</label>
+            <input type="number" id="retur-ekor" min="0">
+          </div>
+          <div class="form-field">
+            <label>Kg *</label>
+            <input type="number" id="retur-kg" min="0" step="0.01">
+          </div>
+        </div>
+        <div class="form-row full">
+          <div class="form-field">
+            <label>Keterangan</label>
+            <textarea id="retur-keterangan" rows="2" placeholder="Opsional…"></textarea>
+          </div>
+        </div>
+        <div style="font-size:11px;color:#9ca3af">Setelah disimpan, Retur Slip akan langsung siap dicetak sebagai surat jalan ke Chiller.</div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModalRetur()">Batal</button>
+      <button class="btn btn-primary" id="btn-simpan-retur" onclick="submitBuatRetur()">💾 Simpan & Cetak Slip</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     MODAL: RESOLUSI RETUR (Supervisor) — Revisi Item / Catat Rusak
+     ============================================================ -->
+<div class="modal-backdrop" id="modal-retur-resolusi">
+  <div class="modal-box modal-sm">
+    <div class="modal-head">
+      <div class="modal-title">✅ Resolusi Retur</div>
+      <button class="modal-close" onclick="closeModalReturResolusi()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="rr-info" style="font-size:12px;color:#6b7280;margin-bottom:12px"></div>
+      <div class="form-field" style="margin-bottom:10px">
+        <label>Resolusi *</label>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
+          <label style="font-size:13px;font-weight:600;color:#374151;cursor:pointer;line-height:1.4">
+            <input type="radio" name="rr-resolusi" value="REVISI_ITEM" onchange="onReturResolusiChange()" style="margin-right:6px;vertical-align:middle"><span style="vertical-align:middle">Revisi Item (turun grade)</span>
+          </label>
+          <label style="font-size:13px;font-weight:600;color:#374151;cursor:pointer;line-height:1.4">
+            <input type="radio" name="rr-resolusi" value="CATAT_RUSAK" onchange="onReturResolusiChange()" style="margin-right:6px;vertical-align:middle"><span style="vertical-align:middle">Catat Barang Rusak (musnah)</span>
+          </label>
+        </div>
+      </div>
+      <div class="form-field" id="rr-produk-row" style="display:none;margin-bottom:10px">
+        <label>Produk Pengganti *</label>
+        <select id="rr-produk-revisi"><option value="">— Pilih Produk —</option></select>
+      </div>
+      <div class="form-field">
+        <label>Catatan Review</label>
+        <textarea id="rr-catatan" rows="2" placeholder="Opsional…"></textarea>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModalReturResolusi()">Batal</button>
+      <button class="btn btn-primary" onclick="lanjutkanApproveRetur()">Lanjutkan →</button>
+    </div>
   </div>
 </div>
 
@@ -776,7 +900,7 @@ function startApp(){
     document.getElementById('filter-tanggal').value = today;
   }
   RPA_STATE.bindScroll('Penjualan');
-  Promise.all([loadMasters(), loadPickingSlips(), loadPendingMovements(), loadLoadingStock(), loadSelisihPending()]);
+  Promise.all([loadMasters(), loadPickingSlips(), loadPendingMovements(), loadLoadingStock(), loadSelisihPending(), loadReturList(), loadProductsAktif()]);
 }
 
 // Auto-login dari localStorage
@@ -912,6 +1036,7 @@ function renderPsTable(rows){
         <div style="display:flex;gap:6px">
           <button class="btn btn-ghost btn-sm" onclick="openDetail('${ps.id}')">👁 Detail</button>
           ${ps.status==='DRAFT' ? `<button class="btn btn-success btn-sm" onclick="confirmPs('${ps.id}')">✓ Confirm</button>` : ''}
+          ${ps.status==='CONFIRMED' ? `<button class="btn btn-ghost btn-sm" onclick="openRetur('${ps.id}')">↩️ Retur</button>` : ''}
         </div>
       </td>
     </tr>
@@ -1513,6 +1638,301 @@ function prosesSelisih(selisihId, approve){
       if(!data?.ok){ toast('Gagal: ' + data?.msg, 'error'); return; }
       toast(approve ? '✅ Selisih disetujui & dicatat' : '🚫 Selisih ditolak', approve ? 'success' : 'info');
       await loadSelisihPending();
+    }
+  });
+}
+
+/* ============================================================
+   RETUR PENJUALAN PELANGGAN
+   ============================================================ */
+const JENIS_RETUR_LABEL = {
+  RUSAK_CACAT: 'Rusak/Cacat', KOMPLAIN_KUALITAS: 'Komplain Kualitas',
+  SALAH_KIRIM: 'Salah Kirim', KELEBIHAN_KIRIM: 'Kelebihan Kirim'
+};
+const RETUR_STATUS_LABEL = {
+  DIKIRIM: 'Dikirim ke Chiller', MENUNGGU_SUPERVISOR: 'Menunggu Supervisor',
+  SELESAI: 'Selesai', DITOLAK: 'Ditolak'
+};
+const RETUR_STATUS_BADGE = {
+  DIKIRIM: 'badge-draft', MENUNGGU_SUPERVISOR: 'badge-draft',
+  SELESAI: 'badge-confirmed', DITOLAK: 'badge-void'
+};
+
+let allProductsAktif = [];
+let returPsId = null;
+let returPsItems = [];
+let returSelectedItem = null;
+let returPendingApproveId = null; // dipakai antara modal-retur-resolusi -> PIN
+
+async function loadProductsAktif(){
+  const { data, error } = await db.from('product_master')
+    .select('id,product_code,nama_produk,kategori,grade').eq('aktif', true).order('nama_produk');
+  if(error){ console.warn('loadProductsAktif:', error); return; }
+  allProductsAktif = data || [];
+}
+
+/* ---------- MODAL: BUAT RETUR ---------- */
+async function openRetur(psId){
+  returPsId = psId;
+  returSelectedItem = null;
+  document.getElementById('retur-form-fields').style.display = 'none';
+  document.getElementById('retur-jenis').value = '';
+  document.getElementById('retur-ekor').value = '';
+  document.getElementById('retur-kg').value = '';
+  document.getElementById('retur-keterangan').value = '';
+
+  const picker = document.getElementById('retur-item-picker');
+  picker.innerHTML = '<div style="padding:16px;text-align:center;color:#9ca3af;font-size:12px">Memuat item…</div>';
+  document.getElementById('modal-retur').classList.add('open');
+
+  const { data, error } = await db.from('picking_slip_items').select('*').eq('ps_id', psId).order('basket_code');
+  if(error){ picker.innerHTML = `<div style="padding:16px;color:#dc2626;font-size:12px">Gagal memuat item: ${error.message}</div>`; return; }
+  returPsItems = data || [];
+  renderReturItemPicker();
+}
+function closeModalRetur(){
+  document.getElementById('modal-retur').classList.remove('open');
+}
+function renderReturItemPicker(){
+  const picker = document.getElementById('retur-item-picker');
+  if(!returPsItems.length){
+    picker.innerHTML = '<div style="padding:16px;text-align:center;color:#9ca3af;font-size:12px">Tidak ada item di Picking Slip ini</div>';
+    return;
+  }
+  picker.innerHTML = returPsItems.map(it => {
+    const active = returSelectedItem && returSelectedItem.id === it.id;
+    return `
+      <div style="display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:8px;padding:8px 12px;border-bottom:1px solid #f3f4f6;align-items:center;${active?'background:#eff6ff':''}">
+        <div>
+          <div style="font-size:12px;font-weight:700;font-family:monospace">${it.basket_code}</div>
+          <div style="font-size:11px;color:#6b7280">${it.nama_item}</div>
+        </div>
+        <div style="font-size:12px;font-weight:600">${it.qty_ekor} ekor</div>
+        <div style="font-size:12px;font-weight:600">${(+it.berat_kg).toFixed(2)} kg</div>
+        <button class="btn ${active?'btn-success':'btn-ghost'} btn-sm" onclick='selectReturItem(${JSON.stringify(it.id)})'>${active?'✓ Dipilih':'Pilih'}</button>
+      </div>`;
+  }).join('');
+}
+function selectReturItem(itemId){
+  returSelectedItem = returPsItems.find(i => i.id === itemId) || null;
+  renderReturItemPicker();
+  const fields = document.getElementById('retur-form-fields');
+  if(returSelectedItem){
+    fields.style.display = 'block';
+    document.getElementById('retur-ekor').max = returSelectedItem.qty_ekor;
+    document.getElementById('retur-kg').max = returSelectedItem.berat_kg;
+  } else {
+    fields.style.display = 'none';
+  }
+}
+async function submitBuatRetur(){
+  if(!returSelectedItem){ toast('Pilih item yang diretur dulu', 'error'); return; }
+  const jenis = document.getElementById('retur-jenis').value;
+  const ekor  = parseInt(document.getElementById('retur-ekor').value) || 0;
+  const kg    = parseFloat(document.getElementById('retur-kg').value) || 0;
+  const ket   = document.getElementById('retur-keterangan').value.trim();
+  if(!jenis){ toast('Pilih jenis retur', 'error'); return; }
+  if(ekor <= 0 || kg <= 0){ toast('Ekor dan Kg harus lebih dari 0', 'error'); return; }
+
+  const btn = document.getElementById('btn-simpan-retur');
+  btn.disabled = true; btn.textContent = 'Menyimpan…';
+  try {
+    const { data, error } = await db.rpc('buat_retur_penjualan', {
+      p_ps_item_id: returSelectedItem.id,
+      p_jenis_retur: jenis,
+      p_ekor: ekor,
+      p_kg: kg,
+      p_keterangan: ket || null,
+      p_user_id: currentUser?.id || null,
+    });
+    if(error) throw error;
+    if(!data?.ok){ toast('Gagal: ' + data?.msg, 'error', 6000); return; }
+
+    toast(`✅ ${data.retur_code} tersimpan — siap dicetak & dikirim ke Chiller`, 'success', 5000);
+    closeModalRetur();
+    openReturSlipPrint({ ...data, jenis_retur: jenis, ekor, kg, keterangan: ket });
+    await loadReturList();
+  } catch(e){
+    toast('Gagal simpan: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = '💾 Simpan & Cetak Slip';
+  }
+}
+
+/* ---------- PRINT RETUR SLIP (reuse #modal-detail) ---------- */
+function openReturSlipPrint(r){
+  const tglFmt = new Date().toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'});
+  document.getElementById('detail-modal-title').textContent = `Retur Slip — ${r.retur_code}`;
+  document.getElementById('detail-modal-body').innerHTML = `
+    <div class="print-sheet">
+      <h2 style="font-size:18px;font-weight:900;margin-bottom:12px">Retur Slip — ${r.retur_code}</h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:16px;font-size:13px">
+        <div><strong>Tanggal:</strong> ${tglFmt}</div>
+        <div><strong>Picking Slip Asal:</strong> ${r.ps_code || '—'}</div>
+        <div><strong>Customer:</strong> ${r.nama_pelanggan || '—'}</div>
+        <div><strong>Jenis Retur:</strong> ${JENIS_RETUR_LABEL[r.jenis_retur] || r.jenis_retur}</div>
+        <div><strong>Keranjang Asal:</strong> ${r.basket_asal_code || '—'}</div>
+        <div><strong>Item:</strong> ${r.nama_produk || '—'}</div>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px">
+        <thead>
+          <tr style="background:#f3f4f6">
+            <th style="text-align:left;padding:7px 10px;border:1px solid #d1d5db">Ekor</th>
+            <th style="text-align:left;padding:7px 10px;border:1px solid #d1d5db">Kg</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="padding:7px 10px;border:1px solid #d1d5db">${r.ekor}</td>
+            <td style="padding:7px 10px;border:1px solid #d1d5db">${(+r.kg).toFixed(2)}</td>
+          </tr>
+        </tbody>
+      </table>
+      ${r.keterangan ? `<div style="font-size:13px;margin-bottom:16px"><strong>Keterangan:</strong> ${r.keterangan}</div>` : ''}
+      <div style="font-size:12px;color:#6b7280;margin-bottom:24px">Surat jalan ini menyertai barang fisik ke Chiller untuk diverifikasi & diterima. Belum ada keranjang/label baru — akan dibuat oleh Chiller saat barang diterima.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:32px;font-size:13px">
+        <div style="text-align:center">
+          <div>Diserahkan (Loading)</div>
+          <div style="margin:40px 0 4px">(__________________________)</div>
+        </div>
+        <div style="text-align:center">
+          <div>Diterima (Chiller)</div>
+          <div style="margin:40px 0 4px">(__________________________)</div>
+        </div>
+      </div>
+    </div>`;
+  document.getElementById('detail-modal-foot').innerHTML = `
+    <button class="btn btn-ghost" onclick="closeModalDetail()">Tutup</button>
+    <button class="btn btn-primary" onclick="window.print()">🖨 Print</button>`;
+  document.getElementById('modal-detail').classList.add('open');
+}
+
+/* ---------- DAFTAR RETUR ---------- */
+async function loadReturList(){
+  const { data, error } = await db
+    .from('retur_penjualan')
+    .select(`
+      id, retur_code, jenis_retur, ekor_dicatat, kg_dicatat, ekor_diterima, kg_diterima,
+      basket_asal_code, nama_produk, nama_pelanggan, status, resolusi_final, catatan_review,
+      picking_slips(ps_code),
+      baskets!retur_penjualan_basket_final_id_fkey(basket_code)
+    `)
+    .order('diajukan_at', { ascending: false })
+    .limit(100);
+
+  const tbody = document.getElementById('retur-tbody');
+  const pill  = document.getElementById('retur-count-pill');
+  if(error){ console.warn('loadReturList:', error); return; }
+
+  const rows = data || [];
+  pill.textContent = `${rows.length} retur`;
+  const menunggu = rows.filter(r => r.status === 'MENUNGGU_SUPERVISOR').length;
+  pill.className = menunggu ? 'panel-pill warn' : 'panel-pill info';
+  if(menunggu) pill.textContent = `${menunggu} menunggu approval / ${rows.length} total`;
+
+  if(!rows.length){
+    tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state"><div class="es-icon">↩️</div><p>Belum ada retur</p></div></td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows.map(r => {
+    const ekorTampil = r.ekor_diterima != null ? r.ekor_diterima : r.ekor_dicatat;
+    const kgTampil    = r.kg_diterima   != null ? r.kg_diterima   : r.kg_dicatat;
+    let aksi = '—';
+    if(r.status === 'MENUNGGU_SUPERVISOR'){
+      aksi = `
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-success btn-sm" onclick="approveReturFlow('${r.id}','${(r.nama_produk||'').replace(/'/g,"\\'")}')">✓ Approve</button>
+          <button class="btn btn-ghost btn-sm" onclick="rejectReturFlow('${r.id}')">✕ Reject</button>
+        </div>`;
+    } else if(r.status === 'DITOLAK' && r.catatan_review){
+      aksi = `<span style="font-size:11px;color:#6b7280">${r.catatan_review}</span>`;
+    } else if(r.status === 'SELESAI' && r.resolusi_final){
+      aksi = `<span style="font-size:11px;color:#6b7280">${r.resolusi_final === 'REVISI_ITEM' ? 'Direvisi grade' : 'Dimusnahkan'}</span>`;
+    }
+    const basketBaru = r.baskets?.basket_code
+      ? `<strong style="font-family:monospace;color:#16a34a">${r.baskets.basket_code}</strong>`
+      : '<span style="color:#d1d5db">—</span>';
+    return `
+      <tr>
+        <td><strong style="font-family:monospace;color:#2563eb">${r.retur_code}</strong></td>
+        <td>${r.picking_slips?.ps_code || '—'}<br><span style="font-size:11px;color:#6b7280">${r.nama_pelanggan}</span></td>
+        <td>${r.basket_asal_code}<br><span style="font-size:11px;color:#6b7280">${r.nama_produk}</span></td>
+        <td>${JENIS_RETUR_LABEL[r.jenis_retur] || r.jenis_retur}</td>
+        <td style="text-align:right">${ekorTampil} ekor<br>${(+kgTampil).toFixed(2)} kg</td>
+        <td><span class="badge ${RETUR_STATUS_BADGE[r.status]||'badge-draft'}">${RETUR_STATUS_LABEL[r.status]||r.status}</span></td>
+        <td>${basketBaru}</td>
+        <td>${aksi}</td>
+      </tr>`;
+  }).join('');
+}
+
+/* ---------- APPROVE / REJECT RETUR (Supervisor) ---------- */
+function approveReturFlow(returId, namaProduk){
+  returPendingApproveId = returId;
+  document.getElementById('rr-info').textContent = `Item: ${namaProduk || '—'}`;
+  document.querySelectorAll('input[name="rr-resolusi"]').forEach(el => el.checked = false);
+  document.getElementById('rr-produk-row').style.display = 'none';
+  document.getElementById('rr-produk-revisi').innerHTML = '<option value="">— Pilih Produk —</option>' +
+    allProductsAktif.map(p => `<option value="${p.id}">${p.nama_produk}${p.grade ? ' (Grade '+p.grade+')' : ''}</option>`).join('');
+  document.getElementById('rr-catatan').value = '';
+  document.getElementById('modal-retur-resolusi').classList.add('open');
+}
+function closeModalReturResolusi(){
+  document.getElementById('modal-retur-resolusi').classList.remove('open');
+  returPendingApproveId = null;
+}
+function onReturResolusiChange(){
+  const val = document.querySelector('input[name="rr-resolusi"]:checked')?.value;
+  document.getElementById('rr-produk-row').style.display = val === 'REVISI_ITEM' ? 'block' : 'none';
+}
+function lanjutkanApproveRetur(){
+  const resolusi = document.querySelector('input[name="rr-resolusi"]:checked')?.value;
+  if(!resolusi){ toast('Pilih resolusi dulu', 'error'); return; }
+  const productRevisi = document.getElementById('rr-produk-revisi').value;
+  if(resolusi === 'REVISI_ITEM' && !productRevisi){ toast('Pilih produk pengganti', 'error'); return; }
+  const catatan = document.getElementById('rr-catatan').value.trim();
+  const returId = returPendingApproveId;
+  closeModalReturResolusi();
+
+  showSupervisorPin({
+    title: '🔑 Approve Retur',
+    desc: resolusi === 'REVISI_ITEM'
+      ? 'Menyetujui akan membuat keranjang baru dengan produk pengganti (grade turun) di Chiller.'
+      : 'Menyetujui akan membuat keranjang baru langsung berstatus dimusnahkan (tidak masuk stok jual).',
+    onConfirm: async (sup) => {
+      const { data, error } = await db.rpc('approve_retur_penjualan', {
+        p_retur_id: returId, p_user_id: sup.id, p_approve: true,
+        p_resolusi: resolusi, p_product_id_revisi: productRevisi || null, p_catatan: catatan || null,
+      });
+      if(error){ toast('Gagal: ' + error.message, 'error'); return; }
+      if(!data?.ok){ toast('Gagal: ' + data?.msg, 'error'); return; }
+      toast(`✅ Retur disetujui — keranjang ${data.basket_code} dibuat`, 'success', 5000);
+      if(data.butuh_cetak_label){
+        RPALabel.printStandardLabel({
+          code: data.basket_code,
+          namaProduk: document.getElementById('rr-produk-revisi').selectedOptions[0]?.textContent || '—',
+          qtyText: `${data.ekor ?? '—'} ekor`, kgText: `${(+(data.kg||0)).toFixed(2)} kg`,
+          tglText: new Date().toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}),
+          refLabel: 'Retur', refValue: 'Revisi Item'
+        });
+      }
+      await loadReturList();
+    }
+  });
+}
+function rejectReturFlow(returId){
+  showSupervisorPin({
+    title: '🔑 Reject Retur',
+    desc: 'Menolak hanya menandai retur ini sebagai ditolak — tidak ada keranjang atau perubahan stok yang dibuat.',
+    onConfirm: async (sup) => {
+      const { data, error } = await db.rpc('approve_retur_penjualan', {
+        p_retur_id: returId, p_user_id: sup.id, p_approve: false, p_catatan: null,
+      });
+      if(error){ toast('Gagal: ' + error.message, 'error'); return; }
+      if(!data?.ok){ toast('Gagal: ' + data?.msg, 'error'); return; }
+      toast('🚫 Retur ditolak', 'info');
+      await loadReturList();
     }
   });
 }
