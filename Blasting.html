@@ -1062,7 +1062,10 @@ function renderPendingList(){
 }
 
 // ── TAB 1: SCAN CARI PENDING ──
-function clearScanResult(resultId){const el=document.getElementById(resultId);if(el){el.className='scan-result';el.style.display='none'}}
+// PENTING: jangan set el.style.display di sini — inline style akan menimpa
+// class 'visible'/'block' yang di-set nanti saat render hasil. Cukup reset
+// className, biarkan CSS yang mengatur tampil/sembunyi.
+function clearScanResult(resultId){const el=document.getElementById(resultId);if(el){el.className='scan-result'}}
 
 // Sebagian barcode reader tablet (mode IME/keyboard-wedge) tidak memicu event keydown asli —
 // hanya mengubah value lewat event input. Jadi selain tombol Enter, kita juga auto-trigger

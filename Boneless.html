@@ -1784,7 +1784,12 @@ function renderPendingList() {
 // ============================================================
 function clearScanMasukResult() {
   const r = document.getElementById('scan-masuk-result');
-  if (r) { r.className = 'scan-result'; r.style.display = 'none'; }
+  // PENTING: jangan set r.style.display di sini — inline style akan
+  // menimpa/mengalahkan class 'visible' yang di-set nanti oleh doScanMasuk(),
+  // sehingga hasil scan tidak akan pernah muncul lagi setelah panggilan
+  // pertama. Cukup reset className, biarkan CSS (.scan-result / .visible)
+  // yang mengatur tampil/sembunyi.
+  if (r) { r.className = 'scan-result'; }
 }
 
 // Sebagian barcode reader tablet (mode IME/keyboard-wedge) tidak memicu
