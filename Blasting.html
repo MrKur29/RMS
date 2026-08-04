@@ -1074,6 +1074,10 @@ function onScanPendingInput(val){
   // Abaikan event input kosong (mis. sisa 'Enter' penutup dari scanner
   // IME-mode Android) — jangan sampai menghapus hasil scan yang baru tampil.
   if(!val||!val.trim())return;
+  // Abaikan juga event susulan yang datang tepat setelah scan sebelumnya
+  // selesai diproses (sisa karakter/IME dari scanner) — jangan sampai
+  // clearScanResult() di bawah ini menghapus hasil yang baru tampil.
+  if(Date.now()-scanPendingLastRun<300)return;
   clearScanResult('scan-pending-result');
   scanPendingTimer=setTimeout(()=>doScanPending(),200);
 }

@@ -2020,6 +2020,10 @@ function onScanMasukInput(val) {
   // Abaikan event input kosong (mis. sisa 'Enter' penutup dari scanner
   // IME-mode Android) — jangan sampai menghapus hasil scan yang baru tampil.
   if (!val || !val.trim()) return;
+  // Abaikan juga event susulan yang datang tepat setelah scan sebelumnya
+  // selesai diproses (sisa karakter/IME dari scanner) — jangan sampai
+  // clearScanResult() di bawah ini menghapus hasil yang baru tampil.
+  if (Date.now() - scanMasukLastRun < 300) return;
   clearScanResult('scan-masuk-result');
   scanMasukTimer = setTimeout(() => doScanMasuk(), 200);
 }
@@ -2030,6 +2034,7 @@ let scanKeluarGen = 0;
 function onScanKeluarInput(val) {
   clearTimeout(scanKeluarTimer);
   if (!val || !val.trim()) return;
+  if (Date.now() - scanKeluarLastRun < 300) return;
   clearScanResult('scan-keluar-result');
   scanKeluarTimer = setTimeout(() => doScanKeluar(), 200);
 }
