@@ -212,7 +212,16 @@ a{text-decoration:none}
   .item-list-header,.item-row,.items-total-row{grid-template-columns:2fr 1fr 1fr 40px}
 }
 
-/* ===== PRINT STYLES ===== */
+/* ===== PRINT STYLES =====
+   Kertas fisik: continuous paper 8.5in (lebar) x 5.5in (tinggi) — dot-matrix/
+   docket printer, BUKAN A4/Letter biasa. @page di bawah ini WAJIB ada supaya
+   browser tidak fallback ke ukuran kertas default (itu penyebab hasil print
+   picking slip / retur slip sebelumnya "kurang pas"/salah ukuran & margin).
+   Tiap .print-sheet = 1 lembar continuous form (page-break-after:always). */
+@page {
+  size: 8.5in 5.5in;
+  margin: 5mm 7mm;
+}
 @media print {
   body{background:white;font-size:12px}
   /* HANYA #app-screen yang dipaksa tampil — #login-screen TIDAK boleh ikut,
@@ -231,8 +240,19 @@ a{text-decoration:none}
   .main-area{overflow:visible}
   .content-area{overflow:visible;padding:0}
   .print-only{display:block !important}
-  .print-sheet{page-break-after:always}
+  .print-sheet{page-break-after:always;margin-top:0 !important;padding-top:0 !important;border-top:none !important}
   .print-sheet:last-child{page-break-after:avoid}
+  /* Kertas cuma tinggi 5.5in — rapatkan tabel & jarak vertikal supaya 1 lembar
+     picking slip/retur slip pas di 1 halaman continuous form, tidak kepotong. */
+  .print-sheet table{font-size:10.5pt !important}
+  .print-sheet table td,.print-sheet table th{padding:3px 6px !important}
+  .print-sheet h2{font-size:14pt !important;margin-bottom:6px !important}
+  .print-sheet h3{margin-bottom:5px !important}
+  /* Jangan sampai 1 baris tabel atau 1 blok "Item: ..." kepotong di tengah
+     saat pindah ke lembar berikutnya — kalau tidak muat, seluruh baris/blok
+     dipindah utuh ke lembar baru, bukan dipotong separuh. */
+  .print-sheet tr,.print-sheet thead{page-break-inside:avoid;break-inside:avoid-page}
+  .print-sheet table{page-break-inside:auto}
 }
 .print-only{display:none}
 </style>
@@ -1803,53 +1823,53 @@ function openReturSlipPrint(header, items){
   document.getElementById('detail-modal-title').textContent = `Retur Slip — ${kodeGabungan}`;
   document.getElementById('detail-modal-body').innerHTML = `
     <div class="print-sheet">
-      <h2 style="font-size:18px;font-weight:900;margin-bottom:12px">Retur Slip — ${kodeGabungan}</h2>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:16px;font-size:13px">
+      <h2 style="font-size:16px;font-weight:900;margin-bottom:8px">Retur Slip — ${kodeGabungan}</h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-bottom:10px;font-size:12px">
         <div><strong>Tanggal:</strong> ${tglFmt}</div>
         <div><strong>Picking Slip Asal:</strong> ${header.ps_code || '—'}</div>
         <div><strong>Customer:</strong> ${header.nama_pelanggan || '—'}</div>
         <div></div>
       </div>
-      <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px">
+      <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:10px">
         <thead>
           <tr style="background:#f3f4f6">
-            <th style="text-align:left;padding:7px 10px;border:1px solid #d1d5db">Kode Retur</th>
-            <th style="text-align:left;padding:7px 10px;border:1px solid #d1d5db">Keranjang Asal</th>
-            <th style="text-align:left;padding:7px 10px;border:1px solid #d1d5db">Item</th>
-            <th style="text-align:left;padding:7px 10px;border:1px solid #d1d5db">Jenis</th>
-            <th style="text-align:right;padding:7px 10px;border:1px solid #d1d5db">Ekor</th>
-            <th style="text-align:right;padding:7px 10px;border:1px solid #d1d5db">Kg</th>
-            <th style="text-align:left;padding:7px 10px;border:1px solid #d1d5db">Keterangan</th>
+            <th style="text-align:left;padding:4px 8px;border:1px solid #d1d5db">Kode Retur</th>
+            <th style="text-align:left;padding:4px 8px;border:1px solid #d1d5db">Keranjang Asal</th>
+            <th style="text-align:left;padding:4px 8px;border:1px solid #d1d5db">Item</th>
+            <th style="text-align:left;padding:4px 8px;border:1px solid #d1d5db">Jenis</th>
+            <th style="text-align:right;padding:4px 8px;border:1px solid #d1d5db">Ekor</th>
+            <th style="text-align:right;padding:4px 8px;border:1px solid #d1d5db">Kg</th>
+            <th style="text-align:left;padding:4px 8px;border:1px solid #d1d5db">Keterangan</th>
           </tr>
         </thead>
         <tbody>
           ${items.map(i => `
           <tr>
-            <td style="padding:7px 10px;border:1px solid #d1d5db;font-family:monospace">${i.retur_code}</td>
-            <td style="padding:7px 10px;border:1px solid #d1d5db;font-family:monospace">${i.basket_asal_code||'—'}</td>
-            <td style="padding:7px 10px;border:1px solid #d1d5db">${i.nama_produk||'—'}</td>
-            <td style="padding:7px 10px;border:1px solid #d1d5db">${JENIS_RETUR_LABEL[i.jenis_retur]||i.jenis_retur}</td>
-            <td style="text-align:right;padding:7px 10px;border:1px solid #d1d5db">${i.ekor}</td>
-            <td style="text-align:right;padding:7px 10px;border:1px solid #d1d5db">${(+i.kg).toFixed(2)}</td>
-            <td style="padding:7px 10px;border:1px solid #d1d5db;font-size:12px">${i.keterangan||'—'}</td>
+            <td style="padding:4px 8px;border:1px solid #d1d5db;font-family:monospace">${i.retur_code}</td>
+            <td style="padding:4px 8px;border:1px solid #d1d5db;font-family:monospace">${i.basket_asal_code||'—'}</td>
+            <td style="padding:4px 8px;border:1px solid #d1d5db">${i.nama_produk||'—'}</td>
+            <td style="padding:4px 8px;border:1px solid #d1d5db">${JENIS_RETUR_LABEL[i.jenis_retur]||i.jenis_retur}</td>
+            <td style="text-align:right;padding:4px 8px;border:1px solid #d1d5db">${i.ekor}</td>
+            <td style="text-align:right;padding:4px 8px;border:1px solid #d1d5db">${(+i.kg).toFixed(2)}</td>
+            <td style="padding:4px 8px;border:1px solid #d1d5db;font-size:11px">${i.keterangan||'—'}</td>
           </tr>`).join('')}
           <tr style="font-weight:900;background:#f9fafb">
-            <td colspan="4" style="padding:7px 10px;border:1px solid #d1d5db">TOTAL</td>
-            <td style="text-align:right;padding:7px 10px;border:1px solid #d1d5db">${totalEkor}</td>
-            <td style="text-align:right;padding:7px 10px;border:1px solid #d1d5db">${totalKg.toFixed(2)}</td>
-            <td style="padding:7px 10px;border:1px solid #d1d5db"></td>
+            <td colspan="4" style="padding:4px 8px;border:1px solid #d1d5db">TOTAL</td>
+            <td style="text-align:right;padding:4px 8px;border:1px solid #d1d5db">${totalEkor}</td>
+            <td style="text-align:right;padding:4px 8px;border:1px solid #d1d5db">${totalKg.toFixed(2)}</td>
+            <td style="padding:4px 8px;border:1px solid #d1d5db"></td>
           </tr>
         </tbody>
       </table>
-      <div style="font-size:12px;color:#6b7280;margin-bottom:24px">Surat jalan ini menyertai barang fisik ke Chiller untuk diverifikasi & diterima. Belum ada keranjang/label baru — akan dibuat oleh Chiller saat barang diterima.</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:32px;font-size:13px">
+      <div style="font-size:11px;color:#6b7280;margin-bottom:10px">Surat jalan ini menyertai barang fisik ke Chiller untuk diverifikasi & diterima. Belum ada keranjang/label baru — akan dibuat oleh Chiller saat barang diterima.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:14px;font-size:12px">
         <div style="text-align:center">
           <div>Diserahkan (Loading)</div>
-          <div style="margin:40px 0 4px">(__________________________)</div>
+          <div style="margin:20px 0 4px">(__________________________)</div>
         </div>
         <div style="text-align:center">
           <div>Diterima (Chiller)</div>
-          <div style="margin:40px 0 4px">(__________________________)</div>
+          <div style="margin:20px 0 4px">(__________________________)</div>
         </div>
       </div>
     </div>`;
@@ -2062,7 +2082,7 @@ async function openDetail(psId){
     <!-- LEMBAR 1 -->
     <div class="print-sheet">
       <h2 style="font-size:18px;font-weight:900;margin-bottom:12px">Picking Slip — ${ps.ps_code}</h2>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:16px;font-size:13px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-bottom:10px;font-size:12px">
         <div><strong>Tanggal:</strong> ${tglFmt}</div>
         <div><strong>Tujuan:</strong> ${ps.tujuan || '—'}</div>
         <div><strong>Customer:</strong> ${ps.nama_pelanggan}</div>
@@ -2071,39 +2091,39 @@ async function openDetail(psId){
         ${ps.catatan ? `<div style="grid-column:span 2"><strong>Catatan:</strong> ${ps.catatan}</div>` : ''}
       </div>
 
-      <h3 style="font-size:13px;font-weight:800;margin-bottom:8px;border-bottom:1.5px solid #111827;padding-bottom:4px">Rekap per Item</h3>
-      <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:24px">
+      <h3 style="font-size:12px;font-weight:800;margin-bottom:5px;border-bottom:1.5px solid #111827;padding-bottom:3px">Rekap per Item</h3>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:10px">
         <thead>
           <tr style="background:#f3f4f6">
-            <th style="text-align:left;padding:7px 10px;border:1px solid #d1d5db">Item</th>
-            <th style="text-align:right;padding:7px 10px;border:1px solid #d1d5db">Jumlah Karung</th>
-            <th style="text-align:right;padding:7px 10px;border:1px solid #d1d5db">Total Ekor / Bks</th>
-            <th style="text-align:right;padding:7px 10px;border:1px solid #d1d5db">Total Kg</th>
+            <th style="text-align:left;padding:4px 8px;border:1px solid #d1d5db">Item</th>
+            <th style="text-align:right;padding:4px 8px;border:1px solid #d1d5db">Jumlah Karung</th>
+            <th style="text-align:right;padding:4px 8px;border:1px solid #d1d5db">Total Ekor / Bks</th>
+            <th style="text-align:right;padding:4px 8px;border:1px solid #d1d5db">Total Kg</th>
           </tr>
         </thead>
         <tbody>
           ${rekapRows}
           <tr style="font-weight:900;background:#f9fafb">
-            <td style="padding:7px 10px;border:1px solid #d1d5db"><strong>GRAND TOTAL</strong></td>
-            <td style="text-align:right;padding:7px 10px;border:1px solid #d1d5db"><strong>${ps.total_karung}</strong></td>
-            <td style="text-align:right;padding:7px 10px;border:1px solid #d1d5db"><strong>${ps.total_ekor}</strong></td>
-            <td style="text-align:right;padding:7px 10px;border:1px solid #d1d5db"><strong>${(+ps.total_kg).toFixed(2)}</strong></td>
+            <td style="padding:4px 8px;border:1px solid #d1d5db"><strong>GRAND TOTAL</strong></td>
+            <td style="text-align:right;padding:4px 8px;border:1px solid #d1d5db"><strong>${ps.total_karung}</strong></td>
+            <td style="text-align:right;padding:4px 8px;border:1px solid #d1d5db"><strong>${ps.total_ekor}</strong></td>
+            <td style="text-align:right;padding:4px 8px;border:1px solid #d1d5db"><strong>${(+ps.total_kg).toFixed(2)}</strong></td>
           </tr>
         </tbody>
       </table>
-      <div style="text-align:right;font-size:12px;font-weight:700;margin-bottom:32px">
+      <div style="text-align:right;font-size:11px;font-weight:700;margin-bottom:12px">
         Total: ${ps.total_karung} karung / ${ps.total_ekor} ekor / ${(+ps.total_kg).toFixed(2)} kg
       </div>
 
       <!-- TTD -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:32px;font-size:13px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:14px;font-size:12px">
         <div style="text-align:center">
           <div>Operator</div>
-          <div style="margin:40px 0 4px">(__________________________)</div>
+          <div style="margin:20px 0 4px">(__________________________)</div>
         </div>
         <div style="text-align:center">
           <div>Checker</div>
-          <div style="margin:40px 0 4px">(__________________________)</div>
+          <div style="margin:20px 0 4px">(__________________________)</div>
         </div>
       </div>
     </div>
@@ -2129,7 +2149,7 @@ async function openDetail(psId){
           ).join('') + '</tr>';
         }
         return `
-          <div style="margin-bottom:16px">
+          <div style="margin-bottom:16px;page-break-inside:avoid;break-inside:avoid-page">
             <div style="font-size:12px;font-weight:800;margin-bottom:6px;color:#111827">Item: ${nama}</div>
             <table style="width:100%;border-collapse:collapse;font-size:12px">
               <thead>
