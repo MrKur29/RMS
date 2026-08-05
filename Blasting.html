@@ -1183,7 +1183,7 @@ function doScanPending(){
 // Begitu seluruh isi keranjang sudah naik rak / beku, keranjang hilang dari daftar ini —
 // akan muncul lagi hanya jika alokasinya di-edit/dihapus dari tab Rak (selama belum "Jalankan Batch").
 function renderStok(){
-  const availList=blastingStock.filter(b=>(b.qty_sisa||0)-basketCommittedEkor(b.id)>0);
+  const availList=blastingStock.filter(b=>(b.qty_sisa||0)>0);
   const pill=document.getElementById('pill-stok-count');
   if(pill)pill.textContent=`${availList.length} item`;
   const f=(document.getElementById('stok-search')?.value||'').trim().toLowerCase();
@@ -1215,9 +1215,11 @@ function renderStok(){
     </tr>`;
     if(isExp){
       g.baskets.forEach((b,i)=>{
+        // qty_sisa sudah net dari alokasi ALLOCATED+FROZEN — badge di bawah
+        // murni informasi, bukan lagi dipakai untuk mengurangi availEkor.
         const allocEkor=rackAllocations.filter(a=>a.basket_id===b.id&&a.status==='ALLOCATED').reduce((s,a)=>s+(a.ekor||0),0);
         const frozenEkor=basketFrozenEkor(b.id);
-        const availEkor=(b.qty_sisa||0)-allocEkor-frozenEkor;
+        const availEkor=b.qty_sisa||0;
         html+=`<tr class="sub-row${i===g.baskets.length-1?' last-sub':''}">
           <td style="font-family:monospace;font-weight:700">${b.basket_code}</td>
           <td><span style="color:#111827">${fmt(b.qty_sisa)} ek / ${fmtKg(b.kg_sisa)}</span>
@@ -1425,10 +1427,12 @@ function openReturn(basketId){
   const b=blastingStock.find(x=>x.id===basketId);
   if(!b)return;
   const pm=b.product_master||{};
+  // qty_sisa sudah net dari semua alokasi rak (ALLOCATED/FROZEN) sejak
+  // 2026-08-05 — allocEkor/allocKg di sini murni untuk badge info "di rak".
   const allocEkor=basketCommittedEkor(basketId);
   const allocKg=basketCommittedKg(basketId);
-  const availEkor=Math.max(0,(b.qty_sisa||0)-allocEkor);
-  const availKg=Math.max(0,(Number(b.kg_sisa)||0)-allocKg);
+  const availEkor=b.qty_sisa||0;
+  const availKg=Number(b.kg_sisa)||0;
   setEl('mr-code',b.basket_code);
   setEl('mr-produk',pm.nama_produk||'—');
   setEl('mr-sisa',`${fmt(b.qty_sisa)} ekor / ${fmtKg(b.kg_sisa)}`);
@@ -1524,7 +1528,8 @@ function renderRakDetail(rackId){
     ?`<span class="badge b-frozen" style="padding:5px 10px">Di Batch: ${inBatch.batch_code}</span>`:'';
 
   // Keranjang yang ada di lantai blasting dengan sisa belum dialokasikan penuh
-  const availBaskets=blastingStock.filter(b=>(b.qty_sisa||0)-basketCommittedEkor(b.id)>0);
+  // (qty_sisa sudah net dari alokasi rak sejak 2026-08-05, tidak perlu dikurangi lagi)
+  const availBaskets=blastingStock.filter(b=>(b.qty_sisa||0)>0);
 
   let html='';
 
@@ -1551,10 +1556,8 @@ function renderRakDetail(rackId){
       <div id="rak-basket-list" style="max-height:200px;overflow-y:auto;border:1.5px solid #e5e7eb;border-radius:8px">
         ${availBaskets.length
           ? availBaskets.map(b=>{
-              const allocEkor=basketCommittedEkor(b.id);
-              const allocKg=basketCommittedKg(b.id);
-              const availEkor=(b.qty_sisa||0)-allocEkor;
-              const availKg=Math.max(0,(Number(b.kg_sisa)||0)-allocKg);
+              const availEkor=b.qty_sisa||0;
+              const availKg=Number(b.kg_sisa)||0;
               const isPre=b.id===selectedBasketForRak;
               return `<div class="rak-basket-item${isPre?' selected':''}" id="rbi-${b.id}"
                 onclick="selectBasketForRak('${b.id}',${availEkor},${availKg},'${b.basket_code}','${(b.product_master?.nama_produk||'').replace(/'/g,"\\'")}',${b.product_master?.kg_min||'null'},${b.product_master?.kg_max||'null'})">
@@ -1660,10 +1663,8 @@ function renderRakDetail(rackId){
   if(selectedBasketForRak){
     const b=blastingStock.find(x=>x.id===selectedBasketForRak);
     if(b){
-      const allocEkor=basketCommittedEkor(b.id);
-      const allocKg=basketCommittedKg(b.id);
-      const availEkor=Math.max(0,(b.qty_sisa||0)-allocEkor);
-      const availKg=Math.max(0,(Number(b.kg_sisa)||0)-allocKg);
+      const availEkor=b.qty_sisa||0;
+      const availKg=Number(b.kg_sisa)||0;
       selectBasketForRak(b.id,availEkor,availKg,b.basket_code,b.product_master?.nama_produk||'—',b.product_master?.kg_min||null,b.product_master?.kg_max||null);
       selectedBasketForRak=null;
     }
@@ -1677,10 +1678,8 @@ function doScanRak(rackId){
   // Cari basket yang match
   const match=blastingStock.find(b=>(b.basket_code||'').toUpperCase()===val);
   if(match){
-    const allocEkor=basketCommittedEkor(match.id);
-    const allocKg=basketCommittedKg(match.id);
-    const availEkor=Math.max(0,(match.qty_sisa||0)-allocEkor);
-    const availKg=Math.max(0,(Number(match.kg_sisa)||0)-allocKg);
+    const availEkor=match.qty_sisa||0;
+    const availKg=Number(match.kg_sisa)||0;
     if(availEkor<=0){
       showToast('Keranjang ini sudah penuh dialokasikan ke rak.','warning');
       return;
@@ -1754,6 +1753,19 @@ async function doAlokasiInline(rackId){
       rack_id:rackId,basket_id:basketId,ekor,kg,created_by:currentUser.id
     });
     if(error)throw error;
+    // Kurangi sisa keranjang begitu naik rak -- pola sama seperti input
+    // basket ke WO di Parting/Boneless/Marinasi (konsumsi langsung, bukan
+    // pending-transfer). Migration 73 (2026-08-05) membackfill data lama.
+    const bSrc=blastingStock.find(x=>x.id===basketId);
+    if(bSrc){
+      const newQty=Math.max(0,(bSrc.qty_sisa||0)-ekor);
+      const newKg=Math.max(0,Number(bSrc.kg_sisa||0)-kg);
+      await db.from('baskets').update({
+        qty_sisa:newQty,
+        kg_sisa:Number(newKg.toFixed(1)),
+        status:newQty<=0?'HABIS':'AKTIF'
+      }).eq('id',basketId);
+    }
     const rack=racks.find(r=>r.id===rackId);
     showToast(`${fmt(ekor)} ekor berhasil ditambahkan ke ${rack?.nomor_rak||'rak'}!`,'success');
     clearRakSelection();
@@ -1772,9 +1784,9 @@ function openEditAlokasi(allocId){
   activeAllocId=allocId;
   const b=a.baskets||{};
   const rak=a.blasting_racks||{};
-  // Sisa maksimum = kapasitas keranjang dikurangi komitmen alokasi LAIN (di luar record ini sendiri)
-  const otherCommitted=Math.max(0,basketCommittedEkor(a.basket_id)-(a.ekor||0));
-  const maxEkor=Math.max(a.ekor||0,(b.qty_sisa||0)-otherCommitted);
+  // qty_sisa keranjang sudah net dari alokasi ini sendiri (dikurangi saat
+  // alokasi dibuat), jadi maksimum edit = qty_sisa + ekor alokasi ini sendiri.
+  const maxEkor=Math.max(a.ekor||0,(b.qty_sisa||0)+(a.ekor||0));
   setEl('ea-code',b.basket_code||'—');
   setEl('ea-rak',rak.nomor_rak||'—');
   setEl('ea-max',`${fmt(maxEkor)} ekor`);
@@ -1796,10 +1808,26 @@ async function doEditAlokasi(){
   if(ekor>maxEkor){showErr('ea-err',`Melebihi sisa tersedia (${fmt(maxEkor)} ekor).`);return}
   btn.disabled=true;btn.textContent='Menyimpan…';
   try{
+    const a=rackAllocations.find(x=>x.id===activeAllocId);
+    const oldEkor=a?.ekor||0,oldKg=Number(a?.kg||0);
     const{error}=await db.from('blasting_rack_allocations')
       .update({ekor,kg,updated_by:currentUser.id})
       .eq('id',activeAllocId).eq('status','ALLOCATED');
     if(error)throw error;
+    // Selisihkan perubahan ke qty_sisa/kg_sisa keranjang (reversible edit)
+    if(a){
+      const deltaEkor=ekor-oldEkor,deltaKg=kg-oldKg;
+      if(deltaEkor!==0||deltaKg!==0){
+        const b=a.baskets||{};
+        const newQty=Math.max(0,(b.qty_sisa||0)-deltaEkor);
+        const newKg=Math.max(0,Number(b.kg_sisa||0)-deltaKg);
+        await db.from('baskets').update({
+          qty_sisa:newQty,
+          kg_sisa:Number(newKg.toFixed(1)),
+          status:newQty<=0?'HABIS':'AKTIF'
+        }).eq('id',a.basket_id);
+      }
+    }
     showToast('Alokasi berhasil diperbarui.','success');
     closeModal('modal-edit-alokasi');
     activeAllocId=null;
@@ -1818,6 +1846,13 @@ async function doHapusAlokasi(allocId){
   try{
     const{error}=await db.from('blasting_rack_allocations').delete().eq('id',allocId).eq('status','ALLOCATED');
     if(error)throw error;
+    // Kembalikan qty_sisa/kg_sisa ke keranjang (reversible delete)
+    const b=a.baskets||{};
+    await db.from('baskets').update({
+      qty_sisa:(b.qty_sisa||0)+(a.ekor||0),
+      kg_sisa:Number(((Number(b.kg_sisa||0))+Number(a.kg||0)).toFixed(1)),
+      status:'AKTIF'
+    }).eq('id',a.basket_id);
     showToast('Alokasi dihapus, keranjang kembali tersedia di lantai.','warning');
     await loadAll();
     if(selectedRackId)renderRakDetail(selectedRackId);

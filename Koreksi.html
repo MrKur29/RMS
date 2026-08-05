@@ -418,6 +418,39 @@ a{text-decoration:none}
             </table>
           </div>
         </div>
+
+        <div class="panel" style="margin-top:16px">
+          <div class="panel-head">
+            <span class="panel-title">🧊 Riwayat Selisih Terima Blasting</span>
+            <div class="panel-actions">
+              <select id="riwayat-selisih-filter" onchange="loadRiwayatSelisihTerima()" style="padding:6px 10px;border:1.5px solid #e5e7eb;border-radius:7px;font-size:12px">
+                <option value="ALL">Semua Status</option>
+                <option value="APPROVED">Disetujui</option>
+                <option value="REJECTED">Ditolak</option>
+              </select>
+            </div>
+          </div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>Basket</th>
+                  <th>Tercatat</th>
+                  <th>Aktual</th>
+                  <th>Resolusi</th>
+                  <th>Alasan</th>
+                  <th>Diajukan Oleh</th>
+                  <th>Direview Oleh</th>
+                  <th>Tanggal Review</th>
+                  <th>Catatan Review</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-riwayat-selisih-terima">
+                <tr><td colspan="9"><div class="empty">Memuat…</div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       <!-- TAB: AJUKAN -->
@@ -613,7 +646,7 @@ function switchTab(tab){
   });
   document.getElementById(`tab-${tab}`)?.classList.add('active');
   document.getElementById(`tab-btn-${tab}`)?.classList.add('active');
-  if(tab==='riwayat') loadRiwayat();
+  if(tab==='riwayat'){loadRiwayat();loadRiwayatSelisihTerima();}
 }
 
 // ── AUTH ──
@@ -783,6 +816,11 @@ function renderPending(){
 // approval sesuai keputusan 2026-08-05 -- lihat [[project_blasting_terima_selisih_concept_2026_08_05]].
 let selisihTerimaList = [];
 let activeSelisihTerimaId = null;
+// Riwayat (APPROVED/REJECTED) selisih terima blasting -- lihat tab Riwayat,
+// panel terpisah dari Riwayat Koreksi karena CATAT_SELISIH tidak pernah
+// membuat baris `corrections` (cuma REVISI_SUMBER yang membuatnya, lewat
+// fn_approve_correction), jadi tidak akan pernah muncul di situ.
+let riwayatSelisihTerimaList = [];
 
 async function loadSelisihTerima(){
   const{data,error}=await db.from('blasting_terima_selisih')
@@ -824,6 +862,48 @@ function renderSelisihTerima(){
 
 function fmt(n,d=0){if(n==null||n==='')return'—';return Number(n).toLocaleString('id-ID',{minimumFractionDigits:d,maximumFractionDigits:d})}
 function fmtKg(n){if(n==null)return'—';return Number(n).toLocaleString('id-ID',{minimumFractionDigits:1,maximumFractionDigits:1})+' kg'}
+
+// ── RIWAYAT SELISIH TERIMA BLASTING ──
+async function loadRiwayatSelisihTerima(){
+  const filter=document.getElementById('riwayat-selisih-filter').value;
+  let q=db.from('blasting_terima_selisih')
+    .select('id,basket_code,qty_tercatat,kg_tercatat,qty_aktual,kg_aktual,alasan,resolusi,status,direview_at,catatan_review,diajukan_oleh(nama),direview_oleh(nama)')
+    .in('status',['APPROVED','REJECTED'])
+    .order('direview_at',{ascending:false})
+    .limit(200);
+  if(filter!=='ALL') q=q.eq('status',filter);
+  const{data,error}=await q;
+  if(error){console.error(error);showToast('Gagal memuat riwayat selisih terima blasting','error');return}
+  riwayatSelisihTerimaList=data||[];
+  renderRiwayatSelisihTerima();
+}
+
+function renderRiwayatSelisihTerima(){
+  const tbody=document.getElementById('tbody-riwayat-selisih-terima');
+  if(!tbody)return;
+  if(!riwayatSelisihTerimaList.length){
+    tbody.innerHTML=`<tr><td colspan="9"><div class="empty">Belum ada riwayat selisih terima blasting</div></td></tr>`;
+    return;
+  }
+  const resolusiBadge={
+    REVISI_SUMBER:'<span class="badge b-approved">✅ Revisi dari Sumber</span>',
+    CATAT_SELISIH:'<span class="badge b-auto">📊 Catat Selisih</span>',
+    TOLAK:'<span class="badge b-rejected">✗ Ditolak</span>'
+  };
+  tbody.innerHTML=riwayatSelisihTerimaList.map(r=>`
+    <tr>
+      <td><span style="font-family:monospace;font-weight:700">${esc(r.basket_code)}</span></td>
+      <td>${fmt(r.qty_tercatat)} ek<br><span class="tbl-sub">${fmtKg(r.kg_tercatat)}</span></td>
+      <td>${fmt(r.qty_aktual)} ek<br><span class="tbl-sub">${fmtKg(r.kg_aktual)}</span></td>
+      <td>${resolusiBadge[r.resolusi]||esc(r.resolusi)||'—'}</td>
+      <td style="max-width:200px">${esc(r.alasan)}</td>
+      <td>${esc(r.diajukan_oleh?.nama)||'—'}</td>
+      <td>${esc(r.direview_oleh?.nama)||'—'}</td>
+      <td>${fmtDT(r.direview_at)}</td>
+      <td style="max-width:200px">${esc(r.catatan_review)||'—'}</td>
+    </tr>
+  `).join('');
+}
 
 async function openReviewSelisihTerima(id){
   activeSelisihTerimaId=id;

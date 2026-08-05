@@ -533,12 +533,16 @@ async function buildStokAggregate(lokasi, asOfDate){
       })
   );
 
-  // C) Transfer keluar dari lokasi (basket_movements — semua status, dikurangi sejak dikirim)
+  // C) Transfer keluar dari lokasi (basket_movements CONFIRMED — hanya yang benar-benar
+  //    sudah dikonfirmasi penerima; PENDING/REJECTED tidak dihitung sebagai keluar,
+  //    pakai confirmed_at supaya konsisten dengan LaporanKartuStok.html /
+  //    LaporanRincianTransaksiChiller.html — 2026-08-05)
   tasks.push(
     db.from('basket_movements')
-      .select('qty_pindah,kg_pindah,created_at,baskets!inner(product_id)')
+      .select('qty_pindah,kg_pindah,confirmed_at,baskets!inner(product_id)')
       .eq('dari_lokasi',lokasi)
-      .lte('created_at',toBound)
+      .eq('status','CONFIRMED')
+      .lte('confirmed_at',toBound)
       .then(({data,error})=>{
         if(error){console.error('buildStokAggregate C',error);return}
         (data||[]).forEach(m=>{

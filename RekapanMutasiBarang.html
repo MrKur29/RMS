@@ -266,11 +266,18 @@ a{text-decoration:none}
               <label>Sampai Tanggal</label>
               <input type="date" id="filter-sampai">
             </div>
+            <div class="form-group">
+              <label>Lokasi</label>
+              <select id="filter-lokasi">
+                <option value="">Semua Lokasi (gabungan)</option>
+                <option value="CHILLER">Chiller</option>
+              </select>
+            </div>
             <div class="form-group" style="flex:0">
               <button class="btn btn-primary" onclick="tampilkanRekap()">🔁 Tampilkan</button>
             </div>
           </div>
-          <div class="hint">Baris = nama Barang. Saldo Awal dihitung otomatis dari seluruh histori (opname Saldo Awal + semua mutasi) sampai H-1 dari tanggal mulai. Hanya barang yang punya Saldo Awal dan/atau mutasi pada periode ini yang ditampilkan.</div>
+          <div class="hint" id="filter-hint">Baris = nama Barang. Saldo Awal dihitung otomatis dari seluruh histori (opname Saldo Awal + semua mutasi) sampai H-1 dari tanggal mulai. Hanya barang yang punya Saldo Awal dan/atau mutasi pada periode ini yang ditampilkan.</div>
         </div>
       </div>
 
@@ -289,7 +296,7 @@ a{text-decoration:none}
 
         <div class="tbl-wrap">
           <table class="tbl">
-            <thead>
+            <thead id="thead-rekap">
               <tr class="grp">
                 <th class="first" rowspan="3">Produk</th>
                 <th class="grp-awal" colspan="2" rowspan="2">Saldo Awal</th>
@@ -308,7 +315,7 @@ a{text-decoration:none}
                 <th class="col-keluar" colspan="2">Parting</th>
                 <th class="col-keluar" colspan="2">Boneless</th>
                 <th class="col-keluar" colspan="2">Marinasi</th>
-                <th class="col-keluar" colspan="2">Thawing</th>
+                <th class="col-keluar" colspan="2" title="Transfer ke lantai Blasting — informasi, tidak dikurangkan ke Total Keluar/Saldo Akhir">Blasting*</th>
                 <th class="col-keluar" colspan="2">Jual</th>
                 <th class="col-keluar" colspan="2">Selisih</th>
                 <th class="col-keluar" colspan="2">Total</th>
@@ -338,8 +345,8 @@ a{text-decoration:none}
           </table>
         </div>
 
-        <div class="rpt-note">
-          Catatan: <b>Jual</b> = keranjang yang sudah dikirim final ke pelanggan (Loading → Sold), sudah bersih dari retur/selisih dock karena leg tersebut memang tidak pernah tercatat sebagai terjual. <b>Selisih</b> = write-off yang sudah disetujui Supervisor di modul Penjualan &amp; Selisih (hanya mencakup selisih kurang — sistem belum punya mekanisme selisih lebih). <b>Retur</b> = retur barang dari Pelanggan (Return Slip) — fitur ini belum tersedia di sistem, kolom selalu 0. <b>Keluar: Thawing</b> selalu 0 karena Thawing hanya sumber barang masuk (dari Cold Storage/WMS), tidak pernah mengonsumsi stok internal. Koreksi yang sudah disetujui (Koreksi &amp; Approval) belum tercermin di rekap ini. By-product Karkas memakai model stok terpisah dan belum tercakup.
+        <div class="rpt-note" id="rpt-note-text">
+          Catatan: <b>Jual</b> = keranjang yang sudah dikirim final ke pelanggan (Loading → Sold), sudah bersih dari retur/selisih dock karena leg tersebut memang tidak pernah tercatat sebagai terjual. <b>Selisih</b> = write-off yang sudah disetujui Supervisor di modul Penjualan &amp; Selisih (hanya mencakup selisih kurang — sistem belum punya mekanisme selisih lebih). <b>Retur</b> = retur barang dari Pelanggan (Return Slip) — fitur ini belum tersedia di sistem, kolom selalu 0. <b>Keluar: Blasting*</b> = transfer terkonfirmasi ke lantai Blasting (barang masuk proses pembekuan) — ditampilkan untuk visibilitas tapi <u>tidak</u> ikut dikurangkan ke Total Keluar/Saldo Akhir gabungan, karena barang belum keluar dari perusahaan, cuma pindah ke tahap proses berikutnya (sama prinsipnya dengan Parting/Boneless/Marinasi, tapi Blasting murni transfer lokasi tanpa produksi/konsumsi baru sehingga sengaja dipisah dari Total). Koreksi yang sudah disetujui (Koreksi &amp; Approval) belum tercermin di rekap ini. By-product Karkas memakai model stok terpisah dan belum tercakup.
         </div>
       </div>
 
@@ -359,6 +366,8 @@ const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 // ── STATE ──
 let currentUser = null;
 let mutasiRows  = []; // hasil render terkini (utk export)
+let mutasiMode  = 'semua'; // 'semua' | 'lokasi' — dipakai render/export utk pilih bentuk kolom
+let mutasiLokasi = null;   // kode lokasi kalau mutasiMode==='lokasi'
 let lastDari = null, lastSampai = null;
 
 // ── UTILS ──
@@ -476,6 +485,32 @@ function bump(map, pid, qty, kg){
   map[pid].kg  += (Number(kg)||0);
 }
 
+// PENTING: PostgREST/Supabase membatasi tiap request maksimal 1000 baris
+// secara default. Semua query rekap di file ini TIDAK difilter per produk
+// (menghitung company-wide / per-lokasi lintas semua produk), jadi begitu
+// total baris basket_movements/baskets/processing_* yang cocok sudah lewat
+// 1000, query tanpa .range() akan diam-diam terpotong — hasilnya tampak
+// "hampir benar" tapi understated, dan berbeda-beda tergantung urutan
+// default (bisa memotong baris lama ATAU baru). Pola yang sama pernah jadi
+// bug di Chiller.html (lihat komentarnya di loadChillerStok). Fix: fetch
+// bertahap per 1000 baris, diurutkan pakai id, sampai batch terakhir lebih
+// pendek dari PAGE_SIZE. buildQuery harus function yg mengembalikan query
+// BARU tiap dipanggil (builder Supabase sekali pakai, tidak bisa dipanggil
+// ulang setelah di-await).
+const REKAP_PAGE_SIZE = 1000;
+async function fetchAllRows(buildQuery){
+  let all = [];
+  let from = 0;
+  while(true){
+    const { data, error } = await buildQuery().order('id',{ascending:true}).range(from, from+REKAP_PAGE_SIZE-1);
+    if(error){ console.error('fetchAllRows', error); return all; }
+    all = all.concat(data||[]);
+    if(!data || data.length < REKAP_PAGE_SIZE) break;
+    from += REKAP_PAGE_SIZE;
+  }
+  return all;
+}
+
 // Saldo kumulatif SELURUH SISTEM (semua lokasi digabung) per produk, sampai dengan
 // cutoffDate (inklusif). Dipakai untuk Saldo Awal periode (cutoff = H-1 dari filter-dari).
 // Model: hanya event yang benar-benar MENCIPTAKAN atau MENGHILANGKAN barang dari sistem
@@ -489,52 +524,48 @@ async function computeSaldoKumulatif(cutoffDate){
 
   // 1) Lahir di Karkas (LANTAI)
   tasks.push(
-    db.from('baskets')
+    fetchAllRows(()=>db.from('baskets')
       .select('product_id,qty_awal,kg_awal,created_at,carcass_baskets!inner(id)')
       .neq('status','VOID')
       .lte('created_at', toBound)
-      .then(({data,error})=>{
-        if(error){console.error('kumulatif karkas',error);return}
-        (data||[]).forEach(b=>bump(masuk,b.product_id,b.qty_awal,b.kg_awal));
-      })
+    ).then(data=>{
+      (data||[]).forEach(b=>bump(masuk,b.product_id,b.qty_awal,b.kg_awal));
+    })
   );
 
   // 2) Hasil produksi (semua WO — Parting/Boneless/Marinasi/MULTI, product baru lahir)
   tasks.push(
-    db.from('processing_outputs')
+    fetchAllRows(()=>db.from('processing_outputs')
       .select('product_id,qty_output,kg_output,created_at')
       .lte('created_at', toBound)
-      .then(({data,error})=>{
-        if(error){console.error('kumulatif outputs',error);return}
-        (data||[]).forEach(po=>bump(masuk,po.product_id,po.qty_output,po.kg_output));
-      })
+    ).then(data=>{
+      (data||[]).forEach(po=>bump(masuk,po.product_id,po.qty_output,po.kg_output));
+    })
   );
 
   // 3) Lahir di Thawing (distribusi dari Cold Storage/WMS)
   tasks.push(
-    db.from('baskets')
+    fetchAllRows(()=>db.from('baskets')
       .select('product_id,qty_awal,kg_awal,created_at')
       .eq('basket_type','THAWING')
       .neq('status','VOID')
       .lte('created_at', toBound)
-      .then(({data,error})=>{
-        if(error){console.error('kumulatif thawing',error);return}
-        (data||[]).forEach(b=>bump(masuk,b.product_id,b.qty_awal,b.kg_awal));
-      })
+    ).then(data=>{
+      (data||[]).forEach(b=>bump(masuk,b.product_id,b.qty_awal,b.kg_awal));
+    })
   );
 
   // 4) Opname Saldo Awal (sesi FINAL, tanggal_opname <= cutoff)
   tasks.push(
-    db.from('baskets')
+    fetchAllRows(()=>db.from('baskets')
       .select('product_id,qty_awal,kg_awal,saldo_awal_sessions!inner(status,tanggal_opname)')
       .eq('basket_type','SALDO_AWAL')
       .neq('status','VOID')
       .eq('saldo_awal_sessions.status','FINAL')
       .lte('saldo_awal_sessions.tanggal_opname', cutoffDate)
-      .then(({data,error})=>{
-        if(error){console.error('kumulatif saldo_awal',error);return}
-        (data||[]).forEach(b=>bump(masuk,b.product_id,b.qty_awal,b.kg_awal));
-      })
+    ).then(data=>{
+      (data||[]).forEach(b=>bump(masuk,b.product_id,b.qty_awal,b.kg_awal));
+    })
   );
 
   // 4b) Retur dari Pelanggan — basket baru lahir langsung ke CHILLER saat retur
@@ -543,38 +574,35 @@ async function computeSaldoKumulatif(cutoffDate){
   // konsisten dengan MUSNAH dari produksi karkas yang juga tidak dapat sumber
   // "masuk" tersendiri di rekap ini.
   tasks.push(
-    db.from('basket_movements')
+    fetchAllRows(()=>db.from('basket_movements')
       .select('qty_pindah,kg_pindah,confirmed_at,baskets!inner(product_id)')
       .eq('dari_lokasi','RETUR').eq('ke_lokasi','CHILLER').eq('status','CONFIRMED')
       .lte('confirmed_at', toBound)
-      .then(({data,error})=>{
-        if(error){console.error('kumulatif retur',error);return}
-        (data||[]).forEach(m=>bump(masuk, m.baskets?.product_id, m.qty_pindah, m.kg_pindah));
-      })
+    ).then(data=>{
+      (data||[]).forEach(m=>bump(masuk, m.baskets?.product_id, m.qty_pindah, m.kg_pindah));
+    })
   );
 
   // 5) Konsumsi ke Work Order (semua tipe — Parting/Boneless/Marinasi/MULTI)
   tasks.push(
-    db.from('processing_inputs')
+    fetchAllRows(()=>db.from('processing_inputs')
       .select('product_id,qty_input,kg_input,created_at')
       .lte('created_at', toBound)
-      .then(({data,error})=>{
-        if(error){console.error('kumulatif inputs',error);return}
-        (data||[]).forEach(pi=>bump(keluar,pi.product_id,pi.qty_input,pi.kg_input));
-      })
+    ).then(data=>{
+      (data||[]).forEach(pi=>bump(keluar,pi.product_id,pi.qty_input,pi.kg_input));
+    })
   );
 
   // 6) Keluar total dari sistem: terjual, selisih write-off, musnah, by-product langsung
   tasks.push(
-    db.from('basket_movements')
+    fetchAllRows(()=>db.from('basket_movements')
       .select('qty_pindah,kg_pindah,confirmed_at,baskets!inner(product_id)')
       .in('ke_lokasi',['SOLD','SELISIH','MUSNAH','BYPRODUCT_DIRECT'])
       .eq('status','CONFIRMED')
       .lte('confirmed_at', toBound)
-      .then(({data,error})=>{
-        if(error){console.error('kumulatif exit',error);return}
-        (data||[]).forEach(m=>bump(keluar, m.baskets?.product_id, m.qty_pindah, m.kg_pindah));
-      })
+    ).then(data=>{
+      (data||[]).forEach(m=>bump(keluar, m.baskets?.product_id, m.qty_pindah, m.kg_pindah));
+    })
   );
 
   await Promise.all(tasks);
@@ -593,105 +621,512 @@ async function computePeriodBreakdown(fromDate, toDate){
   const fromBound = boundStart(fromDate), toBound = boundEnd(toDate);
   const buckets = {
     karkas_in:{}, parting_in:{}, boneless_in:{}, marinasi_in:{}, thawing_in:{}, retur_in:{},
-    parting_out:{}, boneless_out:{}, marinasi_out:{}, jual_out:{}, selisih_out:{}
+    parting_out:{}, boneless_out:{}, marinasi_out:{}, blasting_out:{}, jual_out:{}, selisih_out:{}
   };
   const tasks = [];
 
   // Masuk: Karkas
   tasks.push(
-    db.from('baskets')
+    fetchAllRows(()=>db.from('baskets')
       .select('product_id,qty_awal,kg_awal,created_at,carcass_baskets!inner(id)')
       .neq('status','VOID')
       .gte('created_at', fromBound).lte('created_at', toBound)
-      .then(({data,error})=>{
-        if(error){console.error('period karkas_in',error);return}
-        (data||[]).forEach(b=>bump(buckets.karkas_in,b.product_id,b.qty_awal,b.kg_awal));
-      })
+    ).then(data=>{
+      (data||[]).forEach(b=>bump(buckets.karkas_in,b.product_id,b.qty_awal,b.kg_awal));
+    })
   );
 
   // Masuk: Parting / Boneless / Marinasi (lahir dari WO, aman utk MULTI-stage
   // karena filter pakai tujuan_lokasi, bukan processing_orders.tipe)
   [['PARTING','parting_in'],['BONELESS','boneless_in'],['MARINASI','marinasi_in']].forEach(([tujuan,key])=>{
     tasks.push(
-      db.from('processing_outputs')
+      fetchAllRows(()=>db.from('processing_outputs')
         .select('product_id,qty_output,kg_output,created_at')
         .eq('tujuan_lokasi', tujuan)
         .gte('created_at', fromBound).lte('created_at', toBound)
-        .then(({data,error})=>{
-          if(error){console.error('period '+key,error);return}
-          (data||[]).forEach(po=>bump(buckets[key],po.product_id,po.qty_output,po.kg_output));
-        })
+      ).then(data=>{
+        (data||[]).forEach(po=>bump(buckets[key],po.product_id,po.qty_output,po.kg_output));
+      })
     );
   });
 
   // Masuk: Thawing
   tasks.push(
-    db.from('baskets')
+    fetchAllRows(()=>db.from('baskets')
       .select('product_id,qty_awal,kg_awal,created_at')
       .eq('basket_type','THAWING')
       .neq('status','VOID')
       .gte('created_at', fromBound).lte('created_at', toBound)
-      .then(({data,error})=>{
-        if(error){console.error('period thawing_in',error);return}
-        (data||[]).forEach(b=>bump(buckets.thawing_in,b.product_id,b.qty_awal,b.kg_awal));
-      })
+    ).then(data=>{
+      (data||[]).forEach(b=>bump(buckets.thawing_in,b.product_id,b.qty_awal,b.kg_awal));
+    })
   );
 
   // Keluar: Parting / Boneless / Marinasi (konsumsi ke WO, aman utk MULTI-stage
   // karena filter pakai workstations.tipe, bukan processing_orders.tipe)
   [['PARTING','parting_out'],['BONELESS','boneless_out'],['MARINASI','marinasi_out']].forEach(([tipe,key])=>{
     tasks.push(
-      db.from('processing_inputs')
+      fetchAllRows(()=>db.from('processing_inputs')
         .select('product_id,qty_input,kg_input,created_at,workstations!inner(tipe)')
         .eq('workstations.tipe', tipe)
         .gte('created_at', fromBound).lte('created_at', toBound)
-        .then(({data,error})=>{
-          if(error){console.error('period '+key,error);return}
-          (data||[]).forEach(pi=>bump(buckets[key],pi.product_id,pi.qty_input,pi.kg_input));
-        })
+      ).then(data=>{
+        (data||[]).forEach(pi=>bump(buckets[key],pi.product_id,pi.qty_input,pi.kg_input));
+      })
     );
   });
+
+  // Keluar: Blasting (transfer terkonfirmasi ke lantai Blasting, dari mana pun —
+  // 2026-08-05, gantikan kolom "Keluar: Thawing" yang selalu 0. Info-only: TIDAK
+  // diikutkan ke total_keluar/saldo_akhir gabungan karena ini transfer internal,
+  // barang belum keluar dari perusahaan — lihat catatan di footer laporan.)
+  tasks.push(
+    fetchAllRows(()=>db.from('basket_movements')
+      .select('qty_pindah,kg_pindah,confirmed_at,baskets!inner(product_id)')
+      .eq('ke_lokasi','BLASTING').eq('status','CONFIRMED')
+      .gte('confirmed_at', fromBound).lte('confirmed_at', toBound)
+    ).then(data=>{
+      (data||[]).forEach(m=>bump(buckets.blasting_out, m.baskets?.product_id, m.qty_pindah, m.kg_pindah));
+    })
+  );
 
   // Masuk: Retur dari Pelanggan (RETUR -> CHILLER, lihat migration 68). RETUR ->
   // MUSNAH (Catat Barang Rusak) sengaja tidak diikutkan — lihat catatan di
   // computeSaldoKumulatif().
   tasks.push(
-    db.from('basket_movements')
+    fetchAllRows(()=>db.from('basket_movements')
       .select('qty_pindah,kg_pindah,confirmed_at,baskets!inner(product_id)')
       .eq('dari_lokasi','RETUR').eq('ke_lokasi','CHILLER').eq('status','CONFIRMED')
       .gte('confirmed_at', fromBound).lte('confirmed_at', toBound)
-      .then(({data,error})=>{
-        if(error){console.error('period retur_in',error);return}
-        (data||[]).forEach(m=>bump(buckets.retur_in, m.baskets?.product_id, m.qty_pindah, m.kg_pindah));
-      })
+    ).then(data=>{
+      (data||[]).forEach(m=>bump(buckets.retur_in, m.baskets?.product_id, m.qty_pindah, m.kg_pindah));
+    })
   );
 
   // Keluar: Jual (Loading -> Sold, sudah net dari retur/selisih dock)
   tasks.push(
-    db.from('basket_movements')
+    fetchAllRows(()=>db.from('basket_movements')
       .select('qty_pindah,kg_pindah,confirmed_at,baskets!inner(product_id)')
       .eq('dari_lokasi','LOADING').eq('ke_lokasi','SOLD').eq('status','CONFIRMED')
       .gte('confirmed_at', fromBound).lte('confirmed_at', toBound)
-      .then(({data,error})=>{
-        if(error){console.error('period jual_out',error);return}
-        (data||[]).forEach(m=>bump(buckets.jual_out, m.baskets?.product_id, m.qty_pindah, m.kg_pindah));
-      })
+    ).then(data=>{
+      (data||[]).forEach(m=>bump(buckets.jual_out, m.baskets?.product_id, m.qty_pindah, m.kg_pindah));
+    })
   );
 
   // Keluar: Selisih (Chiller -> Selisih, write-off yang sudah disetujui Supervisor)
   tasks.push(
-    db.from('basket_movements')
+    fetchAllRows(()=>db.from('basket_movements')
       .select('qty_pindah,kg_pindah,confirmed_at,baskets!inner(product_id)')
       .eq('dari_lokasi','CHILLER').eq('ke_lokasi','SELISIH').eq('status','CONFIRMED')
       .gte('confirmed_at', fromBound).lte('confirmed_at', toBound)
-      .then(({data,error})=>{
-        if(error){console.error('period selisih_out',error);return}
-        (data||[]).forEach(m=>bump(buckets.selisih_out, m.baskets?.product_id, m.qty_pindah, m.kg_pindah));
-      })
+    ).then(data=>{
+      (data||[]).forEach(m=>bump(buckets.selisih_out, m.baskets?.product_id, m.qty_pindah, m.kg_pindah));
+    })
   );
 
   await Promise.all(tasks);
   return buckets;
+}
+
+// ══════════════════════════════════════════════════════════════
+// MODE CHILLER (2026-08-05, revisi ke-2 setelah user melaporkan Saldo Awal
+// bisa minus) — root cause: versi pertama membuat daftar sumber "masuk"
+// TETAP (LANTAI/PARTING/BONELESS/MARINASI/RETUR), tapi Blasting.html punya
+// tombol "↩️ Return" yang mengirim BLASTING->CHILLER (dari_lokasi:'BLASTING'),
+// DAN Chiller.html sendiri punya fitur generik "Tarik Kembali ke Chiller"
+// yang bisa narik dari basket.lokasi APA PUN (bukan daftar tetap). Kedua
+// jalur itu tidak pernah dihitung sebagai Masuk, padahal keranjang yang
+// masuk lewat situ, begitu keluar lagi dari Chiller (mis. dikirim ke Parting,
+// atau ke Blasting lagi), TETAP terhitung sebagai Keluar — keluar tanpa
+// pernah dihitung masuk = saldo bisa minus.
+//
+// FIX: jangan enumerasi sumber/tujuan lewat query terpisah per lokasi (rawan
+// kelewat kalau ada jalur baru). Sebagai gantinya: SATU query total utk semua
+// transfer CONFIRMED ke_lokasi=CHILLER (utk Masuk) dan SATU query total utk
+// semua dari_lokasi=CHILLER (utk Keluar), lalu di-bucket ke kolom bernama di
+// JS via MASUK_KEY_MAP/KELUAR_KEY_MAP — apa pun yang dari_lokasi/ke_lokasi-nya
+// TIDAK ada di peta, otomatis masuk kolom "Lainnya" (bukan hilang diam-diam).
+// Ini menjamin Total Masuk/Keluar SELALU cocok dengan kenyataan di basket_movements,
+// terlepas dari lokasi asal/tujuan spesifiknya.
+// ══════════════════════════════════════════════════════════════
+const MASUK_KEY_MAP  = {LANTAI:'karkas', PARTING:'parting', BONELESS:'boneless', MARINASI:'marinasi', RETUR:'retur', BLASTING:'blasting'};
+const KELUAR_KEY_MAP = {PARTING:'parting', BONELESS:'boneless', MARINASI:'marinasi', BLASTING:'blasting', LOADING:'jual', SELISIH:'selisih'};
+
+// Saldo Chiller sampai cutoffDate (inklusif) — dipakai utk Saldo Awal periode.
+// Tidak perlu breakdown per kolom di sini, cukup total masuk vs total keluar.
+async function computeSaldoChiller(cutoffDate){
+  const toBound = boundEnd(cutoffDate);
+  const masuk = {}, keluar = {};
+  const tasks = [];
+
+  // Masuk: SEMUA transfer CONFIRMED ke CHILLER, dari lokasi APA PUN.
+  tasks.push(
+    fetchAllRows(()=>db.from('basket_movements')
+      .select('qty_pindah,kg_pindah,confirmed_at,baskets!inner(product_id)')
+      .eq('ke_lokasi','CHILLER').eq('status','CONFIRMED')
+      .lte('confirmed_at',toBound)
+    ).then(data=>{
+      (data||[]).forEach(m=>bump(masuk,m.baskets?.product_id,m.qty_pindah,m.kg_pindah));
+    })
+  );
+
+  // Masuk: Thawing lahir LANGSUNG di Chiller (destinasi dipilih operator saat timbang Thawing)
+  tasks.push(
+    fetchAllRows(()=>db.from('baskets')
+      .select('product_id,qty_awal,kg_awal,created_at')
+      .eq('basket_type','THAWING').eq('lokasi','CHILLER').neq('status','VOID')
+      .lte('created_at',toBound)
+    ).then(data=>{
+      (data||[]).forEach(b=>bump(masuk,b.product_id,b.qty_awal,b.kg_awal));
+    })
+  );
+
+  // Keluar: SEMUA transfer CONFIRMED dari CHILLER, ke lokasi APA PUN.
+  tasks.push(
+    fetchAllRows(()=>db.from('basket_movements')
+      .select('qty_pindah,kg_pindah,confirmed_at,baskets!inner(product_id)')
+      .eq('dari_lokasi','CHILLER').eq('status','CONFIRMED')
+      .lte('confirmed_at',toBound)
+    ).then(data=>{
+      (data||[]).forEach(m=>bump(keluar,m.baskets?.product_id,m.qty_pindah,m.kg_pindah));
+    })
+  );
+
+  // Opname Saldo Awal yang dicatat DI Chiller
+  tasks.push(
+    fetchAllRows(()=>db.from('baskets')
+      .select('product_id,qty_awal,kg_awal,lokasi,saldo_awal_sessions!inner(status,tanggal_opname)')
+      .eq('basket_type','SALDO_AWAL').eq('lokasi','CHILLER').neq('status','VOID')
+      .eq('saldo_awal_sessions.status','FINAL')
+      .lte('saldo_awal_sessions.tanggal_opname', cutoffDate)
+    ).then(data=>{
+      (data||[]).forEach(b=>bump(masuk,b.product_id,b.qty_awal,b.kg_awal));
+    })
+  );
+
+  await Promise.all(tasks);
+  const saldo = {};
+  new Set([...Object.keys(masuk),...Object.keys(keluar)]).forEach(pid=>{
+    const m=masuk[pid]||{qty:0,kg:0}, k=keluar[pid]||{qty:0,kg:0};
+    saldo[pid] = {qty:m.qty-k.qty, kg:m.kg-k.kg};
+  });
+  return saldo;
+}
+
+// Rincian mutasi Chiller dalam rentang tanggal (inklusif), DI-BUCKET per kolom
+// bernama utk tampilan — tapi dari SATU query total per arah (bukan query
+// terpisah per lokasi), supaya "Lainnya" bisa dihitung sbg residual yang
+// dijamin benar (bukan kolom yang kebetulan lupa ditambahkan).
+async function computePeriodChiller(fromDate, toDate){
+  const fromBound = boundStart(fromDate), toBound = boundEnd(toDate);
+  const masuk  = {karkas:{},parting:{},boneless:{},marinasi:{},retur:{},blasting:{},lainnya:{},thawing:{}};
+  const keluar = {parting:{},boneless:{},marinasi:{},blasting:{},jual:{},selisih:{},lainnya:{}};
+  const tasks = [];
+
+  tasks.push(
+    fetchAllRows(()=>db.from('basket_movements')
+      .select('qty_pindah,kg_pindah,dari_lokasi,confirmed_at,baskets!inner(product_id)')
+      .eq('ke_lokasi','CHILLER').eq('status','CONFIRMED')
+      .gte('confirmed_at',fromBound).lte('confirmed_at',toBound)
+    ).then(data=>{
+      (data||[]).forEach(m=>{
+        const key = MASUK_KEY_MAP[m.dari_lokasi] || 'lainnya';
+        bump(masuk[key], m.baskets?.product_id, m.qty_pindah, m.kg_pindah);
+      });
+    })
+  );
+
+  tasks.push(
+    fetchAllRows(()=>db.from('baskets')
+      .select('product_id,qty_awal,kg_awal,created_at')
+      .eq('basket_type','THAWING').eq('lokasi','CHILLER').neq('status','VOID')
+      .gte('created_at',fromBound).lte('created_at',toBound)
+    ).then(data=>{
+      (data||[]).forEach(b=>bump(masuk.thawing,b.product_id,b.qty_awal,b.kg_awal));
+    })
+  );
+
+  tasks.push(
+    fetchAllRows(()=>db.from('basket_movements')
+      .select('qty_pindah,kg_pindah,ke_lokasi,confirmed_at,baskets!inner(product_id)')
+      .eq('dari_lokasi','CHILLER').eq('status','CONFIRMED')
+      .gte('confirmed_at',fromBound).lte('confirmed_at',toBound)
+    ).then(data=>{
+      (data||[]).forEach(m=>{
+        const key = KELUAR_KEY_MAP[m.ke_lokasi] || 'lainnya';
+        bump(keluar[key], m.baskets?.product_id, m.qty_pindah, m.kg_pindah);
+      });
+    })
+  );
+
+  await Promise.all(tasks);
+  return {masuk, keluar};
+}
+
+function theadSemuaLokasiHTML(){
+  return `<tr class="grp">
+    <th class="first" rowspan="3">Produk</th>
+    <th class="grp-awal" colspan="2" rowspan="2">Saldo Awal</th>
+    <th class="grp-masuk" colspan="14">Masuk</th>
+    <th class="grp-keluar" colspan="14">Keluar</th>
+    <th class="grp-akhir" colspan="2" rowspan="2">Saldo Akhir</th>
+  </tr>
+  <tr class="grp">
+    <th class="col-masuk" colspan="2">Karkas</th>
+    <th class="col-masuk" colspan="2">Parting</th>
+    <th class="col-masuk" colspan="2">Boneless</th>
+    <th class="col-masuk" colspan="2">Marinasi</th>
+    <th class="col-masuk" colspan="2">Thawing</th>
+    <th class="col-masuk" colspan="2">Retur</th>
+    <th class="col-masuk" colspan="2">Total</th>
+    <th class="col-keluar" colspan="2">Parting</th>
+    <th class="col-keluar" colspan="2">Boneless</th>
+    <th class="col-keluar" colspan="2">Marinasi</th>
+    <th class="col-keluar" colspan="2" title="Transfer ke lantai Blasting — informasi, tidak dikurangkan ke Total Keluar/Saldo Akhir">Blasting*</th>
+    <th class="col-keluar" colspan="2">Jual</th>
+    <th class="col-keluar" colspan="2">Selisih</th>
+    <th class="col-keluar" colspan="2">Total</th>
+  </tr>
+  <tr>
+    <th class="col-awal">Qty</th><th class="col-awal">Kg</th>
+    <th class="col-masuk">Qty</th><th class="col-masuk">Kg</th>
+    <th class="col-masuk">Qty</th><th class="col-masuk">Kg</th>
+    <th class="col-masuk">Qty</th><th class="col-masuk">Kg</th>
+    <th class="col-masuk">Qty</th><th class="col-masuk">Kg</th>
+    <th class="col-masuk">Qty</th><th class="col-masuk">Kg</th>
+    <th class="col-masuk">Qty</th><th class="col-masuk">Kg</th>
+    <th class="col-masuk" style="font-weight:800">Qty</th><th class="col-masuk" style="font-weight:800">Kg</th>
+    <th class="col-keluar">Qty</th><th class="col-keluar">Kg</th>
+    <th class="col-keluar">Qty</th><th class="col-keluar">Kg</th>
+    <th class="col-keluar">Qty</th><th class="col-keluar">Kg</th>
+    <th class="col-keluar">Qty</th><th class="col-keluar">Kg</th>
+    <th class="col-keluar">Qty</th><th class="col-keluar">Kg</th>
+    <th class="col-keluar">Qty</th><th class="col-keluar">Kg</th>
+    <th class="col-keluar" style="font-weight:800">Qty</th><th class="col-keluar" style="font-weight:800">Kg</th>
+    <th class="col-akhir">Qty</th><th class="col-akhir">Kg</th>
+  </tr>`;
+}
+
+// 8 kolom Masuk (tambah Blasting + Lainnya dari versi combined) dan 7 kolom
+// Keluar (tambah Lainnya) — beda jumlah kolom dari theadSemuaLokasiHTML,
+// makanya render/export Chiller punya fungsi sendiri (bawah), tidak reuse
+// renderRekapTable/exportHeaders lagi seperti draft pertama.
+function theadChillerHTML(){
+  return `<tr class="grp">
+    <th class="first" rowspan="3">Produk</th>
+    <th class="grp-awal" colspan="2" rowspan="2">Saldo Awal</th>
+    <th class="grp-masuk" colspan="18">Masuk</th>
+    <th class="grp-keluar" colspan="16">Keluar</th>
+    <th class="grp-akhir" colspan="2" rowspan="2">Saldo Akhir</th>
+  </tr>
+  <tr class="grp">
+    <th class="col-masuk" colspan="2">Karkas</th>
+    <th class="col-masuk" colspan="2">Parting</th>
+    <th class="col-masuk" colspan="2">Boneless</th>
+    <th class="col-masuk" colspan="2">Marinasi</th>
+    <th class="col-masuk" colspan="2">Thawing</th>
+    <th class="col-masuk" colspan="2">Retur</th>
+    <th class="col-masuk" colspan="2">Blasting</th>
+    <th class="col-masuk" colspan="2" title="Transfer masuk dari lokasi selain kategori di atas — mis. fitur Tarik Kembali ke Chiller dari lokasi apa pun">Lainnya</th>
+    <th class="col-masuk" colspan="2">Total</th>
+    <th class="col-keluar" colspan="2">Parting</th>
+    <th class="col-keluar" colspan="2">Boneless</th>
+    <th class="col-keluar" colspan="2">Marinasi</th>
+    <th class="col-keluar" colspan="2">Blasting</th>
+    <th class="col-keluar" colspan="2" title="Dikirim ke Loading Dock untuk dijual (belum tentu sudah terjual final)">Jual*</th>
+    <th class="col-keluar" colspan="2">Selisih</th>
+    <th class="col-keluar" colspan="2" title="Transfer keluar ke lokasi selain kategori di atas">Lainnya</th>
+    <th class="col-keluar" colspan="2">Total</th>
+  </tr>
+  <tr>
+    <th class="col-awal">Qty</th><th class="col-awal">Kg</th>
+    <th class="col-masuk">Qty</th><th class="col-masuk">Kg</th>
+    <th class="col-masuk">Qty</th><th class="col-masuk">Kg</th>
+    <th class="col-masuk">Qty</th><th class="col-masuk">Kg</th>
+    <th class="col-masuk">Qty</th><th class="col-masuk">Kg</th>
+    <th class="col-masuk">Qty</th><th class="col-masuk">Kg</th>
+    <th class="col-masuk">Qty</th><th class="col-masuk">Kg</th>
+    <th class="col-masuk">Qty</th><th class="col-masuk">Kg</th>
+    <th class="col-masuk">Qty</th><th class="col-masuk">Kg</th>
+    <th class="col-masuk" style="font-weight:800">Qty</th><th class="col-masuk" style="font-weight:800">Kg</th>
+    <th class="col-keluar">Qty</th><th class="col-keluar">Kg</th>
+    <th class="col-keluar">Qty</th><th class="col-keluar">Kg</th>
+    <th class="col-keluar">Qty</th><th class="col-keluar">Kg</th>
+    <th class="col-keluar">Qty</th><th class="col-keluar">Kg</th>
+    <th class="col-keluar">Qty</th><th class="col-keluar">Kg</th>
+    <th class="col-keluar">Qty</th><th class="col-keluar">Kg</th>
+    <th class="col-keluar">Qty</th><th class="col-keluar">Kg</th>
+    <th class="col-keluar" style="font-weight:800">Qty</th><th class="col-keluar" style="font-weight:800">Kg</th>
+    <th class="col-akhir">Qty</th><th class="col-akhir">Kg</th>
+  </tr>`;
+}
+
+async function tampilkanRekapChiller(dari, sampai){
+  document.getElementById('thead-rekap').innerHTML = theadChillerHTML();
+  document.getElementById('tbody-rekap').innerHTML = '<tr><td colspan="39"><div class="empty">Memuat…</div></td></tr>';
+  const hint = document.getElementById('filter-hint');
+  if(hint)hint.textContent = 'Menampilkan mutasi lantai Chiller saja. Masuk/Keluar dihitung dari SEMUA transfer nyata ke/dari Chiller (termasuk Blasting, dan kolom "Lainnya" utk lokasi asal/tujuan lain) — tidak dikecualikan seperti mode "Semua Lokasi".';
+  const noteEl = document.getElementById('rpt-note-text');
+  if(noteEl)noteEl.innerHTML = 'Catatan: mode ini khusus stok Chiller. <b>Jual*</b> = dikirim ke Loading Dock untuk dijual (transfer nyata keluar dari Chiller), bukan konfirmasi sudah laku — beda dari mode "Semua Lokasi" yang baru menghitung Jual saat benar-benar terjual (Loading → Sold). <b>Blasting</b> di sini IKUT dihitung ke Total Keluar/Saldo Akhir (beda dari mode "Semua Lokasi" yang mengecualikannya) karena barang itu benar-benar keluar dari stok Chiller. <b>Lainnya</b> = transfer ke/dari lokasi di luar kategori bernama (mis. fitur "Tarik Kembali ke Chiller" yang bisa menarik dari lokasi mana pun) — kalau kolom ini sering terisi, beri tahu supaya kategorinya bisa ditambah namanya. Koreksi yang sudah disetujui (Koreksi &amp; Approval) belum tercermin di rekap ini.';
+
+  const cutoffDate = addDaysISO(dari,-1);
+  const [saldoAwalMap, periode] = await Promise.all([
+    computeSaldoChiller(cutoffDate),
+    computePeriodChiller(dari, sampai)
+  ]);
+
+  const productIds = new Set([
+    ...Object.keys(saldoAwalMap),
+    ...Object.values(periode.masuk).flatMap(b=>Object.keys(b)),
+    ...Object.values(periode.keluar).flatMap(b=>Object.keys(b))
+  ]);
+
+  let products = [];
+  if(productIds.size){
+    const { data, error } = await db.from('product_master')
+      .select('id,product_code,nama_produk,kategori,grade')
+      .in('id', [...productIds]);
+    if(error) throw error;
+    products = data||[];
+  }
+  const productById = {};
+  products.forEach(p=>{productById[p.id]=p});
+
+  let rows = [...productIds].map(pid=>{
+    const p = productById[pid] || {product_code:'—', nama_produk:'(produk tidak dikenali)', kategori:'', grade:null};
+    const saldoAwal = saldoAwalMap[pid] || {qty:0,kg:0};
+    const masuk = {
+      karkas:   periode.masuk.karkas[pid]   || {qty:0,kg:0},
+      parting:  periode.masuk.parting[pid]  || {qty:0,kg:0},
+      boneless: periode.masuk.boneless[pid] || {qty:0,kg:0},
+      marinasi: periode.masuk.marinasi[pid] || {qty:0,kg:0},
+      thawing:  periode.masuk.thawing[pid]  || {qty:0,kg:0},
+      retur:    periode.masuk.retur[pid]    || {qty:0,kg:0},
+      blasting: periode.masuk.blasting[pid] || {qty:0,kg:0},
+      lainnya:  periode.masuk.lainnya[pid]  || {qty:0,kg:0}
+    };
+    const keluar = {
+      parting:  periode.keluar.parting[pid]  || {qty:0,kg:0},
+      boneless: periode.keluar.boneless[pid] || {qty:0,kg:0},
+      marinasi: periode.keluar.marinasi[pid] || {qty:0,kg:0},
+      blasting: periode.keluar.blasting[pid] || {qty:0,kg:0}, // di mode ini IKUT total (beda dari Semua Lokasi)
+      jual:     periode.keluar.jual[pid]     || {qty:0,kg:0},
+      selisih:  periode.keluar.selisih[pid]  || {qty:0,kg:0},
+      lainnya:  periode.keluar.lainnya[pid]  || {qty:0,kg:0}
+    };
+    const totalMasuk = Object.values(masuk).reduce(addUnit, ZERO);
+    const totalKeluar = Object.values(keluar).reduce(addUnit, ZERO);
+    const saldoAkhir = addUnit(saldoAwal, subUnit(totalMasuk, totalKeluar));
+    return {
+      product_id: pid, product_code:p.product_code, nama_produk:p.nama_produk,
+      kategori:p.kategori, grade:p.grade,
+      saldo_awal: saldoAwal, masuk, keluar, total_masuk: totalMasuk, total_keluar: totalKeluar,
+      saldo_akhir: saldoAkhir
+    };
+  });
+
+  rows = rows.filter(r =>
+    sigUnit(r.saldo_awal) || sigUnit(r.total_masuk) || sigUnit(r.total_keluar) || sigUnit(r.saldo_akhir)
+  );
+  rows.sort((a,b)=> a.nama_produk.localeCompare(b.nama_produk,'id'));
+
+  mutasiRows = rows;
+  mutasiMode = 'chiller';
+  mutasiLokasi = 'CHILLER';
+  lastDari = dari; lastSampai = sampai;
+  document.getElementById('result-count').textContent = rows.length + ' barang';
+  renderRekapTableChiller(rows);
+}
+
+function renderRekapTableChiller(rows){
+  const tbody = document.getElementById('tbody-rekap');
+  if(!rows.length){
+    tbody.innerHTML = '<tr><td colspan="39"><div class="empty">Tidak ada saldo maupun mutasi barang pada periode ini.</div></td></tr>';
+    return;
+  }
+  const tot = {
+    saldo_awal:{qty:0,kg:0},
+    masuk:{karkas:{qty:0,kg:0},parting:{qty:0,kg:0},boneless:{qty:0,kg:0},marinasi:{qty:0,kg:0},thawing:{qty:0,kg:0},retur:{qty:0,kg:0},blasting:{qty:0,kg:0},lainnya:{qty:0,kg:0}},
+    keluar:{parting:{qty:0,kg:0},boneless:{qty:0,kg:0},marinasi:{qty:0,kg:0},blasting:{qty:0,kg:0},jual:{qty:0,kg:0},selisih:{qty:0,kg:0},lainnya:{qty:0,kg:0}},
+    total_masuk:{qty:0,kg:0}, total_keluar:{qty:0,kg:0}, saldo_akhir:{qty:0,kg:0}
+  };
+  const accum = (t,u)=>{ t.qty+=u.qty; t.kg+=u.kg; };
+
+  let html = rows.map(r=>{
+    accum(tot.saldo_awal, r.saldo_awal);
+    Object.keys(tot.masuk).forEach(k=>accum(tot.masuk[k], r.masuk[k]));
+    Object.keys(tot.keluar).forEach(k=>accum(tot.keluar[k], r.keluar[k]));
+    accum(tot.total_masuk, r.total_masuk);
+    accum(tot.total_keluar, r.total_keluar);
+    accum(tot.saldo_akhir, r.saldo_akhir);
+
+    return `<tr>
+      <td>
+        <div class="produk-name">${esc(r.nama_produk)}</div>
+        <div class="produk-code">${esc(r.product_code)}${r.grade?' · Grade '+esc(r.grade):''}</div>
+      </td>
+      ${cell(r.saldo_awal,'col-awal')}
+      ${cell(r.masuk.karkas,'col-masuk')}
+      ${cell(r.masuk.parting,'col-masuk')}
+      ${cell(r.masuk.boneless,'col-masuk')}
+      ${cell(r.masuk.marinasi,'col-masuk')}
+      ${cell(r.masuk.thawing,'col-masuk')}
+      ${cell(r.masuk.retur,'col-masuk')}
+      ${cell(r.masuk.blasting,'col-masuk')}
+      ${cell(r.masuk.lainnya,'col-masuk')}
+      ${cell(r.total_masuk,'col-masuk').replace(/<td /g,'<td style="font-weight:700" ')}
+      ${cell(r.keluar.parting,'col-keluar')}
+      ${cell(r.keluar.boneless,'col-keluar')}
+      ${cell(r.keluar.marinasi,'col-keluar')}
+      ${cell(r.keluar.blasting,'col-keluar')}
+      ${cell(r.keluar.jual,'col-keluar')}
+      ${cell(r.keluar.selisih,'col-keluar')}
+      ${cell(r.keluar.lainnya,'col-keluar')}
+      ${cell(r.total_keluar,'col-keluar').replace(/<td /g,'<td style="font-weight:700" ')}
+      ${cell(r.saldo_akhir,'col-akhir')}
+    </tr>`;
+  }).join('');
+
+  html += `<tr class="tot-row">
+    <td>TOTAL</td>
+    ${cell(tot.saldo_awal,'')}
+    ${cell(tot.masuk.karkas,'')}
+    ${cell(tot.masuk.parting,'')}
+    ${cell(tot.masuk.boneless,'')}
+    ${cell(tot.masuk.marinasi,'')}
+    ${cell(tot.masuk.thawing,'')}
+    ${cell(tot.masuk.retur,'')}
+    ${cell(tot.masuk.blasting,'')}
+    ${cell(tot.masuk.lainnya,'')}
+    ${cell(tot.total_masuk,'')}
+    ${cell(tot.keluar.parting,'')}
+    ${cell(tot.keluar.boneless,'')}
+    ${cell(tot.keluar.marinasi,'')}
+    ${cell(tot.keluar.blasting,'')}
+    ${cell(tot.keluar.jual,'')}
+    ${cell(tot.keluar.selisih,'')}
+    ${cell(tot.keluar.lainnya,'')}
+    ${cell(tot.total_keluar,'')}
+    ${cell(tot.saldo_akhir,'')}
+  </tr>`;
+
+  tbody.innerHTML = html;
+}
+
+function exportHeadersChiller(){
+  const pairs = ['Saldo Awal','Masuk: Karkas','Masuk: Parting','Masuk: Boneless','Masuk: Marinasi','Masuk: Thawing','Masuk: Retur','Masuk: Blasting','Masuk: Lainnya','Total Masuk',
+    'Keluar: Parting','Keluar: Boneless','Keluar: Marinasi','Keluar: Blasting','Keluar: Jual (ke Loading Dock)','Keluar: Selisih','Keluar: Lainnya','Total Keluar','Saldo Akhir'];
+  const headers = ['Kode Produk','Nama Produk','Kategori','Grade'];
+  pairs.forEach(p=>{ headers.push(p+' (Qty)'); headers.push(p+' (Kg)'); });
+  return headers;
+}
+function exportRowChiller(r){
+  const seq = [r.saldo_awal, r.masuk.karkas, r.masuk.parting, r.masuk.boneless, r.masuk.marinasi, r.masuk.thawing, r.masuk.retur, r.masuk.blasting, r.masuk.lainnya, r.total_masuk,
+    r.keluar.parting, r.keluar.boneless, r.keluar.marinasi, r.keluar.blasting, r.keluar.jual, r.keluar.selisih, r.keluar.lainnya, r.total_keluar, r.saldo_akhir];
+  const row = [r.product_code, r.nama_produk, r.kategori||'', r.grade||''];
+  seq.forEach(u=>{ row.push(u.qty); row.push(u.kg); });
+  return row;
 }
 
 const ZERO = {qty:0, kg:0};
@@ -702,12 +1137,32 @@ function sigUnit(u){ return Math.abs(u?.qty||0) > 0.0001 || Math.abs(u?.kg||0) >
 async function tampilkanRekap(){
   const dari = document.getElementById('filter-dari').value;
   const sampai = document.getElementById('filter-sampai').value;
+  const lokasi = document.getElementById('filter-lokasi').value || '';
   if(!dari || !sampai){ showToast('Pilih tanggal dari & sampai.','warning'); return; }
   if(dari > sampai){ showToast('Tanggal "Dari" harus sebelum atau sama dengan "Sampai".','warning'); return; }
 
   const panel = document.getElementById('panel-result');
   panel.style.display = 'block';
-  document.getElementById('result-title').textContent = `Mutasi Barang — ${fmtDateID(dari)} s/d ${fmtDateID(sampai)}`;
+  const judulLokasi = lokasi==='CHILLER' ? ' — Lantai Chiller' : ' — Semua Lokasi';
+  document.getElementById('result-title').textContent = `Mutasi Barang${judulLokasi} — ${fmtDateID(dari)} s/d ${fmtDateID(sampai)}`;
+
+  if(lokasi==='CHILLER'){
+    try{
+      await tampilkanRekapChiller(dari, sampai);
+    }catch(e){
+      console.error(e);
+      document.getElementById('tbody-rekap').innerHTML = '<tr><td colspan="39"><div class="empty">Gagal memuat data mutasi barang.</div></td></tr>';
+      showToast('Gagal memuat rekap: '+(e.message||''),'error');
+    }
+    return;
+  }
+
+  // ── Mode "Semua Lokasi" (gabungan, seperti sebelumnya) ──
+  document.getElementById('thead-rekap').innerHTML = theadSemuaLokasiHTML();
+  const hint = document.getElementById('filter-hint');
+  if(hint)hint.textContent = 'Baris = nama Barang. Saldo Awal dihitung otomatis dari seluruh histori (opname Saldo Awal + semua mutasi) sampai H-1 dari tanggal mulai. Hanya barang yang punya Saldo Awal dan/atau mutasi pada periode ini yang ditampilkan.';
+  const noteEl = document.getElementById('rpt-note-text');
+  if(noteEl)noteEl.innerHTML = `Catatan: <b>Jual</b> = keranjang yang sudah dikirim final ke pelanggan (Loading → Sold), sudah bersih dari retur/selisih dock karena leg tersebut memang tidak pernah tercatat sebagai terjual. <b>Selisih</b> = write-off yang sudah disetujui Supervisor di modul Penjualan &amp; Selisih (hanya mencakup selisih kurang — sistem belum punya mekanisme selisih lebih). <b>Retur</b> = retur barang dari Pelanggan (Return Slip) — fitur ini belum tersedia di sistem, kolom selalu 0. <b>Keluar: Blasting*</b> = transfer terkonfirmasi ke lantai Blasting (barang masuk proses pembekuan) — ditampilkan untuk visibilitas tapi <u>tidak</u> ikut dikurangkan ke Total Keluar/Saldo Akhir gabungan, karena barang belum keluar dari perusahaan, cuma pindah ke tahap proses berikutnya. Koreksi yang sudah disetujui (Koreksi &amp; Approval) belum tercermin di rekap ini. By-product Karkas memakai model stok terpisah dan belum tercakup.`;
   document.getElementById('tbody-rekap').innerHTML = '<tr><td colspan="33"><div class="empty">Memuat…</div></td></tr>';
 
   try{
@@ -723,8 +1178,8 @@ async function tampilkanRekap(){
       ...Object.keys(periode.boneless_in), ...Object.keys(periode.marinasi_in),
       ...Object.keys(periode.thawing_in), ...Object.keys(periode.retur_in),
       ...Object.keys(periode.parting_out), ...Object.keys(periode.boneless_out),
-      ...Object.keys(periode.marinasi_out), ...Object.keys(periode.jual_out),
-      ...Object.keys(periode.selisih_out)
+      ...Object.keys(periode.marinasi_out), ...Object.keys(periode.blasting_out),
+      ...Object.keys(periode.jual_out), ...Object.keys(periode.selisih_out)
     ]);
 
     let products = [];
@@ -754,13 +1209,15 @@ async function tampilkanRekap(){
         parting:  periode.parting_out[pid]  || {qty:0,kg:0},
         boneless: periode.boneless_out[pid] || {qty:0,kg:0},
         marinasi: periode.marinasi_out[pid] || {qty:0,kg:0},
-        thawing:  {qty:0,kg:0}, // Thawing tidak pernah mengonsumsi stok internal
+        blasting: periode.blasting_out[pid] || {qty:0,kg:0}, // info-only, TIDAK masuk totalKeluar (lihat catatan footer)
         jual:     periode.jual_out[pid]    || {qty:0,kg:0},
         selisih:  periode.selisih_out[pid] || {qty:0,kg:0}
       };
 
       const totalMasuk = Object.values(masuk).reduce(addUnit, ZERO);
-      const totalKeluar = Object.values(keluar).reduce(addUnit, ZERO);
+      const totalKeluar = Object.entries(keluar)
+        .filter(([k])=>k!=='blasting')
+        .reduce((acc,[,u])=>addUnit(acc,u), ZERO);
       const saldoAkhir = addUnit(saldoAwal, subUnit(totalMasuk, totalKeluar));
 
       return {
@@ -772,12 +1229,15 @@ async function tampilkanRekap(){
     });
 
     // Scope: hanya barang yang punya saldo awal dan/atau mutasi pada periode ini
+    // (r.keluar.blasting dicek terpisah karena info-only, tidak ikut total_keluar)
     rows = rows.filter(r =>
-      sigUnit(r.saldo_awal) || sigUnit(r.total_masuk) || sigUnit(r.total_keluar) || sigUnit(r.saldo_akhir)
+      sigUnit(r.saldo_awal) || sigUnit(r.total_masuk) || sigUnit(r.total_keluar) || sigUnit(r.saldo_akhir) || sigUnit(r.keluar.blasting)
     );
     rows.sort((a,b)=> a.nama_produk.localeCompare(b.nama_produk,'id'));
 
     mutasiRows = rows;
+    mutasiMode = 'semua';
+    mutasiLokasi = null;
     lastDari = dari; lastSampai = sampai;
     document.getElementById('result-count').textContent = rows.length + ' barang';
     renderRekapTable(rows);
@@ -800,7 +1260,7 @@ function renderRekapTable(rows){
   const tot = {
     saldo_awal:{qty:0,kg:0},
     masuk:{karkas:{qty:0,kg:0},parting:{qty:0,kg:0},boneless:{qty:0,kg:0},marinasi:{qty:0,kg:0},thawing:{qty:0,kg:0},retur:{qty:0,kg:0}},
-    keluar:{parting:{qty:0,kg:0},boneless:{qty:0,kg:0},marinasi:{qty:0,kg:0},thawing:{qty:0,kg:0},jual:{qty:0,kg:0},selisih:{qty:0,kg:0}},
+    keluar:{parting:{qty:0,kg:0},boneless:{qty:0,kg:0},marinasi:{qty:0,kg:0},blasting:{qty:0,kg:0},jual:{qty:0,kg:0},selisih:{qty:0,kg:0}},
     total_masuk:{qty:0,kg:0}, total_keluar:{qty:0,kg:0}, saldo_akhir:{qty:0,kg:0}
   };
   const accum = (t,u)=>{ t.qty+=u.qty; t.kg+=u.kg; };
@@ -829,7 +1289,7 @@ function renderRekapTable(rows){
       ${cell(r.keluar.parting,'col-keluar')}
       ${cell(r.keluar.boneless,'col-keluar')}
       ${cell(r.keluar.marinasi,'col-keluar')}
-      ${cell(r.keluar.thawing,'col-keluar')}
+      ${cell(r.keluar.blasting,'col-keluar')}
       ${cell(r.keluar.jual,'col-keluar')}
       ${cell(r.keluar.selisih,'col-keluar')}
       ${cell(r.total_keluar,'col-keluar').replace(/<td /g,'<td style="font-weight:700" ')}
@@ -850,7 +1310,7 @@ function renderRekapTable(rows){
     ${cell(tot.keluar.parting,'')}
     ${cell(tot.keluar.boneless,'')}
     ${cell(tot.keluar.marinasi,'')}
-    ${cell(tot.keluar.thawing,'')}
+    ${cell(tot.keluar.blasting,'')}
     ${cell(tot.keluar.jual,'')}
     ${cell(tot.keluar.selisih,'')}
     ${cell(tot.total_keluar,'')}
@@ -865,29 +1325,33 @@ function renderRekapTable(rows){
 // ══════════════════════════════════════════════════════════════
 function exportHeaders(){
   const pairs = ['Saldo Awal','Masuk: Karkas','Masuk: Parting','Masuk: Boneless','Masuk: Marinasi','Masuk: Thawing','Masuk: Retur','Total Masuk',
-    'Keluar: Parting','Keluar: Boneless','Keluar: Marinasi','Keluar: Thawing','Keluar: Jual','Keluar: Selisih','Total Keluar','Saldo Akhir'];
+    'Keluar: Parting','Keluar: Boneless','Keluar: Marinasi','Keluar: Blasting (info, di luar Total)','Keluar: Jual','Keluar: Selisih','Total Keluar','Saldo Akhir'];
   const headers = ['Kode Produk','Nama Produk','Kategori','Grade'];
   pairs.forEach(p=>{ headers.push(p+' (Qty)'); headers.push(p+' (Kg)'); });
   return headers;
 }
 function exportRow(r){
   const seq = [r.saldo_awal, r.masuk.karkas, r.masuk.parting, r.masuk.boneless, r.masuk.marinasi, r.masuk.thawing, r.masuk.retur, r.total_masuk,
-    r.keluar.parting, r.keluar.boneless, r.keluar.marinasi, r.keluar.thawing, r.keluar.jual, r.keluar.selisih, r.total_keluar, r.saldo_akhir];
+    r.keluar.parting, r.keluar.boneless, r.keluar.marinasi, r.keluar.blasting, r.keluar.jual, r.keluar.selisih, r.total_keluar, r.saldo_akhir];
   const row = [r.product_code, r.nama_produk, r.kategori||'', r.grade||''];
   seq.forEach(u=>{ row.push(u.qty); row.push(u.kg); });
   return row;
 }
 function exportRekapCSV(){
   if(!mutasiRows.length){showToast('Belum ada data untuk diekspor.','warning');return}
-  const headers = exportHeaders();
-  const rows = mutasiRows.map(exportRow);
-  exportCSV(headers, rows, todayFilename(`mutasibarang_${lastDari}_${lastSampai}`) + 'csv');
+  const isChiller = mutasiMode==='chiller';
+  const headers = isChiller ? exportHeadersChiller() : exportHeaders();
+  const rows = mutasiRows.map(isChiller ? exportRowChiller : exportRow);
+  const suffix = isChiller ? '_CHILLER' : '';
+  exportCSV(headers, rows, todayFilename(`mutasibarang${suffix}_${lastDari}_${lastSampai}`) + 'csv');
 }
 function exportRekapXLSX(){
   if(!mutasiRows.length){showToast('Belum ada data untuk diekspor.','warning');return}
-  const headers = exportHeaders();
-  const rows = mutasiRows.map(exportRow);
-  exportXLSX(headers, rows, 'Mutasi Barang', todayFilename(`mutasibarang_${lastDari}_${lastSampai}`) + 'xlsx');
+  const isChiller = mutasiMode==='chiller';
+  const headers = isChiller ? exportHeadersChiller() : exportHeaders();
+  const rows = mutasiRows.map(isChiller ? exportRowChiller : exportRow);
+  const suffix = isChiller ? '_CHILLER' : '';
+  exportXLSX(headers, rows, 'Mutasi Barang', todayFilename(`mutasibarang${suffix}_${lastDari}_${lastSampai}`) + 'xlsx');
 }
 </script>
 </body>

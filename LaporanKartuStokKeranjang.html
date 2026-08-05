@@ -735,15 +735,21 @@ async function tampilkanLedger(basket){
       masuk_qty:0,masuk_kg:0,keluar_qty:0,keluar_kg:0,isInfo:true});
   });
 
-  // 5) Alokasi Blasting — reservasi lunak, tidak mengurangi qty_sisa
+  // 5) Alokasi Blasting — keluar nyata dengan tujuan rak (sejak 2026-08-05,
+  //    naik rak langsung mengurangi qty_sisa/kg_sisa keranjang, sama seperti
+  //    Konsumsi Produksi di floor lain — bukan lagi reservasi lunak). Setiap
+  //    baris yang masih ada di tabel ini SELALU merepresentasikan ekor/kg yang
+  //    SAAT INI sedang dikurangi dari basket (hapus alokasi = baris hilang DAN
+  //    qty_sisa dikembalikan, edit = baris yang sama diperbarui di tempat) —
+  //    jadi aman dijumlah apa adanya tanpa perlu logika status/delta tambahan.
   const{data:blastRows,error:blastErr}=await db.from('blasting_rack_allocations')
     .select('id,ekor,kg,status,created_at,blasting_racks(nomor_rak),blasting_batches(batch_code)')
     .eq('basket_id',basket.id);
   if(blastErr)console.error('[KartuStokKeranjang] blasting_rack_allocations gagal:',blastErr);
   (blastRows||[]).forEach(r=>{
     events.push({date:new Date(r.created_at||basket.created_at),tipe:'Alokasi Blasting',tipeCls:'tp-blasting',
-      ket:`Rak ${esc(r.blasting_racks?.nomor_rak||'—')}, Batch ${esc(r.blasting_batches?.batch_code||'(belum diassign)')} — status ${esc(r.status)} · ${fmt(r.ekor)} ekor · ${fmtKg(r.kg)}`,
-      masuk_qty:0,masuk_kg:0,keluar_qty:0,keluar_kg:0,isInfo:true});
+      ket:`Naik ke Rak ${esc(r.blasting_racks?.nomor_rak||'—')}, Batch ${esc(r.blasting_batches?.batch_code||'(belum diassign)')} — status ${esc(r.status)} · ${fmt(r.ekor)} ekor · ${fmtKg(r.kg)}`,
+      masuk_qty:0,masuk_kg:0,keluar_qty:Number(r.ekor)||0,keluar_kg:Number(r.kg)||0,isInfo:false});
   });
 
   // 6) Koreksi disetujui (mengubah qty_awal/kg_awal/qty_sisa/kg_sisa keranjang ini)
