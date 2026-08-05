@@ -235,19 +235,29 @@ a{text-decoration:none}
      di atas supaya tetap tampil — tapi tetap perlu dilepas dari fixed-position
      terpusat + dibatalkan max-height/overflow-nya, kalau tidak isi yang lebih
      panjang dari layar akan terpotong (cuma bagian yang ter-scroll yang print). */
-  #modal-detail{position:static !important;background:none !important}
+  /* #modal-detail masih .modal-backdrop -> display:flex;justify-content:center
+     dari CSS aslinya. Kalau display:flex ini dibiarkan, .modal-box yang
+     width:auto di bawah cuma jadi shrink-to-fit isinya lalu DI-CENTER —
+     itu penyebab kertas ke-print sempit dgn kosong lebar kanan-kiri.
+     display:block di sini yang membatalkan flex-centering-nya. */
+  #modal-detail{position:static !important;background:none !important;display:block !important}
   #modal-detail .modal-box{width:auto !important;max-width:none !important;max-height:none !important;overflow:visible !important;box-shadow:none !important;border-radius:0}
+  #detail-modal-body{padding:0 !important}
   .main-area{overflow:visible}
   .content-area{overflow:visible;padding:0}
   .print-only{display:block !important}
-  .print-sheet{page-break-after:always;margin-top:0 !important;padding-top:0 !important;border-top:none !important}
+  .print-sheet{page-break-after:always}
   .print-sheet:last-child{page-break-after:avoid}
-  /* Kertas cuma tinggi 5.5in — rapatkan tabel & jarak vertikal supaya 1 lembar
-     picking slip/retur slip pas di 1 halaman continuous form, tidak kepotong. */
-  .print-sheet table{font-size:10.5pt !important}
-  .print-sheet table td,.print-sheet table th{padding:3px 6px !important}
-  .print-sheet h2{font-size:14pt !important;margin-bottom:6px !important}
-  .print-sheet h3{margin-bottom:5px !important}
+  /* Lembar pertama: tanpa jarak ekstra di atas (posisi awal kertas sudah pas). */
+  .print-sheet:first-child{margin-top:0 !important;padding-top:0 !important;border-top:none !important}
+  /* Lembar ke-2 dst (setelah page-break): dot-matrix butuh sedikit "dead zone"
+     di awal lembar baru supaya baris pertama tidak kepotong print head —
+     jangan dibikin 0, kasih jarak kecil secukupnya saja (bukan gap besar
+     seperti sebelumnya, itu beda penyebab & sudah dibahas terpisah). */
+  .print-sheet:not(:first-child){margin-top:0 !important;padding-top:6mm !important;border-top:none !important}
+  /* Ukuran font/padding tabel sudah diatur langsung inline per elemen di JS
+     (supaya pas di kertas 5.5in tinggi) — TIDAK di-override lagi di sini
+     supaya tidak konflik/kebesaran lagi seperti sebelumnya. */
   /* Jangan sampai 1 baris tabel atau 1 blok "Item: ..." kepotong di tengah
      saat pindah ke lembar berikutnya — kalau tidak muat, seluruh baris/blok
      dipindah utuh ke lembar baru, bukan dipotong separuh. */
@@ -1823,53 +1833,53 @@ function openReturSlipPrint(header, items){
   document.getElementById('detail-modal-title').textContent = `Retur Slip — ${kodeGabungan}`;
   document.getElementById('detail-modal-body').innerHTML = `
     <div class="print-sheet">
-      <h2 style="font-size:16px;font-weight:900;margin-bottom:8px">Retur Slip — ${kodeGabungan}</h2>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-bottom:10px;font-size:12px">
+      <h2 style="font-size:13px;font-weight:900;margin-bottom:6px">Retur Slip — ${kodeGabungan}</h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px;margin-bottom:6px;font-size:9.5px">
         <div><strong>Tanggal:</strong> ${tglFmt}</div>
         <div><strong>Picking Slip Asal:</strong> ${header.ps_code || '—'}</div>
         <div><strong>Customer:</strong> ${header.nama_pelanggan || '—'}</div>
         <div></div>
       </div>
-      <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:10px">
+      <table style="width:100%;border-collapse:collapse;font-size:9.5px;margin-bottom:6px">
         <thead>
           <tr style="background:#f3f4f6">
-            <th style="text-align:left;padding:4px 8px;border:1px solid #d1d5db">Kode Retur</th>
-            <th style="text-align:left;padding:4px 8px;border:1px solid #d1d5db">Keranjang Asal</th>
-            <th style="text-align:left;padding:4px 8px;border:1px solid #d1d5db">Item</th>
-            <th style="text-align:left;padding:4px 8px;border:1px solid #d1d5db">Jenis</th>
-            <th style="text-align:right;padding:4px 8px;border:1px solid #d1d5db">Ekor</th>
-            <th style="text-align:right;padding:4px 8px;border:1px solid #d1d5db">Kg</th>
-            <th style="text-align:left;padding:4px 8px;border:1px solid #d1d5db">Keterangan</th>
+            <th style="text-align:left;padding:2px 6px;border:1px solid #d1d5db">Kode Retur</th>
+            <th style="text-align:left;padding:2px 6px;border:1px solid #d1d5db">Keranjang Asal</th>
+            <th style="text-align:left;padding:2px 6px;border:1px solid #d1d5db">Item</th>
+            <th style="text-align:left;padding:2px 6px;border:1px solid #d1d5db">Jenis</th>
+            <th style="text-align:right;padding:2px 6px;border:1px solid #d1d5db">Ekor</th>
+            <th style="text-align:right;padding:2px 6px;border:1px solid #d1d5db">Kg</th>
+            <th style="text-align:left;padding:2px 6px;border:1px solid #d1d5db">Keterangan</th>
           </tr>
         </thead>
         <tbody>
           ${items.map(i => `
           <tr>
-            <td style="padding:4px 8px;border:1px solid #d1d5db;font-family:monospace">${i.retur_code}</td>
-            <td style="padding:4px 8px;border:1px solid #d1d5db;font-family:monospace">${i.basket_asal_code||'—'}</td>
-            <td style="padding:4px 8px;border:1px solid #d1d5db">${i.nama_produk||'—'}</td>
-            <td style="padding:4px 8px;border:1px solid #d1d5db">${JENIS_RETUR_LABEL[i.jenis_retur]||i.jenis_retur}</td>
-            <td style="text-align:right;padding:4px 8px;border:1px solid #d1d5db">${i.ekor}</td>
-            <td style="text-align:right;padding:4px 8px;border:1px solid #d1d5db">${(+i.kg).toFixed(2)}</td>
-            <td style="padding:4px 8px;border:1px solid #d1d5db;font-size:11px">${i.keterangan||'—'}</td>
+            <td style="padding:2px 6px;border:1px solid #d1d5db;font-family:monospace">${i.retur_code}</td>
+            <td style="padding:2px 6px;border:1px solid #d1d5db;font-family:monospace">${i.basket_asal_code||'—'}</td>
+            <td style="padding:2px 6px;border:1px solid #d1d5db">${i.nama_produk||'—'}</td>
+            <td style="padding:2px 6px;border:1px solid #d1d5db">${JENIS_RETUR_LABEL[i.jenis_retur]||i.jenis_retur}</td>
+            <td style="text-align:right;padding:2px 6px;border:1px solid #d1d5db">${i.ekor}</td>
+            <td style="text-align:right;padding:2px 6px;border:1px solid #d1d5db">${(+i.kg).toFixed(2)}</td>
+            <td style="padding:2px 6px;border:1px solid #d1d5db;font-size:9px">${i.keterangan||'—'}</td>
           </tr>`).join('')}
           <tr style="font-weight:900;background:#f9fafb">
-            <td colspan="4" style="padding:4px 8px;border:1px solid #d1d5db">TOTAL</td>
-            <td style="text-align:right;padding:4px 8px;border:1px solid #d1d5db">${totalEkor}</td>
-            <td style="text-align:right;padding:4px 8px;border:1px solid #d1d5db">${totalKg.toFixed(2)}</td>
-            <td style="padding:4px 8px;border:1px solid #d1d5db"></td>
+            <td colspan="4" style="padding:2px 6px;border:1px solid #d1d5db">TOTAL</td>
+            <td style="text-align:right;padding:2px 6px;border:1px solid #d1d5db">${totalEkor}</td>
+            <td style="text-align:right;padding:2px 6px;border:1px solid #d1d5db">${totalKg.toFixed(2)}</td>
+            <td style="padding:2px 6px;border:1px solid #d1d5db"></td>
           </tr>
         </tbody>
       </table>
-      <div style="font-size:11px;color:#6b7280;margin-bottom:10px">Surat jalan ini menyertai barang fisik ke Chiller untuk diverifikasi & diterima. Belum ada keranjang/label baru — akan dibuat oleh Chiller saat barang diterima.</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:14px;font-size:12px">
+      <div style="font-size:9px;color:#6b7280;margin-bottom:6px">Surat jalan ini menyertai barang fisik ke Chiller untuk diverifikasi & diterima. Belum ada keranjang/label baru — akan dibuat oleh Chiller saat barang diterima.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:8px;font-size:9.5px">
         <div style="text-align:center">
           <div>Diserahkan (Loading)</div>
-          <div style="margin:20px 0 4px">(__________________________)</div>
+          <div style="margin:14px 0 3px">(______________)</div>
         </div>
         <div style="text-align:center">
           <div>Diterima (Chiller)</div>
-          <div style="margin:20px 0 4px">(__________________________)</div>
+          <div style="margin:14px 0 3px">(______________)</div>
         </div>
       </div>
     </div>`;
@@ -2081,8 +2091,8 @@ async function openDetail(psId){
   document.getElementById('detail-modal-body').innerHTML = `
     <!-- LEMBAR 1 -->
     <div class="print-sheet">
-      <h2 style="font-size:18px;font-weight:900;margin-bottom:12px">Picking Slip — ${ps.ps_code}</h2>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-bottom:10px;font-size:12px">
+      <h2 style="font-size:13px;font-weight:900;margin-bottom:6px">Picking Slip — ${ps.ps_code}</h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px;margin-bottom:6px;font-size:9.5px">
         <div><strong>Tanggal:</strong> ${tglFmt}</div>
         <div><strong>Tujuan:</strong> ${ps.tujuan || '—'}</div>
         <div><strong>Customer:</strong> ${ps.nama_pelanggan}</div>
@@ -2091,47 +2101,51 @@ async function openDetail(psId){
         ${ps.catatan ? `<div style="grid-column:span 2"><strong>Catatan:</strong> ${ps.catatan}</div>` : ''}
       </div>
 
-      <h3 style="font-size:12px;font-weight:800;margin-bottom:5px;border-bottom:1.5px solid #111827;padding-bottom:3px">Rekap per Item</h3>
-      <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:10px">
+      <h3 style="font-size:9.5px;font-weight:800;margin-bottom:3px;border-bottom:1.5px solid #111827;padding-bottom:2px">Rekap per Item</h3>
+      <table style="width:100%;border-collapse:collapse;font-size:9.5px;margin-bottom:6px">
         <thead>
           <tr style="background:#f3f4f6">
-            <th style="text-align:left;padding:4px 8px;border:1px solid #d1d5db">Item</th>
-            <th style="text-align:right;padding:4px 8px;border:1px solid #d1d5db">Jumlah Karung</th>
-            <th style="text-align:right;padding:4px 8px;border:1px solid #d1d5db">Total Ekor / Bks</th>
-            <th style="text-align:right;padding:4px 8px;border:1px solid #d1d5db">Total Kg</th>
+            <th style="text-align:left;padding:2px 6px;border:1px solid #d1d5db">Item</th>
+            <th style="text-align:right;padding:2px 6px;border:1px solid #d1d5db">Jumlah Karung</th>
+            <th style="text-align:right;padding:2px 6px;border:1px solid #d1d5db">Total Ekor / Bks</th>
+            <th style="text-align:right;padding:2px 6px;border:1px solid #d1d5db">Total Kg</th>
           </tr>
         </thead>
         <tbody>
           ${rekapRows}
           <tr style="font-weight:900;background:#f9fafb">
-            <td style="padding:4px 8px;border:1px solid #d1d5db"><strong>GRAND TOTAL</strong></td>
-            <td style="text-align:right;padding:4px 8px;border:1px solid #d1d5db"><strong>${ps.total_karung}</strong></td>
-            <td style="text-align:right;padding:4px 8px;border:1px solid #d1d5db"><strong>${ps.total_ekor}</strong></td>
-            <td style="text-align:right;padding:4px 8px;border:1px solid #d1d5db"><strong>${(+ps.total_kg).toFixed(2)}</strong></td>
+            <td style="padding:2px 6px;border:1px solid #d1d5db"><strong>GRAND TOTAL</strong></td>
+            <td style="text-align:right;padding:2px 6px;border:1px solid #d1d5db"><strong>${ps.total_karung}</strong></td>
+            <td style="text-align:right;padding:2px 6px;border:1px solid #d1d5db"><strong>${ps.total_ekor}</strong></td>
+            <td style="text-align:right;padding:2px 6px;border:1px solid #d1d5db"><strong>${(+ps.total_kg).toFixed(2)}</strong></td>
           </tr>
         </tbody>
       </table>
-      <div style="text-align:right;font-size:11px;font-weight:700;margin-bottom:12px">
+      <div style="text-align:right;font-size:9px;font-weight:700;margin-bottom:8px">
         Total: ${ps.total_karung} karung / ${ps.total_ekor} ekor / ${(+ps.total_kg).toFixed(2)} kg
       </div>
 
       <!-- TTD -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:14px;font-size:12px">
-        <div style="text-align:center">
-          <div>Operator</div>
-          <div style="margin:20px 0 4px">(__________________________)</div>
-        </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-top:8px;font-size:9.5px">
         <div style="text-align:center">
           <div>Checker</div>
-          <div style="margin:20px 0 4px">(__________________________)</div>
+          <div style="margin:14px 0 3px">(______________)</div>
+        </div>
+        <div style="text-align:center">
+          <div>Admin</div>
+          <div style="margin:14px 0 3px">(______________)</div>
+        </div>
+        <div style="text-align:center">
+          <div>Driver</div>
+          <div style="margin:14px 0 3px">(______________)</div>
         </div>
       </div>
     </div>
 
     <!-- LEMBAR 2 -->
     <div class="print-sheet" style="margin-top:32px;border-top:2px dashed #d1d5db;padding-top:24px">
-      <h3 style="font-size:15px;font-weight:900;margin-bottom:4px">Lembar 2 — Rincian per Karung (Kelompok per Item)</h3>
-      <div style="font-size:12px;color:#6b7280;margin-bottom:14px">
+      <h3 style="font-size:11px;font-weight:900;margin-bottom:3px">Lembar 2 — Rincian per Karung (Kelompok per Item)</h3>
+      <div style="font-size:9.5px;color:#6b7280;margin-bottom:8px">
         Picking Slip: ${ps.ps_code} &nbsp;|&nbsp; Customer: ${ps.nama_pelanggan}
         ${ps.nama_supir ? ` &nbsp;|&nbsp; Driver: ${ps.nama_supir}` : ''}
       </div>
@@ -2144,25 +2158,25 @@ async function openDetail(psId){
           const slice = itemBaskets.slice(i, i+perCols);
           while(slice.length < perCols) slice.push(null);
           rows2 += '<tr>' + slice.map(c => c
-            ? `<td style="padding:5px 8px;border:1px solid #d1d5db;font-family:monospace;font-size:12px;font-weight:700">${c.basket_code}</td><td style="padding:5px 8px;border:1px solid #d1d5db;text-align:right">${c.qty_ekor}</td><td style="padding:5px 8px;border:1px solid #d1d5db;text-align:right">${(+c.berat_kg).toFixed(2)}</td>`
-            : '<td style="padding:5px 8px;border:1px solid #d1d5db"></td><td style="padding:5px 8px;border:1px solid #d1d5db"></td><td style="padding:5px 8px;border:1px solid #d1d5db"></td>'
+            ? `<td style="padding:2px 6px;border:1px solid #d1d5db;font-family:monospace;font-size:9.5px;font-weight:700">${c.basket_code}</td><td style="padding:2px 6px;border:1px solid #d1d5db;text-align:right">${c.qty_ekor}</td><td style="padding:2px 6px;border:1px solid #d1d5db;text-align:right">${(+c.berat_kg).toFixed(2)}</td>`
+            : '<td style="padding:2px 6px;border:1px solid #d1d5db"></td><td style="padding:2px 6px;border:1px solid #d1d5db"></td><td style="padding:2px 6px;border:1px solid #d1d5db"></td>'
           ).join('') + '</tr>';
         }
         return `
-          <div style="margin-bottom:16px;page-break-inside:avoid;break-inside:avoid-page">
-            <div style="font-size:12px;font-weight:800;margin-bottom:6px;color:#111827">Item: ${nama}</div>
-            <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <div style="margin-bottom:8px;page-break-inside:avoid;break-inside:avoid-page">
+            <div style="font-size:9.5px;font-weight:800;margin-bottom:3px;color:#111827">Item: ${nama}</div>
+            <table style="width:100%;border-collapse:collapse;font-size:9.5px">
               <thead>
                 <tr style="background:#f3f4f6">
-                  <th style="padding:5px 8px;border:1px solid #d1d5db;text-align:left">Karung ID</th>
-                  <th style="padding:5px 8px;border:1px solid #d1d5db;text-align:right">Ekor</th>
-                  <th style="padding:5px 8px;border:1px solid #d1d5db;text-align:right">Kg</th>
-                  <th style="padding:5px 8px;border:1px solid #d1d5db;text-align:left">Karung ID</th>
-                  <th style="padding:5px 8px;border:1px solid #d1d5db;text-align:right">Ekor</th>
-                  <th style="padding:5px 8px;border:1px solid #d1d5db;text-align:right">Kg</th>
-                  <th style="padding:5px 8px;border:1px solid #d1d5db;text-align:left">Karung ID</th>
-                  <th style="padding:5px 8px;border:1px solid #d1d5db;text-align:right">Ekor</th>
-                  <th style="padding:5px 8px;border:1px solid #d1d5db;text-align:right">Kg</th>
+                  <th style="padding:2px 6px;border:1px solid #d1d5db;text-align:left">Karung ID</th>
+                  <th style="padding:2px 6px;border:1px solid #d1d5db;text-align:right">Ekor</th>
+                  <th style="padding:2px 6px;border:1px solid #d1d5db;text-align:right">Kg</th>
+                  <th style="padding:2px 6px;border:1px solid #d1d5db;text-align:left">Karung ID</th>
+                  <th style="padding:2px 6px;border:1px solid #d1d5db;text-align:right">Ekor</th>
+                  <th style="padding:2px 6px;border:1px solid #d1d5db;text-align:right">Kg</th>
+                  <th style="padding:2px 6px;border:1px solid #d1d5db;text-align:left">Karung ID</th>
+                  <th style="padding:2px 6px;border:1px solid #d1d5db;text-align:right">Ekor</th>
+                  <th style="padding:2px 6px;border:1px solid #d1d5db;text-align:right">Kg</th>
                 </tr>
               </thead>
               <tbody>${rows2}</tbody>
