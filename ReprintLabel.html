@@ -3,10 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Laporan — Kurnia's Food</title>
+<title>Reprint Label — Kurnia's Food</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="permissions.js"></script>
-<script src="viewstate.js"></script>
+<script src="labelPrint.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f2f5;color:#111827;font-size:14px}
@@ -22,8 +23,8 @@ a{text-decoration:none}
 .login-logo p{font-size:13px;color:#6b7280;margin-top:4px}
 .form-group{margin-bottom:20px}
 .form-group label{display:block;font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
-.form-group input{width:100%;padding:11px 14px;border:1.5px solid #d1d5db;border-radius:8px;font-size:15px;transition:border-color .2s,box-shadow .2s;color:#111827;background:white;font-family:inherit}
-.form-group input:focus{outline:none;border-color:#0d9488;box-shadow:0 0 0 3px rgba(13,148,136,.12)}
+.form-group input,.form-group select,.form-group textarea{width:100%;padding:11px 14px;border:1.5px solid #d1d5db;border-radius:8px;font-size:15px;transition:border-color .2s,box-shadow .2s;color:#111827;background:white;font-family:inherit}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{outline:none;border-color:#0d9488;box-shadow:0 0 0 3px rgba(13,148,136,.12)}
 .btn-login{width:100%;padding:13px;background:#0d9488;color:white;border:none;border-radius:8px;font-size:15px;font-weight:700;transition:background .2s}
 .btn-login:hover{background:#0f766e}
 .btn-login:disabled{background:#5eead4;cursor:not-allowed}
@@ -69,27 +70,72 @@ a{text-decoration:none}
 .clock-display{font-size:14px;font-weight:700;color:#374151;background:#f9fafb;padding:6px 10px;border-radius:6px;border:1px solid #e5e7eb;white-space:nowrap}
 
 /* CONTENT */
-.content-area{flex:1;overflow-y:auto;padding:20px 24px 32px}
-.page-intro{margin-bottom:18px}
-.page-intro h2{font-size:18px;font-weight:800;color:#111827}
-.page-intro p{font-size:13px;color:#6b7280;margin-top:4px}
+.content-area{flex:1;overflow-y:auto;padding:20px 24px 40px}
 
-/* REPORT CARD GRID */
-.report-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}
-.report-card{background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.06);padding:20px;display:flex;flex-direction:column;gap:10px;cursor:pointer;transition:all .15s;border:1.5px solid transparent}
-.report-card:hover{box-shadow:0 8px 20px rgba(0,0,0,.1);border-color:#0d9488;transform:translateY(-2px)}
-.report-card .rc-icon{font-size:32px}
-.report-card .rc-title{font-size:15px;font-weight:800;color:#111827}
-.report-card .rc-desc{font-size:12.5px;color:#6b7280;line-height:1.5;flex:1}
-.report-card .rc-open{font-size:12px;font-weight:700;color:#0d9488;display:flex;align-items:center;gap:4px}
-.report-card.disabled{cursor:not-allowed;opacity:.55}
-.report-card.disabled:hover{box-shadow:0 1px 3px rgba(0,0,0,.06);border-color:transparent;transform:none}
-.rc-soon{font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:#f3f4f6;color:#6b7280;align-self:flex-start}
+/* PANEL */
+.panel{background:white;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden;margin-bottom:14px}
+.panel:last-child{margin-bottom:0}
+.panel-head{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:1px solid #f3f4f6;gap:8px;flex-wrap:wrap}
+.panel-title{font-size:14px;font-weight:800;color:#111827}
+.panel-body{padding:18px}
+.panel-hint{font-size:12px;color:#6b7280;margin-top:2px}
+
+/* FORM ROW */
+.form-row{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end}
+.form-row .form-group{flex:1;min-width:220px;margin-bottom:0}
+
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:10px 16px;border-radius:6px;border:none;font-size:13px;font-weight:700;transition:all .15s;min-height:44px;touch-action:manipulation;white-space:nowrap}
+.btn-primary{background:#0d9488;color:white}
+.btn-primary:hover{background:#0f766e}
+.btn-ghost{background:#f3f4f6;color:#374151}
+.btn-ghost:hover{background:#e5e7eb}
+.btn-danger{background:#dc2626;color:white}
+.btn-danger:hover{background:#b91c1c}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+
+/* BADGES */
+.badge{display:inline-flex;align-items:center;padding:3px 9px;border-radius:12px;font-size:11px;font-weight:700;white-space:nowrap}
+.b-aktif{background:#d1fae5;color:#065f46}
+.b-habis{background:#f3f4f6;color:#6b7280}
+.b-void{background:#fee2e2;color:#dc2626}
+
+/* STOK TERAKHIR HIGHLIGHT */
+.stok-box{background:#f0fdfa;border:1.5px solid #99f6e4;border-radius:10px;padding:16px;margin-top:14px;display:flex;gap:24px;flex-wrap:wrap}
+.stok-box .stok-item .lbl{font-size:11px;font-weight:700;color:#0f766e;text-transform:uppercase;letter-spacing:.4px}
+.stok-box .stok-item .val{font-size:22px;font-weight:900;color:#111827;margin-top:2px}
+
+/* WARN BOX */
+.risk-box{border-radius:10px;padding:12px 14px;margin-top:14px;font-size:13px}
+.risk-warn{background:#fffbeb;border:1px solid #fde68a;color:#92400e}
+.risk-danger{background:#fef2f2;border:1px solid #fecaca;color:#991b1b}
+
+/* DETAIL GRID */
+.detail-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-top:14px}
+.detail-cell{background:#f9fafb;border:1px solid #f0f2f5;border-radius:8px;padding:10px 12px}
+.detail-cell .lbl{font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px}
+.detail-cell .val{font-size:15px;font-weight:800;color:#111827;margin-top:2px}
+
+/* EMPTY */
+.empty{text-align:center;padding:36px 16px;color:#9ca3af;font-size:13px}
+.viewer-note{background:#fffbeb;border:1px solid #fde68a;color:#92400e;border-radius:8px;padding:10px 14px;font-size:12px;margin-bottom:14px}
+
+/* PREVIEW LABEL WRAPPER */
+#label-preview-wrap{margin-top:16px;display:flex;justify-content:center}
+
+/* TOAST */
+#toast{position:fixed;bottom:28px;right:28px;padding:13px 20px;border-radius:10px;font-size:13px;font-weight:700;box-shadow:0 8px 24px rgba(0,0,0,.2);display:none;z-index:999;animation:toast-in .25s ease}
+#toast.show{display:block}
+#toast.success{background:#065f46;color:white}
+#toast.error{background:#991b1b;color:white}
+#toast.warning{background:#92400e;color:white}
+@keyframes toast-in{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
 
 @media (max-width:900px){
   .btn-hamburger{display:flex}
   .sidebar{position:fixed;top:0;bottom:0;left:0;transform:translateX(-100%)}
   .sidebar.open{transform:translateX(0)}
+  .form-row{flex-direction:column;align-items:stretch}
 }
 </style>
 </head>
@@ -99,9 +145,9 @@ a{text-decoration:none}
 <div id="login-screen">
   <div class="login-card">
     <div class="login-logo">
-      <span class="icon">📊</span>
+      <span class="icon">🖨️</span>
       <h1>RPA Management System</h1>
-      <p>Laporan — Login</p>
+      <p>Reprint Label — Login</p>
     </div>
     <div class="login-error" id="login-error"></div>
     <div class="form-group">
@@ -174,25 +220,27 @@ a{text-decoration:none}
       <div class="nav-item" onclick="navTo('Koreksi.html')">
         <span class="nav-icon">✅</span><span class="nav-label-text">Koreksi & Approval</span>
       </div>
-      <div class="nav-item active">
+      <div class="nav-item" onclick="navTo('Laporan.html')">
         <span class="nav-icon">📊</span><span class="nav-label-text">Laporan</span>
-        <span class="nav-tag">Aktif</span>
       </div>
-      <div class="nav-item" onclick="navTo('Tracing.html')"><span class="nav-icon">🔍</span><span class="nav-label-text">Tracing Produk</span></div>
+      <div class="nav-item" onclick="navTo('Tracing.html')">
+        <span class="nav-icon">🔍</span><span class="nav-label-text">Tracing Produk</span>
+      </div>
       <div class="nav-item" id="nav-saldo-awal" style="display:none" onclick="navTo('SaldoAwal.html')">
         <span class="nav-icon">📋</span><span class="nav-label-text">Saldo Awal Barang</span>
       </div>
-      <div class="nav-item" onclick="navTo('MasterData.html')">
-        <span class="nav-icon">🗂️</span><span class="nav-label-text">Master Data</span>
-      </div>
-<div class="nav-item" id="nav-revisi-batch" style="display:none" onclick="navTo('RevisiBatch.html')">
-          <span class="nav-icon">🔀</span><span class="nav-label-text">Revisi Batch Keranjang</span>
+      <div class="nav-item" id="nav-revisi-batch" style="display:none" onclick="navTo('RevisiBatch.html')">
+        <span class="nav-icon">🔀</span><span class="nav-label-text">Revisi Batch Keranjang</span>
       </div>
       <div class="nav-item" id="nav-void-keranjang" style="display:none" onclick="navTo('VoidKeranjang.html')">
-          <span class="nav-icon">🗑️</span><span class="nav-label-text">Void Keranjang</span>
+        <span class="nav-icon">🗑️</span><span class="nav-label-text">Void Keranjang</span>
       </div>
-      <div class="nav-item" id="nav-reprint-label" style="display:none" onclick="navTo('ReprintLabel.html')">
-          <span class="nav-icon">🖨️</span><span class="nav-label-text">Reprint Label</span>
+      <div class="nav-item active">
+        <span class="nav-icon">🖨️</span><span class="nav-label-text">Reprint Label</span>
+        <span class="nav-tag">Aktif</span>
+      </div>
+      <div class="nav-item" onclick="navTo('MasterData.html')">
+        <span class="nav-icon">🗂️</span><span class="nav-label-text">Master Data</span>
       </div>
       <div class="nav-item" id="nav-user-mgmt" style="display:none" onclick="navTo('UserManagement.html')">
         <span class="nav-icon">👥</span><span class="nav-label-text">Manajemen User</span>
@@ -216,7 +264,7 @@ a{text-decoration:none}
       <div class="topbar-left">
         <button class="btn-hamburger" onclick="toggleSidebar()">☰</button>
         <div class="topbar-left-text">
-          <h1>Laporan</h1>
+          <h1>Reprint Label</h1>
           <p id="topbar-date">—</p>
         </div>
       </div>
@@ -226,104 +274,73 @@ a{text-decoration:none}
     </div>
 
     <div class="content-area">
-      <div class="page-intro">
-        <h2>Pilih Laporan</h2>
-        <p>Pilih jenis laporan yang mau dibuka. Laporan lain akan ditambahkan di sini seiring waktu.</p>
+
+      <div id="viewer-note-area"></div>
+
+      <!-- PANEL 1: CARI / SCAN KERANJANG -->
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <span class="panel-title">🔍 Cari / Scan Keranjang</span>
+            <div class="panel-hint">Masukkan atau scan kode keranjang untuk melihat stok terakhir dan mencetak ulang labelnya (layout sama persis dengan label standar 57×38mm).</div>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Kode Keranjang</label>
+              <input type="text" id="search-code" placeholder="Contoh: BL-260803-0056"
+                     style="text-transform:uppercase" autofocus onkeydown="if(event.key==='Enter')searchBasket()">
+            </div>
+            <button class="btn btn-primary" onclick="searchBasket()">🔍 Cari</button>
+          </div>
+          <div id="search-result-area" style="margin-top:16px"></div>
+        </div>
       </div>
 
-      <div class="report-grid" id="report-grid">
-        <!-- diisi lewat JS dari daftar REPORTS -->
+      <!-- PANEL 2: DETAIL & CETAK -->
+      <div class="panel" id="panel-detail" style="display:none">
+        <div class="panel-head">
+          <span class="panel-title">📄 Detail Keranjang</span>
+        </div>
+        <div class="panel-body">
+          <div id="detail-area"></div>
+          <div style="margin-top:16px;display:flex;justify-content:flex-end;gap:10px">
+            <button class="btn btn-primary" id="btn-print" onclick="doPrint()" disabled>🖨️ Cetak Label</button>
+          </div>
+          <div id="label-preview-wrap"></div>
+        </div>
       </div>
+
     </div>
   </div>
 </div>
 </div>
+
+<!-- TOAST -->
+<div id="toast"></div>
 
 <script>
 const SUPABASE_URL = 'https://dxixqyokuqrdprupsvic.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR4aXhxeW9rdXFyZHBydXBzdmljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5NjM3ODcsImV4cCI6MjA5MjUzOTc4N30.D_yaPwNbe4FFg_hmDeJ9cuxzbNvXZT8l1_TyZuq1t1M';
 const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// ── DAFTAR LAPORAN ──
-// Tambah laporan baru cukup dengan menambah satu object ke array ini.
-const REPORTS = [
-  {
-    icon: '🐔',
-    title: 'Laporan Produksi Karkas',
-    desc: 'Rekap produksi karkas per batch: rendeman, susut jalan, grade A/B/C, uniformity, dan produk transfer.',
-    url: 'LaporanProduksiKarkas.html',
-    enabled: true
-  },
-  {
-    icon: '📆',
-    title: 'Laporan Produksi Karkas Harian',
-    desc: 'Rekap produksi karkas TOTAL 1 hari (semua batch digabung): rendeman, susut jalan, grade A/B/C, uniformity, produk transfer, plus rekapan hasil by-product (barang, bungkus, kg).',
-    url: 'LaporanProduksiKarkasHarian.html',
-    enabled: true
-  },
-  {
-    icon: '📒',
-    title: 'Laporan Kartu Stok',
-    desc: 'Kartu stok per produk & lokasi: saldo berjalan dari produksi, transfer antar lokasi, konsumsi ke proses lanjutan, hasil produksi, dan koreksi disetujui.',
-    url: 'LaporanKartuStok.html',
-    enabled: true
-  },
-  {
-    icon: '📦',
-    title: 'Laporan Kartu Stok Keranjang',
-    desc: 'Kartu stok satu keranjang spesifik: asal (produksi/transfer/opname), tiap kali dipakai ke Work Order atau dikirim sebagian ke lokasi lain, sampai koreksi yang disetujui — cari cukup dengan kode keranjang.',
-    url: 'LaporanKartuStokKeranjang.html',
-    enabled: true
-  },
-  {
-    icon: '🗃️',
-    title: 'Laporan Stok Barang',
-    desc: 'Saldo semua produk per lokasi pada tanggal saldo akhir pilihan. Klik salah satu produk untuk membuka Kartu Stok-nya.',
-    url: 'LaporanStokBarang.html',
-    enabled: true
-  },
-  {
-    icon: '❄️',
-    title: 'Rincian Transaksi Chiller',
-    desc: 'Seluruh transaksi masuk & keluar (semua produk) di lokasi Chiller dalam rentang tanggal pilihan, lengkap Qty dan Kg.',
-    url: 'LaporanRincianTransaksiChiller.html',
-    enabled: true
-  },
-  {
-    icon: '🥩',
-    title: 'Laporan Produksi Lanjutan',
-    desc: 'Rekap harian Boneless / Parting / Marinasi (pilih modulnya) : pengambilan bahan baku, hasil produk, rekap barang masuk & hasil produksi, dan daging reject. Export Excel per-section, plus opsi print.',
-    url: 'LaporanProduksiLanjutan.html',
-    enabled: true
-  },
-  {
-    icon: '🧊',
-    title: 'Laporan Blasting',
-    desc: 'Rincian keranjang yang sudah selesai dibekukan (No. Keranjang, Nama Barang, Tgl Produksi, Ekor, Kg, No. Rak) plus rekap per nama barang. Filter per tanggal batch dan/atau batch tertentu.',
-    url: 'LaporanBlasting.html',
-    enabled: true
-  },
-  {
-    icon: '🔁',
-    title: 'Rekapan Mutasi Barang',
-    desc: 'Rekap per nama Barang dalam rentang tanggal: Saldo Awal, Masuk (Karkas/Parting/Boneless/Marinasi/Thawing/Retur), Keluar (Parting/Boneless/Marinasi/Thawing/Jual/Selisih), dan Saldo Akhir.',
-    url: 'RekapanMutasiBarang.html',
-    enabled: true
-  }
-];
-
 // ── STATE ──
-let currentUser = null;
+let currentUser  = null;
+let foundBasket  = null;   // basket row currently loaded
 
 // ── UTILS ──
-async function sha256(str) {
-  const buf = new TextEncoder().encode(str);
-  const hash = await crypto.subtle.digest('SHA-256', buf);
+async function sha256(str){
+  const buf=new TextEncoder().encode(str);
+  const hash=await crypto.subtle.digest('SHA-256',buf);
   return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
 }
 function esc(s){return (s==null?'':String(s)).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function fmt(n,d=0){if(n==null||n==='')return'—';return Number(n).toLocaleString('id-ID',{minimumFractionDigits:d,maximumFractionDigits:d})}
+function fmtKg(n){if(n==null)return'—';return Number(n).toLocaleString('id-ID',{minimumFractionDigits:1,maximumFractionDigits:1})+' kg'}
+function fmtDate(s){if(!s)return'—';return new Date(s+'T00:00:00').toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'})}
+function showToast(msg,type='success'){const t=document.getElementById('toast');t.textContent=msg;t.className=`show ${type}`;setTimeout(()=>{t.className=''},3800)}
 function navTo(url){closeSidebar();if(currentUser){localStorage.setItem('rpa_user',JSON.stringify(currentUser));sessionStorage.setItem('rpa_user',JSON.stringify(currentUser))}window.location.href=url}
-function showToast(msg){alert(msg)} // halaman ini tidak punya toast sendiri — cukup untuk pesan jarang (laporan disabled)
 
 // ── SIDEBAR ──
 function toggleSidebar(){const s=document.getElementById('sidebar'),o=document.getElementById('sidebar-overlay');s.classList.toggle('open');o.classList.toggle('visible')}
@@ -351,7 +368,7 @@ async function doLogin(){
 function doLogout(){localStorage.removeItem('rpa_user');sessionStorage.removeItem('rpa_user');currentUser=null;document.getElementById('app-screen').style.display='none';document.getElementById('login-screen').style.display='flex'}
 
 function startApp(){
-  const moduleRole=RPA_PERM.enforceModuleAccess(currentUser,'laporan');
+  const moduleRole=RPA_PERM.enforceModuleAccess(currentUser,'reprint_label');
   if(!moduleRole)return;
   currentUser.moduleRole=moduleRole;
 
@@ -362,13 +379,12 @@ function startApp(){
   document.getElementById('sidebar-name').textContent=currentUser.nama;
   document.getElementById('sidebar-role').textContent=currentUser.role+(currentUser.is_system_admin?' (Admin)':'');
   if(currentUser.is_system_admin){const el=document.getElementById('nav-user-mgmt');if(el)el.style.display='flex'}
-  if (RPA_PERM.getModuleRole(currentUser, 'revisi_batch') !== null) { const rbEl = document.getElementById('nav-revisi-batch'); if (rbEl) rbEl.style.display = 'flex'; }
-    if (RPA_PERM.getModuleRole(currentUser, 'void_keranjang') !== null) { const vkEl = document.getElementById('nav-void-keranjang'); if (vkEl) vkEl.style.display = 'flex'; }
-    if (RPA_PERM.getModuleRole(currentUser, 'reprint_label') !== null) { const rlEl = document.getElementById('nav-reprint-label'); if (rlEl) rlEl.style.display = 'flex'; }
-  if(RPA_PERM.getModuleRole(currentUser,'saldo_awal')!==null){const saEl=document.getElementById('nav-saldo-awal');if(saEl)saEl.style.display='flex'}
-  RPA_STATE.bindScroll('Laporan');
+  if(RPA_PERM.getModuleRole(currentUser,'saldo_awal')!==null){const el=document.getElementById('nav-saldo-awal');if(el)el.style.display='flex'}
+  if(RPA_PERM.getModuleRole(currentUser,'revisi_batch')!==null){const el=document.getElementById('nav-revisi-batch');if(el)el.style.display='flex'}
+  if(RPA_PERM.getModuleRole(currentUser,'void_keranjang')!==null){const el=document.getElementById('nav-void-keranjang');if(el)el.style.display='flex'}
+
   startClock();
-  renderReportGrid();
+  document.getElementById('search-code').focus();
 }
 
 function startClock(){
@@ -380,24 +396,113 @@ function startClock(){
   tick();setInterval(tick,1000);
 }
 
-// ── RENDER ──
-function renderReportGrid(){
-  const grid=document.getElementById('report-grid');
-  grid.innerHTML=REPORTS.map(r=>`
-    <div class="report-card ${r.enabled?'':'disabled'}" onclick="${r.enabled?`navTo('${r.url}')`:`showToast('Laporan ini belum tersedia.')`}">
-      <div class="rc-icon">${r.icon}</div>
-      <div class="rc-title">${esc(r.title)}</div>
-      <div class="rc-desc">${esc(r.desc)}</div>
-      ${r.enabled ? '<div class="rc-open">Buka Laporan →</div>' : '<div class="rc-soon">Segera Hadir</div>'}
-    </div>
-  `).join('');
-}
-
 // ── AUTO LOGIN ──
 window.addEventListener('DOMContentLoaded',async ()=>{
   const saved=localStorage.getItem('rpa_user')||sessionStorage.getItem('rpa_user');
   if(saved){try{currentUser=await RPA_PERM.restoreSession(db);if(currentUser)startApp();}catch{}}
 });
+
+// ============================================================
+// PANEL 1 — CARI / SCAN KERANJANG
+// ============================================================
+async function searchBasket(){
+  const codeRaw = document.getElementById('search-code').value.trim();
+  const area = document.getElementById('search-result-area');
+  document.getElementById('panel-detail').style.display='none';
+  document.getElementById('label-preview-wrap').innerHTML='';
+  foundBasket = null;
+  if(!codeRaw){showToast('Masukkan kode keranjang.','warning');return}
+  const code = codeRaw.toUpperCase();
+  area.innerHTML = '<div class="empty">⏳ Mencari…</div>';
+
+  const{data:basket,error}=await db.from('baskets')
+    .select(`id,basket_code,basket_type,status,lokasi,qty_awal,qty_sisa,kg_awal,kg_sisa,
+      tanggal_produksi,keterangan,batch_id,
+      product_master(nama_produk,product_code,kategori,satuan_qty),
+      live_chicken_batches(batch_code)`)
+    .eq('basket_code',code).maybeSingle();
+
+  if(error){console.error(error);area.innerHTML='<div class="empty">⚠️ Gagal mencari.</div>';return}
+  if(!basket){area.innerHTML=`<div class="empty">Keranjang <b>${esc(code)}</b> tidak ditemukan.</div>`;return}
+
+  foundBasket = basket;
+  area.innerHTML = '';
+  renderDetail(basket);
+  document.getElementById('panel-detail').style.display='';
+}
+
+function renderDetail(b){
+  const pm = b.product_master || {};
+  const satuan = pm.satuan_qty || '';
+  const badgeClass = b.status==='AKTIF' ? 'b-aktif' : b.status==='HABIS' ? 'b-habis' : 'b-void';
+  const printable = b.status === 'AKTIF';
+
+  let warnHtml = '';
+  if(!printable){
+    warnHtml = `<div class="risk-box risk-danger">
+      🚫 Keranjang ini berstatus <b>${esc(b.status)}</b> — label tidak bisa dicetak ulang untuk keranjang yang sudah ${b.status==='VOID'?'di-void':'habis'}.
+    </div>`;
+  }
+
+  const html = `
+    ${warnHtml}
+    <div class="stok-box">
+      <div class="stok-item">
+        <div class="lbl">Stok Terakhir — Qty</div>
+        <div class="val">${fmt(b.qty_sisa)} ${esc(satuan)}</div>
+      </div>
+      <div class="stok-item">
+        <div class="lbl">Stok Terakhir — Kg</div>
+        <div class="val">${fmtKg(b.kg_sisa)}</div>
+      </div>
+      <div class="stok-item">
+        <div class="lbl">Status</div>
+        <div class="val" style="font-size:15px"><span class="badge ${badgeClass}">${esc(b.status)}</span></div>
+      </div>
+    </div>
+    <div class="detail-grid">
+      <div class="detail-cell"><div class="lbl">Kode Keranjang</div><div class="val" style="font-family:monospace;font-size:13px">${esc(b.basket_code)}</div></div>
+      <div class="detail-cell"><div class="lbl">Nama Produk</div><div class="val" style="font-size:13px">${esc(pm.nama_produk||'—')}</div></div>
+      <div class="detail-cell"><div class="lbl">Tipe Keranjang</div><div class="val" style="font-size:13px">${esc(b.basket_type||'—')}</div></div>
+      <div class="detail-cell"><div class="lbl">Lokasi</div><div class="val" style="font-size:13px">${esc(b.lokasi||'—')}</div></div>
+      <div class="detail-cell"><div class="lbl">Tanggal Produksi</div><div class="val" style="font-size:13px">${fmtDate(b.tanggal_produksi)}</div></div>
+      <div class="detail-cell"><div class="lbl">No Batch</div><div class="val" style="font-size:13px">${esc(b.live_chicken_batches?.batch_code||'—')}</div></div>
+      <div class="detail-cell"><div class="lbl">Qty Awal</div><div class="val" style="font-size:13px">${fmt(b.qty_awal)} ${esc(satuan)}</div></div>
+      <div class="detail-cell"><div class="lbl">Kg Awal</div><div class="val" style="font-size:13px">${fmtKg(b.kg_awal)}</div></div>
+      ${b.keterangan ? `<div class="detail-cell"><div class="lbl">Keterangan</div><div class="val" style="font-size:13px">${esc(b.keterangan)}</div></div>` : ''}
+    </div>`;
+
+  document.getElementById('detail-area').innerHTML = html;
+
+  const btn = document.getElementById('btn-print');
+  btn.disabled = !printable;
+}
+
+// ============================================================
+// PANEL 2 — CETAK LABEL (layout sama persis dgn label standar)
+// ============================================================
+function toLabelData(b){
+  const pm = b.product_master || {};
+  const satuan = pm.satuan_qty || '';
+  return {
+    code:       b.basket_code || '—',
+    namaProduk: pm.nama_produk || '—',
+    qtyText:    `${fmt(b.qty_sisa)} ${satuan}`.trim(),
+    kgText:     fmtKg(b.kg_sisa),
+    tglText:    fmtDate(b.tanggal_produksi),
+    refLabel:   'No Batch',
+    refValue:   b.live_chicken_batches?.batch_code || '—'
+  };
+}
+
+function doPrint(){
+  if(!foundBasket){showToast('Cari keranjang dulu.','warning');return}
+  if(foundBasket.status!=='AKTIF'){showToast('Keranjang ini tidak bisa dicetak ulang labelnya.','warning');return}
+  const data = toLabelData(foundBasket);
+  const preview = document.getElementById('label-preview-wrap');
+  preview.innerHTML = RPALabel.buildStandardLabelHTML(data);
+  RPALabel.printStandardLabel(data);
+}
 </script>
 </body>
 </html>

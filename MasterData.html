@@ -370,6 +370,9 @@ tbody tr:hover { background: #f9fafb; }
         <div class="nav-item" id="nav-void-keranjang" style="display:none" onclick="navTo('VoidKeranjang.html')">
             <span class="nav-icon">🗑️</span><span class="nav-label-text">Void Keranjang</span>
         </div>
+        <div class="nav-item" id="nav-reprint-label" style="display:none" onclick="navTo('ReprintLabel.html')">
+            <span class="nav-icon">🖨️</span><span class="nav-label-text">Reprint Label</span>
+        </div>
         <div class="nav-item" id="nav-user-mgmt" style="display:none" onclick="navTo('UserManagement.html')"><span class="nav-icon">👥</span><span class="nav-label-text">Manajemen User</span></div>
       </nav>
       <div class="sidebar-footer">
@@ -776,6 +779,7 @@ async function initApp() {
     }
     if (RPA_PERM.getModuleRole(currentUser, 'revisi_batch') !== null) { const rbEl = document.getElementById('nav-revisi-batch'); if (rbEl) rbEl.style.display = 'flex'; }
     if (RPA_PERM.getModuleRole(currentUser, 'void_keranjang') !== null) { const vkEl = document.getElementById('nav-void-keranjang'); if (vkEl) vkEl.style.display = 'flex'; }
+    if (RPA_PERM.getModuleRole(currentUser, 'reprint_label') !== null) { const rlEl = document.getElementById('nav-reprint-label'); if (rlEl) rlEl.style.display = 'flex'; }
     if (RPA_PERM.getModuleRole(currentUser, 'saldo_awal') !== null) { const saEl = document.getElementById('nav-saldo-awal'); if (saEl) saEl.style.display = 'flex'; }
     RPA_STATE.bindFilters('MasterData', ['.toolbar']);
     RPA_STATE.bindScroll('MasterData');

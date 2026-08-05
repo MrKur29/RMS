@@ -488,6 +488,10 @@ input, select, textarea { font-family: inherit; }
                     <span class="nav-icon">🔀</span>
                     <span class="nav-label-text">Revisi Batch Keranjang</span>
                 </div>
+                <div class="nav-item" onclick="navTo('ReprintLabel.html')">
+                    <span class="nav-icon">🖨️</span>
+                    <span class="nav-label-text">Reprint Label</span>
+                </div>
                 <div class="nav-item active">
                     <span class="nav-icon">👥</span>
                     <span class="nav-label-text">Manajemen User</span>
@@ -645,6 +649,7 @@ input, select, textarea { font-family: inherit; }
                         <option value="saldo_awal">Saldo Awal Barang</option>
                         <option value="revisi_batch">Revisi Batch Keranjang</option>
                         <option value="void_keranjang">Void Keranjang</option>
+                        <option value="reprint_label">Reprint Label</option>
                     </select>
                     <select id="perm-add-role">
                         <option value="">— Pilih Role —</option>
@@ -734,6 +739,7 @@ const MODULE_LABELS = {
     saldo_awal:'Saldo Awal Barang',
     revisi_batch:'Revisi Batch Keranjang',
     void_keranjang:'Void Keranjang',
+    reprint_label:'Reprint Label',
 };
 const ROLE_LABELS = {
     supervisor: '👑 Supervisor',
