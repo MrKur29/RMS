@@ -357,6 +357,31 @@ a{text-decoration:none}
             </table>
           </div>
         </div>
+
+        <div class="panel" style="margin-top:16px">
+          <div class="panel-head">
+            <span class="panel-title">🧊 Selisih Terima Blasting — Menunggu Approval</span>
+            <span class="panel-pill alert" id="pill-selisih-terima">—</span>
+          </div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>Basket</th>
+                  <th>Tercatat</th>
+                  <th>Aktual</th>
+                  <th>Alasan</th>
+                  <th>Diajukan Oleh</th>
+                  <th>Tanggal</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-selisih-terima">
+                <tr><td colspan="7"><div class="empty">Memuat…</div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       <!-- TAB: RIWAYAT -->
@@ -532,6 +557,28 @@ a{text-decoration:none}
   </div>
 </div>
 
+<!-- MODAL: REVIEW SELISIH TERIMA BLASTING -->
+<div class="modal-overlay" id="modal-selisih-terima">
+  <div class="modal-box modal-sm">
+    <div class="modal-title">🧊 Review Selisih Terima Blasting</div>
+    <div class="modal-desc">Pilih salah satu: koreksi angka di sumber, catat sebagai selisih (tanpa mengubah sumber), atau tolak (movement kembali seperti semula, belum dikonfirmasi).</div>
+    <div class="modal-info-box" id="st-info-box"></div>
+    <div id="st-karkas-box" style="display:none;margin-top:10px;background:#f0fdfa;border:1px solid #99f6e4;border-radius:8px;padding:10px 12px;font-size:12px;color:#134e4a;line-height:1.7"></div>
+    <div id="st-partial-warn" style="display:none;color:#b45309;font-size:12px;font-weight:600;margin-top:10px">⚠️ Pengiriman ini sebagian (partial) dari keranjang sumber — Revisi dari Sumber tidak tersedia, keranjang tujuan belum eksis sampai dikonfirmasi. Gunakan Catat Selisih.</div>
+    <div class="form-group" style="margin-top:10px">
+      <label>Catatan Review (wajib untuk Tolak)</label>
+      <textarea id="st-catatan" placeholder="Catatan approval / alasan penolakan…"></textarea>
+    </div>
+    <div id="st-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-bottom:8px;display:none"></div>
+    <div class="modal-footer" style="flex-wrap:wrap;gap:6px">
+      <button class="btn btn-ghost" onclick="closeModal('modal-selisih-terima')">Batal</button>
+      <button class="btn btn-red btn-sm" onclick="doApproveSelisihTerima('TOLAK')">✗ Tolak</button>
+      <button class="btn btn-primary btn-sm" onclick="doApproveSelisihTerima('CATAT_SELISIH')">📊 Catat Selisih</button>
+      <button class="btn btn-green" id="st-btn-revisi" onclick="doApproveSelisihTerima('REVISI_SUMBER')">✅ Revisi dari Sumber</button>
+    </div>
+  </div>
+</div>
+
 <!-- TOAST -->
 <div id="toast"></div>
 
@@ -666,7 +713,7 @@ window.addEventListener('DOMContentLoaded',async ()=>{
 
 // ── LOAD ──
 async function loadAll(){
-  await Promise.all([loadPending(),loadCards()]);
+  await Promise.all([loadPending(),loadCards(),loadSelisihTerima()]);
 }
 
 async function loadCards(){
@@ -717,6 +764,127 @@ function renderPending(){
       </td>
     </tr>
   `).join('');
+}
+
+// ── SELISIH TERIMA BLASTING ──
+// Bentuknya beda dari corrections (2 angka + link ke movement pending), jadi
+// tabel & panel terpisah, tapi tetap hidup di Koreksi.html sebagai hub
+// approval sesuai keputusan 2026-08-05 -- lihat [[project_blasting_terima_selisih_concept_2026_08_05]].
+let selisihTerimaList = [];
+let activeSelisihTerimaId = null;
+
+async function loadSelisihTerima(){
+  const{data,error}=await db.from('blasting_terima_selisih')
+    .select(`id,basket_id,basket_code,qty_tercatat,kg_tercatat,qty_aktual,kg_aktual,alasan,diajukan_at,
+              diajukan_oleh(nama),
+              movement:movement_id(id,is_partial,dari_lokasi,ke_lokasi)`)
+    .eq('status','PENDING')
+    .order('diajukan_at',{ascending:false});
+  if(error){console.error(error);return}
+  selisihTerimaList=data||[];
+  renderSelisihTerima();
+}
+
+function renderSelisihTerima(){
+  const tbody=document.getElementById('tbody-selisih-terima');
+  const pill=document.getElementById('pill-selisih-terima');
+  if(!tbody)return;
+  if(pill){pill.textContent=selisihTerimaList.length;pill.className=`panel-pill ${selisihTerimaList.length>0?'alert':'ok'}`}
+  if(!selisihTerimaList.length){
+    tbody.innerHTML=`<tr><td colspan="7"><div class="empty">Tidak ada selisih terima pending</div></td></tr>`;
+    return;
+  }
+  const canApprove=RPA_PERM.canApprove(currentUser.moduleRole);
+  tbody.innerHTML=selisihTerimaList.map(r=>`
+    <tr>
+      <td><span style="font-family:monospace;font-weight:700">${esc(r.basket_code)}</span></td>
+      <td>${fmt(r.qty_tercatat)} ek<br><span class="tbl-sub">${fmtKg(r.kg_tercatat)}</span></td>
+      <td>${fmt(r.qty_aktual)} ek<br><span class="tbl-sub">${fmtKg(r.kg_aktual)}</span></td>
+      <td style="max-width:200px">${esc(r.alasan)}</td>
+      <td>${esc(r.diajukan_oleh?.nama)||'—'}</td>
+      <td>${fmtDT(r.diajukan_at)}</td>
+      <td>
+        ${canApprove?`<button class="btn btn-primary btn-sm" onclick="openReviewSelisihTerima('${r.id}')">🔍 Review</button>`
+                     :'<span class="hint">Butuh akses Supervisor</span>'}
+      </td>
+    </tr>
+  `).join('');
+}
+
+function fmt(n,d=0){if(n==null||n==='')return'—';return Number(n).toLocaleString('id-ID',{minimumFractionDigits:d,maximumFractionDigits:d})}
+function fmtKg(n){if(n==null)return'—';return Number(n).toLocaleString('id-ID',{minimumFractionDigits:1,maximumFractionDigits:1})+' kg'}
+
+async function openReviewSelisihTerima(id){
+  activeSelisihTerimaId=id;
+  const r=selisihTerimaList.find(x=>x.id===id);
+  if(!r)return;
+
+  document.getElementById('st-info-box').innerHTML=`
+    <div class="modal-info-row"><span class="modal-info-label">Basket</span><span class="modal-info-val" style="font-family:monospace">${esc(r.basket_code)}</span></div>
+    <div class="modal-info-row"><span class="modal-info-label">Tercatat</span><span class="modal-info-val">${fmt(r.qty_tercatat)} ekor / ${fmtKg(r.kg_tercatat)}</span></div>
+    <div class="modal-info-row"><span class="modal-info-label">Aktual</span><span class="modal-info-val">${fmt(r.qty_aktual)} ekor / ${fmtKg(r.kg_aktual)}</span></div>
+    <div class="modal-info-row"><span class="modal-info-label">Alasan</span><span class="modal-info-val">${esc(r.alasan)}</span></div>
+    <div class="modal-info-row"><span class="modal-info-label">Diajukan Oleh</span><span class="modal-info-val">${esc(r.diajukan_oleh?.nama)||'—'}</span></div>
+  `;
+  document.getElementById('st-catatan').value='';
+  showErr('st-err','');
+
+  // Revisi dari Sumber hanya untuk pengiriman PENUH (is_partial=FALSE) --
+  // lihat catatan arsitektur di migration 71.
+  const isPartial=!!r.movement?.is_partial;
+  document.getElementById('st-partial-warn').style.display=isPartial?'':'none';
+  const btnRevisi=document.getElementById('st-btn-revisi');
+  if(btnRevisi)btnRevisi.disabled=isPartial;
+
+  // Rekapan batch karkas -- HANYA kalau basket ini telusur langsung ke
+  // carcass_baskets (karkas-origin, bukan output WO Parting/Boneless/Marinasi).
+  const karkasBox=document.getElementById('st-karkas-box');
+  karkasBox.style.display='none';
+  const{data:cb}=await db.from('carcass_baskets').select('batch_id').eq('basket_id',r.basket_id).maybeSingle();
+  if(cb?.batch_id){
+    const[{data:batch},{data:allBaskets}]=await Promise.all([
+      db.from('live_chicken_batches').select('batch_code,tanggal,nama_kandang,ekor_kandang,ekor_timbang_ulang,ekor_mati').eq('id',cb.batch_id).maybeSingle(),
+      db.from('carcass_baskets').select('qty_timbang,basket:basket_id(status)').eq('batch_id',cb.batch_id)
+    ]);
+    if(batch){
+      const totalKarkasSebelum=(allBaskets||[]).filter(b=>b.basket?.status!=='VOID').reduce((s,b)=>s+(Number(b.qty_timbang)||0),0);
+      const totalKarkasSesudah=totalKarkasSebelum-Number(r.qty_tercatat)+Number(r.qty_aktual);
+      const timbangNetto=(batch.ekor_timbang_ulang||0)-(batch.ekor_mati||0);
+      const selisihSebelum=timbangNetto-totalKarkasSebelum;
+      const selisihSesudah=timbangNetto-totalKarkasSesudah;
+      karkasBox.innerHTML=`
+        <strong>📋 Rekapan Batch Karkas — ${esc(batch.batch_code)}</strong> (${fmtDate(batch.tanggal)})<br>
+        Sumber: ${esc(batch.nama_kandang)||'—'} · Ekor Kandang: ${fmt(batch.ekor_kandang)} · Ekor Timbang Ulang: ${fmt(batch.ekor_timbang_ulang)} · Ekor Mati: ${fmt(batch.ekor_mati)}<br>
+        Total Ekor Karkas Batch: ${fmt(totalKarkasSebelum)} → <strong>${fmt(totalKarkasSesudah)}</strong> (kalau disetujui)<br>
+        <strong>Selisih Ekor Karkas (Timbang Netto − Karkas): ${fmt(selisihSebelum)} → ${fmt(selisihSesudah)}</strong>
+      `;
+      karkasBox.style.display='';
+    }
+  }
+
+  openModal('modal-selisih-terima');
+}
+function fmtDate(s){if(!s)return'—';return new Date(s).toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'})}
+
+async function doApproveSelisihTerima(resolusi){
+  if(!activeSelisihTerimaId)return;
+  const catatan=document.getElementById('st-catatan').value.trim();
+  if(resolusi==='TOLAK' && !catatan){showErr('st-err','Alasan penolakan wajib diisi.');return}
+  showErr('st-err','');
+  try{
+    const{data,error}=await db.rpc('approve_selisih_terima_blasting',{
+      p_selisih_id: activeSelisihTerimaId,
+      p_reviewer_id: currentUser.id,
+      p_resolusi: resolusi,
+      p_catatan: catatan||null
+    });
+    if(error)throw error;
+    if(!data?.ok){showErr('st-err','Gagal: '+(data?.msg||'')); return}
+    closeModal('modal-selisih-terima');
+    const label={REVISI_SUMBER:'Direvisi dari sumber & mendarat di Blasting',CATAT_SELISIH:'Dicatat sebagai selisih & mendarat di Blasting',TOLAK:'Ditolak — movement kembali menunggu konfirmasi biasa'}[resolusi];
+    showToast(`✅ ${label}`,'success');
+    await loadAll();
+  }catch(e){showErr('st-err','Gagal: '+(e.message||''));}
 }
 
 async function loadRiwayat(){

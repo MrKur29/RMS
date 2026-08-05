@@ -621,14 +621,31 @@ a{text-decoration:none}
       <div class="modal-info-box">
         <div class="modal-info-row"><span class="modal-info-label">Kode Keranjang</span><span class="modal-info-val" style="font-family:monospace" id="mk-code">—</span></div>
         <div class="modal-info-row"><span class="modal-info-label">Produk</span><span class="modal-info-val" id="mk-produk">—</span></div>
-        <div class="modal-info-row"><span class="modal-info-label">Qty / Kg</span><span class="modal-info-val" id="mk-qty-kg">—</span></div>
+        <div class="modal-info-row"><span class="modal-info-label">Qty / Kg Tercatat</span><span class="modal-info-val" id="mk-qty-kg">—</span></div>
         <div class="modal-info-row"><span class="modal-info-label">Dari</span><span class="modal-info-val" id="mk-dari">—</span></div>
+      </div>
+      <div class="form-row" style="margin-top:10px">
+        <div class="form-group">
+          <label>Ekor Aktual (hasil hitung)</label>
+          <input type="text" inputmode="numeric" id="mk-qty-aktual" oninput="sanitizeIntInput(this);onMkAktualChange()">
+        </div>
+        <div class="form-group">
+          <label>Kg Aktual (hasil timbang)</label>
+          <input type="text" inputmode="decimal" id="mk-kg-aktual" oninput="sanitizeDecimalInput(this);onMkAktualChange()">
+        </div>
+      </div>
+      <div id="mk-selisih-box" style="display:none;margin-top:4px;margin-bottom:8px">
+        <div class="hint" style="color:#b45309;font-weight:600">⚠️ Angka aktual beda dari tercatat — ini akan diajukan sebagai selisih ke Supervisor (Koreksi.html), keranjang belum mendarat di Blasting sampai disetujui.</div>
+        <div class="form-group" style="margin-top:6px">
+          <label>Alasan Selisih</label>
+          <textarea id="mk-alasan" placeholder="Jelaskan penyebab selisih…"></textarea>
+        </div>
       </div>
       <div id="mk-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-bottom:8px;display:none"></div>
       <div class="modal-footer">
         <button class="btn btn-ghost" onclick="closeModal('modal-konfirm')">Batal</button>
         <button class="btn btn-red btn-sm" onclick="openTolakFromKonfirm()">✗ Tolak</button>
-        <button class="btn btn-green" id="mk-btn-ok" onclick="doKonfirmasi()">✅ Konfirmasi Masuk</button>
+        <button class="btn btn-green" id="mk-btn-ok" onclick="submitKonfirmasi()">✅ Konfirmasi Masuk</button>
       </div>
     </div>
     <div id="mk-step2" style="display:none">
@@ -857,6 +874,7 @@ let activeBatchId     = null;
 let hapusBatchId      = null;
 let expandedGroups    = new Set();
 let selectedBasketForRak = null; // basket dipilih untuk dialokasikan ke rak
+let selisihPendingSet = new Set(); // movement_id yang lagi menunggu approval Selisih Terima di Koreksi.html
 
 // ── UTILS ──
 async function sha256(str) {
@@ -982,7 +1000,7 @@ window.addEventListener('DOMContentLoaded',async ()=>{
 
 // ── LOAD ALL ──
 async function loadAll(){
-  await Promise.all([loadPendingMovements(),loadBlastingStock(),loadRacks(),loadRackAllocations(),loadBatches()]);
+  await Promise.all([loadPendingMovements(),loadSelisihPending(),loadBlastingStock(),loadRacks(),loadRackAllocations(),loadBatches()]);
   renderSummaryCards();
   renderPendingList();
   renderStok();
@@ -991,8 +1009,16 @@ async function loadAll(){
 }
 
 async function loadPendingMovements(){
-  const{data,error}=await db.from('basket_movements').select(`id,basket_id,qty_pindah,kg_pindah,dari_lokasi,created_at,baskets(basket_code,qty_sisa,kg_sisa,lokasi,product_master(nama_produk,product_code))`).eq('ke_lokasi','BLASTING').eq('status','PENDING').order('created_at');
+  const{data,error}=await db.from('basket_movements').select(`id,basket_id,qty_pindah,kg_pindah,dari_lokasi,is_partial,created_at,baskets(basket_code,qty_sisa,kg_sisa,lokasi,product_master(nama_produk,product_code))`).eq('ke_lokasi','BLASTING').eq('status','PENDING').order('created_at');
   if(!error)pendingMovements=data||[];
+}
+
+// Movement yang sudah diajukan selisihnya (menunggu Supervisor di Koreksi.html)
+// — TIDAK boleh dikonfirmasi/ditolak/ikut Konfirmasi Semua sampai direview,
+// supaya tidak bypass laporan yang sedang jalan.
+async function loadSelisihPending(){
+  const{data,error}=await db.from('blasting_terima_selisih').select('movement_id').eq('status','PENDING');
+  if(!error)selisihPendingSet=new Set((data||[]).map(r=>r.movement_id));
 }
 
 async function loadBlastingStock(){
@@ -1056,15 +1082,17 @@ function renderPendingList(){
   }
   tbody.innerHTML=pendingMovements.map(mv=>{
     const b=mv.baskets||{};const pm=b.product_master||{};
+    const menunggu=selisihPendingSet.has(mv.id);
     return `<tr id="pend-row-${mv.id}">
       <td><span style="font-family:monospace;font-weight:700">${b.basket_code||'—'}</span>
           <div class="tbl-sub">${lokasiLabel(mv.dari_lokasi)}</div></td>
       <td>${pm.nama_produk||'—'}</td>
       <td>${fmt(mv.qty_pindah)} ek<br><span class="tbl-sub">${fmtKg(mv.kg_pindah)}</span></td>
-      <td>
-        <button class="btn btn-green btn-sm" onclick="openKonfirmasi('${mv.id}')">✅ Terima</button>
-        <button class="btn btn-ghost btn-sm" style="margin-top:2px" onclick="openTolak('${mv.id}','${b.basket_code||''}')">✗ Tolak</button>
-      </td>
+      <td>${menunggu
+        ? `<span class="badge" style="background:#fef3c7;color:#92400e;font-weight:700">⏳ Menunggu Approval Selisih</span>`
+        : `<button class="btn btn-green btn-sm" onclick="openKonfirmasi('${mv.id}')">✅ Terima</button>
+           <button class="btn btn-ghost btn-sm" style="margin-top:2px" onclick="openTolak('${mv.id}','${b.basket_code||''}')">✗ Tolak</button>`
+      }</td>
     </tr>`;
   }).join('');
 }
@@ -1139,6 +1167,11 @@ function doScanPending(){
   const mv=matches[0];const b=mv.baskets||{};const pm=b.product_master||{};
   resEl.className='scan-result scan-ok';
   codeEl.textContent=b.basket_code||code;
+  if(selisihPendingSet.has(mv.id)){
+    detailEl.innerHTML=`Produk: <strong>${pm.nama_produk||'—'}</strong><br>Qty: <strong>${fmt(mv.qty_pindah)} ekor / ${fmtKg(mv.kg_pindah)}</strong><br>Dari: <strong>${lokasiLabel(mv.dari_lokasi)}</strong><br><span style="color:#b45309">⏳ Menunggu approval selisih di Koreksi.html</span>`;
+    actEl.innerHTML='';
+    return;
+  }
   detailEl.innerHTML=`Produk: <strong>${pm.nama_produk||'—'}</strong><br>Qty: <strong>${fmt(mv.qty_pindah)} ekor / ${fmtKg(mv.kg_pindah)}</strong><br>Dari: <strong>${lokasiLabel(mv.dari_lokasi)}</strong><br><span style="color:#16a34a">✅ Ditemukan di antrian — siap dikonfirmasi</span>`;
   actEl.innerHTML=`
     <button class="btn btn-green" onclick="openKonfirmasi('${mv.id}');clearScanResult('scan-pending-result');document.getElementById('scan-pending-input').value=''">✅ Terima</button>
@@ -1206,6 +1239,10 @@ function toggleGroup(key){if(expandedGroups.has(key))expandedGroups.delete(key);
 
 // ── TAB 1: KONFIRMASI ──
 function openKonfirmasi(mvId){
+  if(selisihPendingSet.has(mvId)){
+    showToast('Keranjang ini sedang menunggu approval selisih di Koreksi.html','error');
+    return;
+  }
   activeMovementId=mvId;
   document.getElementById('mk-step1').style.display='';
   document.getElementById('mk-step2').style.display='none';
@@ -1216,8 +1253,55 @@ function openKonfirmasi(mvId){
   setEl('mk-produk',pm.nama_produk||'—');
   setEl('mk-qty-kg',`${fmt(mv.qty_pindah)} ekor / ${fmtKg(mv.kg_pindah)}`);
   setEl('mk-dari',lokasiLabel(mv.dari_lokasi));
+  // Default aktual = tercatat — operator cuma ubah kalau hasil hitung/timbang beda
+  document.getElementById('mk-qty-aktual').value=fmt(mv.qty_pindah);
+  document.getElementById('mk-kg-aktual').value=Number(mv.kg_pindah).toFixed(1);
+  document.getElementById('mk-alasan').value='';
+  document.getElementById('mk-selisih-box').style.display='none';
   showErr('mk-err','');
+  renderMkButtonLabel();
   openModal('modal-konfirm');
+}
+
+// Toggle tampilan kotak alasan selisih + label tombol, tiap kali operator
+// mengubah angka aktual. Tidak memanggil server — cuma bandingkan ke movement.
+function onMkAktualChange(){
+  renderMkButtonLabel();
+  const box=document.getElementById('mk-selisih-box');
+  if(box)box.style.display=mkAdaSelisih()?'':'none';
+}
+
+function mkAdaSelisih(){
+  const mv=pendingMovements.find(m=>m.id===activeMovementId);
+  if(!mv)return false;
+  const qtyAktual=parseFloat(document.getElementById('mk-qty-aktual').value);
+  const kgAktual=parseFloat(document.getElementById('mk-kg-aktual').value);
+  if(isNaN(qtyAktual)||isNaN(kgAktual))return false;
+  return qtyAktual!==Number(mv.qty_pindah) || Math.abs(kgAktual-Number(mv.kg_pindah))>0.001;
+}
+
+function renderMkButtonLabel(){
+  const btn=document.getElementById('mk-btn-ok');
+  if(!btn)return;
+  btn.textContent=mkAdaSelisih()?'📤 Ajukan Selisih ke Supervisor':'✅ Konfirmasi Masuk';
+}
+
+// Dispatcher tombol utama modal Konfirmasi Masuk: kalau angka aktual sama
+// dengan tercatat, jalur lama (konfirmasi_movement langsung). Kalau beda,
+// diajukan ke Supervisor dulu lewat ajukan_selisih_terima_blasting — movement
+// TETAP PENDING sampai direview di Koreksi.html.
+async function submitKonfirmasi(){
+  const mv=pendingMovements.find(m=>m.id===activeMovementId);
+  if(!mv)return;
+  const qtyAktual=parseFloat(document.getElementById('mk-qty-aktual').value);
+  const kgAktual=parseFloat(document.getElementById('mk-kg-aktual').value);
+  if(isNaN(qtyAktual)||qtyAktual<0){showErr('mk-err','Isi ekor aktual dengan benar.');return}
+  if(isNaN(kgAktual)||kgAktual<0){showErr('mk-err','Isi kg aktual dengan benar.');return}
+  if(mkAdaSelisih()){
+    await submitAjukanSelisih(mv,qtyAktual,kgAktual);
+  }else{
+    await doKonfirmasi();
+  }
 }
 
 async function doKonfirmasi(){
@@ -1242,7 +1326,27 @@ async function doKonfirmasi(){
     setEl('mk-post-code',mvCode);
     setEl('mk-post-sisa',mvQtyKg);
   }catch(e){showErr('mk-err','Gagal konfirmasi: '+(e.message||''));}
-  finally{btn.disabled=false;btn.textContent='✅ Konfirmasi Masuk'}
+  finally{btn.disabled=false;renderMkButtonLabel();}
+}
+
+async function submitAjukanSelisih(mv,qtyAktual,kgAktual){
+  const alasan=document.getElementById('mk-alasan').value.trim();
+  if(!alasan){showErr('mk-err','Alasan wajib diisi untuk mengajukan selisih.');return}
+  const btn=document.getElementById('mk-btn-ok');
+  btn.disabled=true;btn.textContent='Memproses…';
+  try{
+    const{data,error}=await db.rpc('ajukan_selisih_terima_blasting',{
+      p_movement_id: mv.id, p_user_id: currentUser.id,
+      p_qty_aktual: qtyAktual, p_kg_aktual: kgAktual, p_alasan: alasan
+    });
+    if(error)throw error;
+    const r=typeof data==='string'?JSON.parse(data):data;
+    if(!r.ok)throw new Error(r.msg||'Gagal mengajukan selisih');
+    closeModal('modal-konfirm');
+    showToast('📤 Selisih diajukan ke Supervisor — menunggu approval di Koreksi.html','success');
+    await loadAll();
+  }catch(e){showErr('mk-err','Gagal: '+(e.message||''));}
+  finally{btn.disabled=false;renderMkButtonLabel();}
 }
 
 function openTolakFromKonfirm(){
@@ -1298,8 +1402,11 @@ function openKonfirmSemua(){
 async function doKonfirmasiSemua(){
   const btn=document.getElementById('mks-btn-ok');
   btn.disabled=true;btn.textContent='Memproses…';
-  let ok=0,fail=0;
+  let ok=0,fail=0,skip=0;
   for(const mv of pendingMovements){
+    // Lewati movement yang sedang menunggu approval Selisih Terima —
+    // jangan sampai Konfirmasi Semua bypass laporan yang lagi direview.
+    if(selisihPendingSet.has(mv.id)){skip++;continue}
     try{
       const{data,error}=await db.rpc('konfirmasi_movement',{p_movement_id:mv.id,p_user_id:currentUser.id});
       if(error){fail++;continue}
@@ -1309,7 +1416,7 @@ async function doKonfirmasiSemua(){
   }
   btn.disabled=false;btn.textContent='✅ Ya, Konfirmasi Semua';
   closeModal('modal-konfirm-semua');
-  showToast(`${ok} keranjang dikonfirmasi${fail?`, ${fail} gagal`:''}!`,fail?'warning':'success');
+  showToast(`${ok} keranjang dikonfirmasi${fail?`, ${fail} gagal`:''}${skip?`, ${skip} dilewati (menunggu approval selisih)`:''}!`,fail?'warning':'success');
   await loadAll();
 }
 
