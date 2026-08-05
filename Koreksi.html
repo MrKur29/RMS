@@ -483,29 +483,13 @@ a{text-decoration:none}
 
             <div id="kf-found-box" class="modal-info-box" style="display:none;margin-top:12px"></div>
 
-            <div class="form-row" style="margin-top:16px">
-              <div class="form-group">
-                <label>Field yang Salah</label>
-                <input type="text" id="kf-field" list="kf-field-suggest" placeholder="mis. kg_sisa" oninput="onFieldChange()">
-                <datalist id="kf-field-suggest"></datalist>
-              </div>
-              <div class="form-group">
-                <label>Nilai Lama</label>
-                <input type="text" id="kf-nilai-lama" placeholder="terisi otomatis kalau ditemukan" readonly>
-                <div class="hint" id="kf-nilai-lama-hint">Terisi otomatis dari data asli, tidak bisa diketik manual.</div>
-              </div>
-            </div>
+            <datalist id="kf-field-suggest"></datalist>
 
-            <div class="form-group" id="kf-nilai-baru-text-wrap">
-              <label>Nilai Baru</label>
-              <input type="text" id="kf-nilai-baru" placeholder="nilai yang seharusnya">
-            </div>
-            <div class="form-group" id="kf-nilai-baru-product-wrap" style="display:none">
-              <label>Item/Produk Baru</label>
-              <select id="kf-product-baru">
-                <option value="">— Pilih Produk —</option>
-              </select>
-              <div class="hint" id="kf-nilai-lama-product-hint"></div>
+            <div style="margin-top:16px">
+              <label>Field yang Dikoreksi</label>
+              <div class="hint" style="margin-bottom:8px">Bisa lebih dari 1 field sekaligus (mis. qty & kg bareng) — Supervisor menyetujui/menolak semuanya sebagai 1 paket.</div>
+              <div id="kf-fields-container"></div>
+              <button type="button" class="btn btn-ghost btn-sm" onclick="addKoreksiFieldRow()" style="margin-bottom:16px">+ Tambah Field</button>
             </div>
 
             <div class="form-group">
@@ -683,9 +667,16 @@ async function loadProductOptions(){
   productOptions=data||[];
   productMap={};
   productOptions.forEach(p=>{productMap[p.id]=`${p.product_code} — ${p.nama_produk}`});
-  const sel=document.getElementById('kf-product-baru');
+  document.querySelectorAll('.kf-field-row').forEach(row=>{
+    refreshProductDropdown(row.id.replace('kf-row-',''));
+  });
+}
+function refreshProductDropdown(idx){
+  const sel=document.getElementById(`kf-product-baru-${idx}`);
   if(sel){
+    const keep=sel.value;
     sel.innerHTML='<option value="">— Pilih Produk —</option>'+productOptions.map(p=>`<option value="${p.id}">${esc(p.product_code)} — ${esc(p.nama_produk)}</option>`).join('');
+    sel.value=keep;
   }
 }
 function prodLabel(id){return id&&productMap[id]?productMap[id]:(id||'—')}
@@ -718,19 +709,19 @@ async function loadAll(){
 }
 
 async function loadCards(){
-  const [{count:pending},{count:approved},{count:rejected}]=await Promise.all([
-    db.from('corrections').select('id',{count:'exact',head:true}).eq('status','PENDING'),
+  const [{count:approved},{count:rejected}]=await Promise.all([
     db.from('corrections').select('id',{count:'exact',head:true}).eq('status','APPROVED').gte('reviewed_at',firstOfMonthISO()),
     db.from('corrections').select('id',{count:'exact',head:true}).eq('status','REJECTED').gte('reviewed_at',firstOfMonthISO())
   ]);
-  document.getElementById('sc-pending').textContent=pending||0;
+  // sc-pending diisi dari renderPending() (dihitung per PAKET/group, bukan
+  // per baris field) supaya angkanya konsisten dengan pill panel di bawahnya.
   document.getElementById('sc-approved').textContent=approved||0;
   document.getElementById('sc-rejected').textContent=rejected||0;
 }
 
 async function loadPending(){
   const{data,error}=await db.from('corrections')
-    .select('id,tabel_terkait,record_id,field_salah,nilai_lama,nilai_baru,alasan,created_at,requested_by(nama)')
+    .select('id,group_id,tabel_terkait,record_id,field_salah,nilai_lama,nilai_baru,alasan,created_at,requested_by(nama)')
     .eq('status','PENDING')
     .order('created_at',{ascending:false});
   if(error){console.error(error);showToast('Gagal memuat koreksi pending','error');return}
@@ -738,33 +729,52 @@ async function loadPending(){
   renderPending();
 }
 
+// Satu "pengajuan" (submit dari tab Ajukan Koreksi) bisa berisi banyak baris
+// `corrections` (1 per field) yang berbagi group_id (migration 72) -- ini
+// mengelompokkan list flat itu jadi array-of-array per pengajuan.
+function groupByGroupId(list){
+  const map=new Map();
+  list.forEach(r=>{
+    const gid=r.group_id||r.id; // fallback kalau ada baris lama tanpa group_id
+    if(!map.has(gid))map.set(gid,[]);
+    map.get(gid).push(r);
+  });
+  return[...map.values()];
+}
+
 function renderPending(){
   const tbody=document.getElementById('tbody-pending');
   const pill=document.getElementById('pill-pending');
-  pill.textContent=pendingList.length;
-  pill.className=`panel-pill ${pendingList.length>0?'alert':'ok'}`;
-  if(!pendingList.length){
+  const groups=groupByGroupId(pendingList);
+  pill.textContent=groups.length;
+  pill.className=`panel-pill ${groups.length>0?'alert':'ok'}`;
+  document.getElementById('sc-pending').textContent=groups.length;
+  if(!groups.length){
     tbody.innerHTML=`<tr><td colspan="7"><div class="empty">Tidak ada koreksi pending</div></td></tr>`;
     return;
   }
   const canApprove=RPA_PERM.canApprove(currentUser.moduleRole);
   const isProdField=r=>r.tabel_terkait==='baskets'&&r.field_salah==='product_id';
-  tbody.innerHTML=pendingList.map(r=>`
+  tbody.innerHTML=groups.map(g=>{
+    const first=g[0];
+    const gid=first.group_id||first.id;
+    const fieldsHtml=g.map(r=>`<div style="margin-bottom:2px"><code style="font-size:11px;background:#f3f4f6;padding:1px 5px;border-radius:4px">${esc(r.field_salah)}</code> <span style="color:#dc2626">${isProdField(r)?esc(prodLabel(r.nilai_lama)):(esc(r.nilai_lama)||'—')}</span> → <span style="color:#16a34a">${isProdField(r)?esc(prodLabel(r.nilai_baru)):(esc(r.nilai_baru)||'—')}</span></div>`).join('');
+    return `
     <tr>
-      <td><code style="font-size:11px;background:#f3f4f6;padding:2px 6px;border-radius:4px">${esc(r.tabel_terkait)}</code></td>
-      <td>${esc(r.field_salah)}</td>
-      <td><span style="color:#dc2626">${isProdField(r)?esc(prodLabel(r.nilai_lama)):(esc(r.nilai_lama)||'—')}</span> → <span style="color:#16a34a">${isProdField(r)?esc(prodLabel(r.nilai_baru)):(esc(r.nilai_baru)||'—')}</span></td>
-      <td style="max-width:220px">${esc(r.alasan)}</td>
-      <td>${esc(r.requested_by?.nama)||'—'}</td>
-      <td>${fmtDT(r.created_at)}</td>
+      <td><code style="font-size:11px;background:#f3f4f6;padding:2px 6px;border-radius:4px">${esc(first.tabel_terkait)}</code></td>
+      <td colspan="2">${fieldsHtml}</td>
+      <td style="max-width:220px">${esc(first.alasan)}</td>
+      <td>${esc(first.requested_by?.nama)||'—'}</td>
+      <td>${fmtDT(first.created_at)}</td>
       <td>
         ${canApprove?`
-          <button class="btn btn-green btn-sm" onclick="openApprove('${r.id}')">✅ Setujui</button>
-          <button class="btn btn-red btn-sm" onclick="openReject('${r.id}')">✗ Tolak</button>
+          <button class="btn btn-green btn-sm" onclick="openApprove('${gid}')">✅ Setujui</button>
+          <button class="btn btn-red btn-sm" onclick="openReject('${gid}')">✗ Tolak</button>
         `:'<span class="hint">Butuh akses Supervisor</span>'}
       </td>
     </tr>
-  `).join('');
+  `;
+  }).join('');
 }
 
 // ── SELISIH TERIMA BLASTING ──
@@ -891,10 +901,10 @@ async function doApproveSelisihTerima(resolusi){
 async function loadRiwayat(){
   const filter=document.getElementById('riwayat-filter').value;
   let q=db.from('corrections')
-    .select('id,tabel_terkait,record_id,field_salah,nilai_lama,nilai_baru,alasan,status,auto_applied,downstream_ids,upstream_ids,reviewed_at,review_catatan,reviewed_by(nama),requested_by(nama)')
+    .select('id,group_id,tabel_terkait,record_id,field_salah,nilai_lama,nilai_baru,alasan,status,auto_applied,downstream_ids,upstream_ids,reviewed_at,review_catatan,reviewed_by(nama),requested_by(nama)')
     .in('status',['APPROVED','REJECTED'])
     .order('reviewed_at',{ascending:false})
-    .limit(100);
+    .limit(200);
   if(filter!=='ALL') q=q.eq('status',filter);
   const{data,error}=await q;
   if(error){console.error(error);showToast('Gagal memuat riwayat','error');return}
@@ -904,42 +914,45 @@ async function loadRiwayat(){
 
 function renderRiwayat(){
   const tbody=document.getElementById('tbody-riwayat');
-  if(!riwayatList.length){
+  const groups=groupByGroupId(riwayatList).slice(0,100);
+  if(!groups.length){
     tbody.innerHTML=`<tr><td colspan="9"><div class="empty">Belum ada riwayat</div></td></tr>`;
     return;
   }
-  tbody.innerHTML=riwayatList.map(r=>{
-    const downCount=Array.isArray(r.downstream_ids)?r.downstream_ids.length:0;
-    const upCount=Array.isArray(r.upstream_ids)?r.upstream_ids.length:0;
-    const statusBadge=r.status==='APPROVED'?'<span class="badge b-approved">Disetujui</span>':'<span class="badge b-rejected">Ditolak</span>';
-    const appliedBadge=r.status==='APPROVED'?(r.auto_applied?'<span class="badge b-auto">Auto</span>':'<span class="badge b-manual">Manual</span>'):'';
-    const isProdField=r.tabel_terkait==='baskets'&&r.field_salah==='product_id';
+  const isProdField=r=>r.tabel_terkait==='baskets'&&r.field_salah==='product_id';
+  tbody.innerHTML=groups.map(g=>{
+    const first=g[0];
+    const downCount=g.reduce((s,r)=>s+(Array.isArray(r.downstream_ids)?r.downstream_ids.length:0),0);
+    const upCount=g.reduce((s,r)=>s+(Array.isArray(r.upstream_ids)?r.upstream_ids.length:0),0);
+    const statusBadge=first.status==='APPROVED'?'<span class="badge b-approved">Disetujui</span>':'<span class="badge b-rejected">Ditolak</span>';
+    const appliedBadge=first.status==='APPROVED'?(g.every(r=>r.auto_applied)?'<span class="badge b-auto">Auto</span>':'<span class="badge b-manual">Manual</span>'):'';
+    const fieldsHtml=g.map(r=>`<div style="margin-bottom:2px"><code style="font-size:11px;background:#f3f4f6;padding:1px 5px;border-radius:4px">${esc(r.field_salah)}</code> <span style="color:#dc2626">${isProdField(r)?esc(prodLabel(r.nilai_lama)):(esc(r.nilai_lama)||'—')}</span> → <span style="color:#16a34a">${isProdField(r)?esc(prodLabel(r.nilai_baru)):(esc(r.nilai_baru)||'—')}</span></div>`).join('');
     return `
     <tr>
-      <td><code style="font-size:11px;background:#f3f4f6;padding:2px 6px;border-radius:4px">${esc(r.tabel_terkait)}</code></td>
-      <td>${esc(r.field_salah)}</td>
-      <td><span style="color:#dc2626">${isProdField?esc(prodLabel(r.nilai_lama)):(esc(r.nilai_lama)||'—')}</span> → <span style="color:#16a34a">${isProdField?esc(prodLabel(r.nilai_baru)):(esc(r.nilai_baru)||'—')}</span></td>
+      <td><code style="font-size:11px;background:#f3f4f6;padding:2px 6px;border-radius:4px">${esc(first.tabel_terkait)}</code></td>
+      <td colspan="2">${fieldsHtml}</td>
       <td>${statusBadge} ${appliedBadge}</td>
       <td>${downCount>0?`${downCount} basket`:'—'}</td>
       <td>${upCount>0?`<span class="badge b-manual">${upCount} basket</span>`:'—'}</td>
-      <td>${esc(r.reviewed_by?.nama)||'—'}</td>
-      <td>${fmtDT(r.reviewed_at)}</td>
-      <td style="max-width:200px">${esc(r.review_catatan)||'—'}</td>
+      <td>${esc(first.reviewed_by?.nama)||'—'}</td>
+      <td>${fmtDT(first.reviewed_at)}</td>
+      <td style="max-width:200px">${esc(first.review_catatan)||'—'}</td>
     </tr>`;
   }).join('');
 }
 
 // ── APPROVE / REJECT ──
-function openApprove(id){
-  activeCorrectionId=id;
-  const r=pendingList.find(x=>x.id===id);
-  if(!r)return;
+// activeCorrectionId di sini menyimpan group_id (1 paket bisa berisi banyak
+// field, migration 72) — bukan id 1 baris corrections lagi.
+function openApprove(groupId){
+  activeCorrectionId=groupId;
+  const rows=pendingList.filter(x=>(x.group_id||x.id)===groupId);
+  if(!rows.length)return;
+  const isProdField=r=>r.tabel_terkait==='baskets'&&r.field_salah==='product_id';
   document.getElementById('approve-info-box').innerHTML=`
-    <div class="modal-info-row"><span class="modal-info-label">Tabel</span><span class="modal-info-val">${esc(r.tabel_terkait)}</span></div>
-    <div class="modal-info-row"><span class="modal-info-label">Field</span><span class="modal-info-val">${esc(r.field_salah)}</span></div>
-    <div class="modal-info-row"><span class="modal-info-label">Nilai Lama</span><span class="modal-info-val">${esc(r.nilai_lama)||'—'}</span></div>
-    <div class="modal-info-row"><span class="modal-info-label">Nilai Baru</span><span class="modal-info-val">${esc(r.nilai_baru)||'—'}</span></div>
-    <div class="modal-info-row"><span class="modal-info-label">Alasan</span><span class="modal-info-val">${esc(r.alasan)}</span></div>
+    <div class="modal-info-row"><span class="modal-info-label">Tabel</span><span class="modal-info-val">${esc(rows[0].tabel_terkait)}</span></div>
+    ${rows.map(r=>`<div class="modal-info-row"><span class="modal-info-label">${esc(r.field_salah)}</span><span class="modal-info-val">${isProdField(r)?esc(prodLabel(r.nilai_lama)):(esc(r.nilai_lama)||'—')} → ${isProdField(r)?esc(prodLabel(r.nilai_baru)):(esc(r.nilai_baru)||'—')}</span></div>`).join('')}
+    <div class="modal-info-row"><span class="modal-info-label">Alasan</span><span class="modal-info-val">${esc(rows[0].alasan)}</span></div>
   `;
   document.getElementById('approve-catatan').value='';
   openModal('modal-approve');
@@ -949,30 +962,30 @@ async function doApprove(){
   if(!activeCorrectionId)return;
   const catatan=document.getElementById('approve-catatan').value.trim()||null;
   try{
-    const{data,error}=await db.rpc('fn_approve_correction',{
-      p_correction_id: activeCorrectionId,
+    const{data,error}=await db.rpc('fn_approve_correction_group',{
+      p_group_id: activeCorrectionId,
       p_reviewer_id: currentUser.id,
       p_catatan: catatan
     });
     if(error)throw error;
     if(!data?.ok){showToast(data?.error||'Gagal approve koreksi','error');return}
     closeModal('modal-approve');
-    const applied=data.auto_applied?'diterapkan otomatis ke data asli':'perlu penyesuaian manual (field belum ada di whitelist)';
+    const fieldWord=data.field_count>1?`${data.field_count} field`:'1 field';
+    const applied=data.applied_count>0?`${data.applied_count} diterapkan otomatis`:'perlu penyesuaian manual (field belum ada di whitelist)';
     const down=data.downstream_count>0?` ${data.downstream_count} basket turunan ditandai untuk direview.`:'';
-    const up=data.upstream_count>0?` ${data.upstream_count} basket sumber (termasuk kemungkinan karkas asal) juga ditandai — cek manual apakah perlu dikoreksi juga.`:'';
-    showToast(`Koreksi disetujui, ${applied}.${down}${up}`,'success');
+    showToast(`Koreksi disetujui (${fieldWord}), ${applied}.${down}`,'success');
     loadAll();
   }catch(e){console.error(e);showToast('Gagal terhubung ke server','error')}
 }
 
-function openReject(id){
-  activeCorrectionId=id;
-  const r=pendingList.find(x=>x.id===id);
-  if(!r)return;
+function openReject(groupId){
+  activeCorrectionId=groupId;
+  const rows=pendingList.filter(x=>(x.group_id||x.id)===groupId);
+  if(!rows.length)return;
   document.getElementById('reject-info-box').innerHTML=`
-    <div class="modal-info-row"><span class="modal-info-label">Tabel</span><span class="modal-info-val">${esc(r.tabel_terkait)}</span></div>
-    <div class="modal-info-row"><span class="modal-info-label">Field</span><span class="modal-info-val">${esc(r.field_salah)}</span></div>
-    <div class="modal-info-row"><span class="modal-info-label">Diajukan Oleh</span><span class="modal-info-val">${esc(r.requested_by?.nama)||'—'}</span></div>
+    <div class="modal-info-row"><span class="modal-info-label">Tabel</span><span class="modal-info-val">${esc(rows[0].tabel_terkait)}</span></div>
+    <div class="modal-info-row"><span class="modal-info-label">Field</span><span class="modal-info-val">${rows.map(r=>esc(r.field_salah)).join(', ')}</span></div>
+    <div class="modal-info-row"><span class="modal-info-label">Diajukan Oleh</span><span class="modal-info-val">${esc(rows[0].requested_by?.nama)||'—'}</span></div>
   `;
   document.getElementById('reject-catatan').value='';
   openModal('modal-reject');
@@ -983,8 +996,8 @@ async function doReject(){
   const catatan=document.getElementById('reject-catatan').value.trim();
   if(!catatan){showToast('Alasan penolakan wajib diisi','error');return}
   try{
-    const{data,error}=await db.rpc('fn_reject_correction',{
-      p_correction_id: activeCorrectionId,
+    const{data,error}=await db.rpc('fn_reject_correction_group',{
+      p_group_id: activeCorrectionId,
       p_reviewer_id: currentUser.id,
       p_catatan: catatan
     });
@@ -1004,18 +1017,71 @@ function onTabelChange(){
   document.getElementById('kf-lookup-manual').style.display=val==='__manual'?'block':'none';
   document.getElementById('kf-found-box').style.display='none';
   foundRecord=null;
-  const nilaiLamaEl=document.getElementById('kf-nilai-lama');
-  nilaiLamaEl.value='';
-  const isManual=val==='__manual';
-  nilaiLamaEl.readOnly=!isManual;
-  document.getElementById('kf-nilai-lama-hint').textContent=isManual
-    ? 'Tidak ada pencarian otomatis untuk tabel manual — isi sesuai data asli kalau tahu.'
-    : 'Terisi otomatis dari data asli, tidak bisa diketik manual.';
   const suggest=document.getElementById('kf-field-suggest');
   const key=val==='__manual'?null:val;
   suggest.innerHTML=(FIELD_SUGGEST[key]||[]).map(f=>`<option value="${f}">`).join('');
-  document.getElementById('kf-field').value='';
-  onFieldChange();
+  resetKoreksiFieldRows();
+}
+
+// ── MULTI-FIELD ROWS (Ajukan Koreksi) ──
+// Setiap baris punya field/nilai-lama/nilai-baru sendiri, di-submit sebagai
+// N baris `corrections` berbagi 1 group_id — 1 paket approval Supervisor.
+let kfRowCounter=0;
+
+function resetKoreksiFieldRows(){
+  document.getElementById('kf-fields-container').innerHTML='';
+  kfRowCounter=0;
+  addKoreksiFieldRow();
+}
+
+function addKoreksiFieldRow(){
+  const idx=kfRowCounter++;
+  const container=document.getElementById('kf-fields-container');
+  const div=document.createElement('div');
+  div.className='kf-field-row';
+  div.id=`kf-row-${idx}`;
+  div.style.cssText='border:1px solid #e5e7eb;border-radius:8px;padding:14px;margin-bottom:10px;position:relative';
+  div.innerHTML=`
+    <button type="button" onclick="removeKoreksiFieldRow(${idx})" title="Hapus field ini"
+            style="position:absolute;top:8px;right:10px;background:none;border:none;color:#9ca3af;font-size:16px;cursor:pointer;line-height:1">✕</button>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Field yang Salah</label>
+        <input type="text" id="kf-field-${idx}" list="kf-field-suggest" placeholder="mis. kg_sisa" oninput="onFieldChange(${idx})">
+      </div>
+      <div class="form-group">
+        <label>Nilai Lama</label>
+        <input type="text" id="kf-nilai-lama-${idx}" placeholder="terisi otomatis kalau ditemukan" readonly>
+        <div class="hint">Terisi otomatis dari data asli, tidak bisa diketik manual.</div>
+      </div>
+    </div>
+    <div class="form-group" id="kf-nilai-baru-text-wrap-${idx}">
+      <label>Nilai Baru</label>
+      <input type="text" id="kf-nilai-baru-${idx}" placeholder="nilai yang seharusnya">
+    </div>
+    <div class="form-group" id="kf-nilai-baru-product-wrap-${idx}" style="display:none">
+      <label>Item/Produk Baru</label>
+      <select id="kf-product-baru-${idx}"><option value="">— Pilih Produk —</option></select>
+      <div class="hint" id="kf-nilai-lama-product-hint-${idx}"></div>
+    </div>
+  `;
+  container.appendChild(div);
+  refreshProductDropdown(idx);
+  if(foundRecord) onFieldChange(idx);
+  updateRemoveButtonsVisibility();
+}
+
+function removeKoreksiFieldRow(idx){
+  document.getElementById(`kf-row-${idx}`)?.remove();
+  updateRemoveButtonsVisibility();
+}
+
+function updateRemoveButtonsVisibility(){
+  const rows=document.querySelectorAll('.kf-field-row');
+  rows.forEach(r=>{
+    const btn=r.querySelector('button');
+    if(btn) btn.style.display=rows.length>1?'':'none';
+  });
 }
 
 async function cariBasket(){
@@ -1035,7 +1101,11 @@ async function cariBasket(){
     <div class="modal-info-row"><span class="modal-info-label">Lokasi</span><span class="modal-info-val">${esc(data.lokasi)}</span></div>
     <div class="hint" style="margin-top:6px">Salah hitung waktu produksi? Koreksi <strong>Qty/Kg Awal</strong> (sisa ikut menyesuaikan otomatis). Cuma mau ubah stok saat ini? Koreksi <strong>Qty/Kg Sisa</strong>. Salah pilih item/produk? Isi Field = <strong>product_id</strong>, lalu pilih produk yang benar lewat dropdown di bawah — otomatis ikut memperbaiki catatan timbang &amp; validasi beratnya juga.</div>
   `;
+  refreshAllFieldRows();
   showToast('Basket ditemukan — pilih field yang mau dikoreksi','success');
+}
+function refreshAllFieldRows(){
+  document.querySelectorAll('.kf-field-row').forEach(row=>onFieldChange(row.id.replace('kf-row-','')));
 }
 
 async function cariBatch(){
@@ -1052,28 +1122,29 @@ async function cariBatch(){
     <div class="modal-info-row"><span class="modal-info-label">Ekor Timbang Ulang</span><span class="modal-info-val">${esc(data.ekor_timbang_ulang)}</span></div>
     <div class="modal-info-row"><span class="modal-info-label">Kg Timbang Ulang</span><span class="modal-info-val">${esc(data.kg_timbang_ulang)}</span></div>
   `;
+  refreshAllFieldRows();
   showToast('Batch ditemukan — pilih field yang mau dikoreksi','success');
 }
 
-function isProductFieldSelected(){
-  return document.getElementById('kf-tabel').value==='baskets' && document.getElementById('kf-field').value.trim()==='product_id';
+function isProductFieldSelectedFor(idx){
+  return document.getElementById('kf-tabel').value==='baskets' && document.getElementById(`kf-field-${idx}`).value.trim()==='product_id';
 }
 
-function onFieldChange(){
-  const field=document.getElementById('kf-field').value.trim();
+function onFieldChange(idx){
+  const field=document.getElementById(`kf-field-${idx}`).value.trim();
   if(foundRecord && field && Object.prototype.hasOwnProperty.call(foundRecord,field)){
-    document.getElementById('kf-nilai-lama').value=foundRecord[field]==null?'':foundRecord[field];
+    document.getElementById(`kf-nilai-lama-${idx}`).value=foundRecord[field]==null?'':foundRecord[field];
   }
 
-  const isProd=isProductFieldSelected();
-  document.getElementById('kf-nilai-baru-text-wrap').style.display=isProd?'none':'block';
-  document.getElementById('kf-nilai-baru-product-wrap').style.display=isProd?'block':'none';
+  const isProd=isProductFieldSelectedFor(idx);
+  document.getElementById(`kf-nilai-baru-text-wrap-${idx}`).style.display=isProd?'none':'block';
+  document.getElementById(`kf-nilai-baru-product-wrap-${idx}`).style.display=isProd?'block':'none';
 
-  const hintEl=document.getElementById('kf-nilai-lama-product-hint');
+  const hintEl=document.getElementById(`kf-nilai-lama-product-hint-${idx}`);
   if(isProd){
     const current=foundRecord?.product_id?prodLabel(foundRecord.product_id):null;
     hintEl.textContent=current?`Produk saat ini: ${current}. Pilih produk yang benar di bawah.`:'Cari basket dulu di atas supaya produk saat ini diketahui, lalu pilih produk yang benar.';
-    const sel=document.getElementById('kf-product-baru');
+    const sel=document.getElementById(`kf-product-baru-${idx}`);
     if(sel) sel.value='';
   }else{
     hintEl.textContent='';
@@ -1095,31 +1166,42 @@ async function submitKoreksi(){
     if(!recordId){showToast('Cari dan pastikan data ditemukan dulu','error');return}
   }
 
-  const fieldSalah=document.getElementById('kf-field').value.trim();
-  const nilaiLama=document.getElementById('kf-nilai-lama').value;
-  const isProd=isProductFieldSelected();
-  const nilaiBaru=isProd?document.getElementById('kf-product-baru').value:document.getElementById('kf-nilai-baru').value.trim();
   const alasan=document.getElementById('kf-alasan').value.trim();
-
-  if(!fieldSalah){showToast('Isi field yang salah','error');return}
-  if(!nilaiBaru){showToast(isProd?'Pilih produk yang benar dulu':'Isi nilai baru','error');return}
-  if(isProd && nilaiBaru===foundRecord?.product_id){showToast('Produk baru sama dengan produk saat ini','error');return}
   if(!alasan){showToast('Alasan koreksi wajib diisi','error');return}
+
+  const rowEls=[...document.querySelectorAll('.kf-field-row')];
+  if(!rowEls.length){showToast('Tambahkan minimal 1 field yang mau dikoreksi','error');return}
+
+  const payload=[];
+  const seenFields=new Set();
+  for(const row of rowEls){
+    const idx=row.id.replace('kf-row-','');
+    const fieldSalah=document.getElementById(`kf-field-${idx}`).value.trim();
+    if(!fieldSalah){showToast('Isi semua field yang salah (atau hapus baris yang kosong)','error');return}
+    if(seenFields.has(fieldSalah)){showToast(`Field "${fieldSalah}" dipilih lebih dari sekali`,'error');return}
+    seenFields.add(fieldSalah);
+
+    const isProd=isProductFieldSelectedFor(idx);
+    const nilaiLama=document.getElementById(`kf-nilai-lama-${idx}`).value;
+    const nilaiBaru=isProd?document.getElementById(`kf-product-baru-${idx}`).value:document.getElementById(`kf-nilai-baru-${idx}`).value.trim();
+    if(!nilaiBaru){showToast(isProd?`Pilih produk yang benar untuk field "${fieldSalah}"`:`Isi nilai baru untuk field "${fieldSalah}"`,'error');return}
+    if(isProd && nilaiBaru===foundRecord?.product_id){showToast('Produk baru sama dengan produk saat ini','error');return}
+
+    payload.push({
+      tabel_terkait: tabelTerkait, record_id: recordId, field_salah: fieldSalah,
+      nilai_lama: nilaiLama||null, nilai_baru: nilaiBaru, alasan, requested_by: currentUser.id
+    });
+  }
+
+  const groupId=crypto.randomUUID();
+  payload.forEach(p=>p.group_id=groupId);
 
   const btn=document.getElementById('kf-btn-submit');
   btn.disabled=true;btn.textContent='Mengirim…';
   try{
-    const{error}=await db.from('corrections').insert({
-      tabel_terkait: tabelTerkait,
-      record_id: recordId,
-      field_salah: fieldSalah,
-      nilai_lama: nilaiLama||null,
-      nilai_baru: nilaiBaru,
-      alasan: alasan,
-      requested_by: currentUser.id
-    });
+    const{error}=await db.from('corrections').insert(payload);
     if(error)throw error;
-    showToast('Koreksi berhasil diajukan, menunggu approval Supervisor.','success');
+    showToast(`Koreksi (${payload.length} field) berhasil diajukan, menunggu approval Supervisor.`,'success');
     resetAjukanForm();
     switchTab('pending');
     loadAll();
@@ -1133,11 +1215,6 @@ function resetAjukanForm(){
   document.getElementById('kf-batch-code').value='';
   document.getElementById('kf-tabel-manual').value='';
   document.getElementById('kf-record-id-manual').value='';
-  document.getElementById('kf-field').value='';
-  document.getElementById('kf-nilai-lama').value='';
-  document.getElementById('kf-nilai-baru').value='';
-  const prodSel=document.getElementById('kf-product-baru');
-  if(prodSel) prodSel.value='';
   document.getElementById('kf-alasan').value='';
   document.getElementById('kf-found-box').style.display='none';
   foundRecord=null;
