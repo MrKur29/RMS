@@ -808,6 +808,26 @@ a{text-decoration:none}
       <div class="modal-info-row"><span class="modal-info-label">Dari Lokasi</span><span class="modal-info-val" id="mk-dari">—</span></div>
       <div class="modal-info-row"><span class="modal-info-label">Batch</span><span class="modal-info-val" id="mk-batch">—</span></div>
     </div>
+    <!-- Toggle Terima / Alihkan ke Loading Dock -->
+    <div class="partial-toggle">
+      <button id="mk-toggle-terima"   class="active" onclick="setKonfirmMode(false)">✅ Terima ke Chiller</button>
+      <button id="mk-toggle-alihkan"  onclick="setKonfirmMode(true)">🚛 Alihkan ke Loading Dock</button>
+    </div>
+    <!-- Input jumlah dialihkan (muncul hanya saat Alihkan ke Loading Dock) -->
+    <div class="partial-input-box" id="mk-alihkan-box">
+      <div class="partial-input-row">
+        <div>
+          <label>Ekor ke Loading Dock <span style="color:#dc2626">*</span></label>
+          <input type="text" inputmode="numeric" pattern="[0-9]*" id="mk-qty-alihkan" placeholder="ekor" oninput="sanitizeIntInput(this)">
+        </div>
+        <div>
+          <label>Kg ke Loading Dock <span style="color:#dc2626">*</span></label>
+          <input type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" id="mk-kg-alihkan" placeholder="kg" oninput="sanitizeDecimalInput(this)">
+        </div>
+      </div>
+      <div class="partial-max-hint" id="mk-alihkan-hint">Maks: — ekor / — kg</div>
+      <div style="font-size:11px;color:#92400e;margin-top:6px">ℹ️ Sisanya tetap masuk &amp; tersimpan di Chiller. Loading Dock perlu mengkonfirmasi penerimaan sebelum barang tercatat pindah dari Chiller.</div>
+    </div>
     <div id="mk-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-bottom:10px;display:none"></div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('modal-konfirm')">Batal</button>
@@ -1038,6 +1058,7 @@ let clockTimer       = null;
 let activeMovementId = null;
 let activeBasketId   = null;
 let selectedDest     = null;
+let konfirmAlihkanMode = false;
 let cancelMovementId = null;   // untuk modal-cancel-mv
 let returnBasketId   = null;   // untuk modal-return
 
@@ -2395,27 +2416,104 @@ function openKonfirmModal(movementId) {
   setEl('mk-batch',  mv.live_chicken_batches?.batch_code||'—');
   document.getElementById('mk-err').style.display = 'none';
   document.getElementById('mk-btn-ok').disabled = false;
-  document.getElementById('mk-btn-ok').textContent = '✅ Konfirmasi Masuk';
+  setKonfirmMode(false);
   openModal('modal-konfirm');
+}
+
+function setKonfirmMode(alihkan) {
+  konfirmAlihkanMode = alihkan;
+  document.getElementById('mk-toggle-terima').classList.toggle('active', !alihkan);
+  document.getElementById('mk-toggle-alihkan').classList.toggle('active', alihkan);
+  document.getElementById('mk-alihkan-box').classList.toggle('show', alihkan);
+  document.getElementById('mk-btn-ok').textContent = alihkan ? '✅ Konfirmasi & Alihkan' : '✅ Konfirmasi Masuk';
+  document.getElementById('mk-err').style.display = 'none';
+  const mv = pendingMovements.find(m => m.id === activeMovementId);
+  if (alihkan && mv) {
+    document.getElementById('mk-qty-alihkan').value = mv.qty_pindah;
+    document.getElementById('mk-kg-alihkan').value  = mv.kg_pindah;
+    setEl('mk-alihkan-hint', `Maks: ${fmt(mv.qty_pindah)} ekor / ${fmtKg(mv.kg_pindah)}`);
+  }
 }
 
 async function doKonfirmasi() {
   const btn = document.getElementById('mk-btn-ok');
   const err = document.getElementById('mk-err');
+  const mv  = pendingMovements.find(m => m.id === activeMovementId);
+
+  // Kalau mode Alihkan ke Loading Dock: validasi jumlah yang dialihkan dulu,
+  // sebelum memanggil RPC apa pun.
+  let qtyAlihkan = null, kgAlihkan = null, isPartialAlihkan = false;
+  if (konfirmAlihkanMode) {
+    qtyAlihkan = parseFloat(document.getElementById('mk-qty-alihkan').value);
+    kgAlihkan  = parseFloat(document.getElementById('mk-kg-alihkan').value);
+    if (!qtyAlihkan || qtyAlihkan <= 0) {
+      err.textContent = 'Jumlah ekor yang dialihkan harus diisi.'; err.style.display = 'block'; return;
+    }
+    if (!kgAlihkan || kgAlihkan <= 0) {
+      err.textContent = 'Berat yang dialihkan harus diisi.'; err.style.display = 'block'; return;
+    }
+    if (mv && qtyAlihkan > mv.qty_pindah) {
+      err.textContent = `Melebihi jumlah yang masuk (${fmt(mv.qty_pindah)} ekor).`; err.style.display = 'block'; return;
+    }
+    if (mv && kgAlihkan > mv.kg_pindah) {
+      err.textContent = `Berat melebihi jumlah yang masuk (${fmtKg(mv.kg_pindah)}).`; err.style.display = 'block'; return;
+    }
+    // Kurang dari jumlah yang masuk = sisanya tetap di Chiller (partial split).
+    isPartialAlihkan = (qtyAlihkan < mv.qty_pindah) || (kgAlihkan < mv.kg_pindah);
+  }
+
   btn.disabled = true; btn.textContent = 'Memproses…';
   err.style.display = 'none';
   try {
+    // Langkah 1: catat barang masuk ke Chiller seperti biasa (RPC yang sudah ada).
     const { data, error } = await db.rpc('konfirmasi_movement', { p_movement_id: activeMovementId, p_user_id: currentUser.id });
     if (error) throw error;
     const r = typeof data === 'string' ? JSON.parse(data) : data;
     if (!(r.ok ?? r.success)) throw new Error(r.error);
+
+    // Langkah 2 (hanya kalau mode Alihkan): buat movement CHILLER → LOADING baru
+    // berstatus PENDING, sama seperti alur "Pindah Keluar" manual — Loading Dock
+    // tetap perlu konfirmasi terima. basket_id pakai basket hasil konfirmasi di
+    // atas (bisa basket asal, atau basket split baru kalau movement asal partial).
+    if (konfirmAlihkanMode) {
+      try {
+        const { error: err2 } = await db.from('basket_movements').insert({
+          basket_id:    r.basket_id,
+          batch_id:     mv?.batch_id || null,
+          dari_lokasi:  'CHILLER',
+          ke_lokasi:    'LOADING',
+          qty_pindah:   qtyAlihkan,
+          kg_pindah:    kgAlihkan,
+          is_partial:   isPartialAlihkan,
+          status:       'PENDING',
+          catatan:      'Dialihkan ke Loading Dock saat konfirmasi masuk Chiller',
+          submitted_by: currentUser.id
+        });
+        if (err2) throw err2;
+      } catch (e2) {
+        // Barang sudah tercatat masuk Chiller (langkah 1 sukses) — hanya
+        // pengalihan ke Loading Dock yang gagal dibuat. Jangan dianggap gagal
+        // total; beri tahu operator supaya bisa pindahkan manual lewat "Pindah Keluar".
+        closeModal('modal-konfirm');
+        showToast('✅ Masuk Chiller dikonfirmasi, tapi gagal membuat pengalihan ke Loading Dock: ' + (e2.message||'Error') + '. Silakan pindahkan manual lewat tombol "Pindah Keluar".', 'error');
+        activeMovementId = null; konfirmAlihkanMode = false;
+        loadAll();
+        return;
+      }
+    }
+
     closeModal('modal-konfirm');
-    showToast('✅ Keranjang dikonfirmasi masuk Chiller!', 'success');
-    activeMovementId = null;
+    showToast(
+      konfirmAlihkanMode
+        ? `✅ Masuk Chiller dikonfirmasi — ${fmt(qtyAlihkan)} ekor / ${fmtKg(kgAlihkan)} dialihkan ke Loading Dock (menunggu konfirmasi penerima)`
+        : '✅ Keranjang dikonfirmasi masuk Chiller!',
+      'success'
+    );
+    activeMovementId = null; konfirmAlihkanMode = false;
     loadAll();
   } catch(e) {
     err.textContent = 'Gagal: '+(e.message||'Terjadi kesalahan'); err.style.display = 'block';
-    btn.disabled = false; btn.textContent = '✅ Konfirmasi Masuk';
+    btn.disabled = false; btn.textContent = konfirmAlihkanMode ? '✅ Konfirmasi & Alihkan' : '✅ Konfirmasi Masuk';
   }
 }
 
