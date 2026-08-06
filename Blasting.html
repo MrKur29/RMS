@@ -1462,16 +1462,27 @@ async function doReturn(){
   const catatan=document.getElementById('mr-catatan').value.trim();
   btn.disabled=true;btn.textContent='Memproses…';
   try{
-    const b=blastingStock.find(x=>x.id===basketId);
+    // Kurangi sisa keranjang lebih dulu lewat RPC ber-row-lock
+    // (blasting_apply_qty_delta, migration 77) -- baca qty_sisa fresh dari
+    // DB saat itu juga, bukan dari cache blastingStock. Ini mencegah race
+    // dengan aksi lain (mis. Alokasi ke Rak) yang menulis qty_sisa basket
+    // yang sama -- penyebab bug BL-260806-0025 (2026-08-06).
+    const{data:decRes,error:decErr}=await db.rpc('blasting_apply_qty_delta',{
+      p_basket_id:basketId,p_delta_ekor:-ekor,p_delta_kg:-kg
+    });
+    const dec=typeof decRes==='string'?JSON.parse(decRes):decRes;
+    if(decErr||!dec?.ok)throw new Error(dec?.error||(decErr&&decErr.message)||'Gagal mengurangi sisa keranjang.');
     const{error:mvErr}=await db.from('basket_movements').insert({
       basket_id:basketId,dari_lokasi:'BLASTING',ke_lokasi:'CHILLER',
       qty_pindah:ekor,kg_pindah:kg,status:'PENDING',
       catatan:catatan||null,submitted_by:currentUser.id
     });
-    if(mvErr)throw mvErr;
-    const newQty=Math.max(0,(b.qty_sisa||0)-ekor);
-    const newKg=Math.max(0,Math.round(((Number(b.kg_sisa)||0)-kg)*10)/10);
-    await db.from('baskets').update({qty_sisa:newQty,kg_sisa:newKg,status:newQty<=0?'HABIS':'AKTIF'}).eq('id',basketId);
+    if(mvErr){
+      // Kompensasi: kembalikan qty_sisa yang sudah dikurangi RPC di atas,
+      // karena movement pengiriman gagal dibuat.
+      await db.rpc('blasting_apply_qty_delta',{p_basket_id:basketId,p_delta_ekor:ekor,p_delta_kg:kg});
+      throw mvErr;
+    }
     showToast('Keranjang dikirim ke Chiller (menunggu konfirmasi Chiller).','success');
     closeModal('modal-return');
     await loadAll();
@@ -1749,22 +1760,25 @@ async function doAlokasiInline(rackId){
   if(kg>availKg+0.05){showErr('raf-err',`Kg melebihi sisa tersedia (${fmtKg(availKg)}).`);return}
   btn.disabled=true;btn.textContent='Menyimpan…';
   try{
-    const{error}=await db.from('blasting_rack_allocations').insert({
+    const{data:allocRow,error}=await db.from('blasting_rack_allocations').insert({
       rack_id:rackId,basket_id:basketId,ekor,kg,created_by:currentUser.id
-    });
+    }).select('id').single();
     if(error)throw error;
-    // Kurangi sisa keranjang begitu naik rak -- pola sama seperti input
-    // basket ke WO di Parting/Boneless/Marinasi (konsumsi langsung, bukan
-    // pending-transfer). Migration 73 (2026-08-05) membackfill data lama.
-    const bSrc=blastingStock.find(x=>x.id===basketId);
-    if(bSrc){
-      const newQty=Math.max(0,(bSrc.qty_sisa||0)-ekor);
-      const newKg=Math.max(0,Number(bSrc.kg_sisa||0)-kg);
-      await db.from('baskets').update({
-        qty_sisa:newQty,
-        kg_sisa:Number(newKg.toFixed(1)),
-        status:newQty<=0?'HABIS':'AKTIF'
-      }).eq('id',basketId);
+    // Kurangi sisa keranjang begitu naik rak -- lewat RPC ber-row-lock
+    // (blasting_apply_qty_delta, migration 77), bukan lagi baca cache lokal
+    // lalu tulis absolut. Ini mencegah race dengan aksi lain (mis. Return)
+    // yang menulis qty_sisa basket yang sama di waktu berdekatan --
+    // penyebab bug BL-260806-0025 (2026-08-06): qty_sisa balik ke 15
+    // padahal seharusnya 0 setelah semua dialokasikan ke rak.
+    const{data:decRes,error:decErr}=await db.rpc('blasting_apply_qty_delta',{
+      p_basket_id:basketId,p_delta_ekor:-ekor,p_delta_kg:-kg
+    });
+    const dec=typeof decRes==='string'?JSON.parse(decRes):decRes;
+    if(decErr||!dec?.ok){
+      // Kompensasi: batalkan alokasi rak yang baru dibuat supaya tidak
+      // nyangkut sebagai alokasi tanpa qty_sisa yang valid di baliknya.
+      if(allocRow?.id)await db.from('blasting_rack_allocations').delete().eq('id',allocRow.id);
+      throw new Error(dec?.error||(decErr&&decErr.message)||'Gagal mengurangi sisa keranjang.');
     }
     const rack=racks.find(r=>r.id===rackId);
     showToast(`${fmt(ekor)} ekor berhasil ditambahkan ke ${rack?.nomor_rak||'rak'}!`,'success');
@@ -1815,17 +1829,21 @@ async function doEditAlokasi(){
       .eq('id',activeAllocId).eq('status','ALLOCATED');
     if(error)throw error;
     // Selisihkan perubahan ke qty_sisa/kg_sisa keranjang (reversible edit)
+    // lewat RPC ber-row-lock (blasting_apply_qty_delta, migration 77),
+    // bukan lagi baca dari a.baskets (cache) lalu tulis absolut.
     if(a){
       const deltaEkor=ekor-oldEkor,deltaKg=kg-oldKg;
       if(deltaEkor!==0||deltaKg!==0){
-        const b=a.baskets||{};
-        const newQty=Math.max(0,(b.qty_sisa||0)-deltaEkor);
-        const newKg=Math.max(0,Number(b.kg_sisa||0)-deltaKg);
-        await db.from('baskets').update({
-          qty_sisa:newQty,
-          kg_sisa:Number(newKg.toFixed(1)),
-          status:newQty<=0?'HABIS':'AKTIF'
-        }).eq('id',a.basket_id);
+        const{data:decRes,error:decErr}=await db.rpc('blasting_apply_qty_delta',{
+          p_basket_id:a.basket_id,p_delta_ekor:-deltaEkor,p_delta_kg:-deltaKg
+        });
+        const dec=typeof decRes==='string'?JSON.parse(decRes):decRes;
+        if(decErr||!dec?.ok){
+          // Kompensasi: kembalikan alokasi rak ke jumlah semula karena
+          // penyesuaian qty_sisa keranjang gagal.
+          await db.from('blasting_rack_allocations').update({ekor:oldEkor,kg:oldKg}).eq('id',activeAllocId);
+          throw new Error(dec?.error||(decErr&&decErr.message)||'Gagal menyesuaikan sisa keranjang.');
+        }
       }
     }
     showToast('Alokasi berhasil diperbarui.','success');
@@ -1846,13 +1864,18 @@ async function doHapusAlokasi(allocId){
   try{
     const{error}=await db.from('blasting_rack_allocations').delete().eq('id',allocId).eq('status','ALLOCATED');
     if(error)throw error;
-    // Kembalikan qty_sisa/kg_sisa ke keranjang (reversible delete)
-    const b=a.baskets||{};
-    await db.from('baskets').update({
-      qty_sisa:(b.qty_sisa||0)+(a.ekor||0),
-      kg_sisa:Number(((Number(b.kg_sisa||0))+Number(a.kg||0)).toFixed(1)),
-      status:'AKTIF'
-    }).eq('id',a.basket_id);
+    // Kembalikan qty_sisa/kg_sisa ke keranjang (reversible delete) lewat
+    // RPC ber-row-lock (blasting_apply_qty_delta, migration 77).
+    const{data:decRes,error:decErr}=await db.rpc('blasting_apply_qty_delta',{
+      p_basket_id:a.basket_id,p_delta_ekor:(a.ekor||0),p_delta_kg:Number(a.kg||0)
+    });
+    const dec=typeof decRes==='string'?JSON.parse(decRes):decRes;
+    if(decErr||!dec?.ok){
+      showToast('Alokasi dihapus, tapi gagal mengembalikan sisa keranjang: '+(dec?.error||(decErr&&decErr.message)||'')+'. Cek manual.','error');
+      await loadAll();
+      if(selectedRackId)renderRakDetail(selectedRackId);
+      return;
+    }
     showToast('Alokasi dihapus, keranjang kembali tersedia di lantai.','warning');
     await loadAll();
     if(selectedRackId)renderRakDetail(selectedRackId);
