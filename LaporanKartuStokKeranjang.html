@@ -638,14 +638,19 @@ async function detectOrigin(basket){
   }
 
   const{data:outRows,error:outErr}=await db.from('processing_outputs')
-    .select('order_id,processing_orders(order_code,tipe,tanggal)')
+    .select('order_id,alasan,processing_orders(order_code,tipe,tanggal)')
     .eq('basket_id',basket.id);
   if(outErr)console.error('[KartuStokKeranjang] processing_outputs gagal:',outErr);
   if(outRows&&outRows.length>1){
     return{...base,ket:`Hasil Produksi — gabungan ${outRows.length} Work Order (by-product lama)`};
   }
   if(outRows&&outRows.length===1){
-    const p=outRows[0].processing_orders;
+    const row=outRows[0];
+    if(!row.order_id){
+      // order_id NULL sejak migration 79 = "Tanpa WO" (mis. produksi lebih dari target WO yang ada)
+      return{...base,ket:`Hasil Produksi — 🆓 Tanpa WO (${esc(row.alasan||'tanpa alasan tercatat')})`};
+    }
+    const p=row.processing_orders;
     const tl=tipeLabel(p?.tipe);
     return{...base,ket:`Hasil Produksi — WO ${esc(p?.order_code||'—')} (${esc(tl.label)}), ${fmtDate(p?.tanggal)}`};
   }

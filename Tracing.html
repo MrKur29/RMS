@@ -934,7 +934,7 @@ async function buildTraceNode(basketId,path,depth){
   //    sebagai fallback saja, alur saat ini (migration 57) selalu lewat
   //    pengecekan byproduct_collection_sessions di atas.
   let{data:outRows,error:outErr}=await db.from('processing_outputs')
-    .select(`id,order_id,qty_output,kg_output,output_type,tanggal_produksi,workstation_id,worker_id,
+    .select(`id,order_id,qty_output,kg_output,output_type,tanggal_produksi,workstation_id,worker_id,alasan,
       workstations(kode,nama),users!worker_id(nama),
       processing_orders(order_code,tipe,tanggal,status)`)
     .eq('basket_id',basketId);
@@ -991,15 +991,21 @@ async function buildTraceNode(basketId,path,depth){
       const childNode=await buildTraceNode(inp.basket_id,myPath,depth+1);
       return{input:inp,node:childNode};
     }));
-  } else if(prod && prod.order_id){
+  } else if(prod){
+    // prod.order_id bisa NULL sejak migration 79 ("Catat Output Tanpa WO" di
+    // Boneless) — baris ini TETAP asal PROCESSING (basket beneran lahir dari
+    // output produksi), cuma tidak tertaut ke WO manapun. Sebelumnya dicek
+    // `prod && prod.order_id` yang salah menjatuhkan baris ini ke 'UNKNOWN'.
     node.origin='PROCESSING';
     let workstations=prod.workstations?[prod.workstations]:[];
-    if(!workstations.length){
+    if(!workstations.length && prod.order_id){
       const{data:woWs}=await db.from('wo_workstations').select('workstations(kode,nama)').eq('order_id',prod.order_id);
       workstations=(woWs||[]).map(w=>w.workstations).filter(Boolean);
     }
     node.processing={
-      order_code:prod.processing_orders?.order_code,
+      order_code:prod.order_id?prod.processing_orders?.order_code:null,
+      tanpaWo:!prod.order_id,
+      alasan:prod.alasan||null,
       tipe:prod.processing_orders?.tipe,
       tanggal:prod.processing_orders?.tanggal,
       status:prod.processing_orders?.status,
@@ -1011,9 +1017,9 @@ async function buildTraceNode(basketId,path,depth){
       operator_nama:prod.users?.nama||null
     };
 
-    const{data:inputs,error:inpErr}=await db.from('processing_inputs')
+    const{data:inputs,error:inpErr}=prod.order_id?await db.from('processing_inputs')
       .select(`id,basket_id,qty_input,kg_input,kg_diambil,workstation_id,workstations(kode,nama),product_master(nama_produk)`)
-      .eq('order_id',prod.order_id);
+      .eq('order_id',prod.order_id):{data:[],error:null};
     if(inpErr)console.error('[Tracing] processing_inputs lookup gagal:',inpErr);
 
     node.sources=await Promise.all((inputs||[]).map(async inp=>{
@@ -1079,8 +1085,8 @@ function renderNode(node,depth,isRoot,inputInfo){
     const tl=tipeLabel(p.tipe);
     const wsText=(p.workstations||[]).map(w=>`${esc(w.kode)} — ${esc(w.nama)}`).join(', ')||'—';
     html+=`<div class="tn-wo-box">
-        <span class="badge ${tl.cls}">${tl.icon} ${esc(tl.label)}</span> ${p.isByproduct?'<span class="badge b-lokasi">By-product</span>':''}<br>
-        <b>WO:</b> ${esc(p.order_code||'—')} &nbsp; <b>Tanggal:</b> ${fmtDate(p.tanggal||p.tanggal_produksi)}<br>
+        <span class="badge ${tl.cls}">${tl.icon} ${esc(tl.label)}</span> ${p.isByproduct?'<span class="badge b-lokasi">By-product</span>':''} ${p.tanpaWo?'<span class="badge b-lokasi">🆓 Tanpa WO</span>':''}<br>
+        <b>WO:</b> ${p.tanpaWo?`<span style="color:#9333ea;font-weight:700">Tanpa WO — ${esc(p.alasan||'tanpa alasan tercatat')}</span>`:esc(p.order_code||'—')} &nbsp; <b>Tanggal:</b> ${fmtDate(p.tanggal||p.tanggal_produksi)}<br>
         <b>Workstation:</b> ${wsText}<br>
         <b>Operator:</b> ${esc(p.operator_nama||'— (belum tercatat)')}<br>
         <b>Hasil dicatat:</b> ${fmt(p.qty)} ${p.qty!=null?'ekor/pcs':''} · ${fmtKg(p.kg)}

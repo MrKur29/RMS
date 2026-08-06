@@ -569,7 +569,7 @@ async function fetchHasil(fromBound,toBound){
   // jadi itu filter yang benar untuk "lahir di lantai ini".
   const { data, error } = await db.from('processing_outputs')
     .select(`
-      id, basket_id, qty_output, kg_output, created_at,
+      id, basket_id, order_id, qty_output, kg_output, created_at, alasan,
       baskets ( basket_code, status ),
       product_master ( nama_produk, product_code ),
       processing_orders ( tipe, order_code, catatan )
@@ -589,7 +589,9 @@ async function fetchHasil(fromBound,toBound){
     qty: Number(r.qty_output)||0,
     kg: Number(r.kg_output)||0,
     tujuan: r.basket_id ? (tujuanMap[r.basket_id] || null) : null,
-    keterangan: r.processing_orders?.catatan || ''
+    // order_id NULL sejak migration 79 = "Tanpa WO" (mis. produksi lebih dari
+    // target WO yang ada) — keterangan pakai alasan yang wajib diisi saat itu.
+    keterangan: r.order_id ? (r.processing_orders?.catatan || '') : `🆓 Tanpa WO — ${r.alasan || 'tanpa alasan tercatat'}`
   }));
 }
 

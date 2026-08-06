@@ -712,9 +712,12 @@ async function fetchAllEvents(productId, lokasi, dateTo){
   );
 
   // E) Hasil produksi (processing_outputs) — masuk, tujuan_lokasi = lokasi
+  // processing_orders join TIDAK !inner (plain/left) sejak migration 79 — output
+  // "Tanpa WO" (order_id NULL, mis. Boneless "Catat Tanpa WO") tetap harus tampil
+  // di kartu stok, !inner akan diam-diam membuangnya.
   queries.push(
     db.from('processing_outputs')
-      .select('id,qty_output,kg_output,created_at,baskets!inner(basket_code),processing_orders!inner(order_code)')
+      .select('id,qty_output,kg_output,created_at,order_id,baskets!inner(basket_code),processing_orders(order_code)')
       .eq('product_id',productId)
       .eq('tujuan_lokasi',lokasi)
       .lte('created_at',toBound)
@@ -724,7 +727,7 @@ async function fetchAllEvents(productId, lokasi, dateTo){
           events.push({
             date:new Date(po.created_at), tipe:'Hasil Produksi', tipeCls:'tp-output',
             asalTujuan:asalTujuanLabel(lokasi), basketCode:po.baskets?.basket_code||'—',
-            ket:`WO ${po.processing_orders?.order_code||'—'} (keranjang baru)`,
+            ket: po.order_id ? `WO ${po.processing_orders?.order_code||'—'} (keranjang baru)` : '🆓 Tanpa WO (keranjang baru)',
             masuk_qty:Number(po.qty_output)||0, masuk_kg:Number(po.kg_output)||0,
             keluar_qty:0, keluar_kg:0
           });

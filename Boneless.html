@@ -663,7 +663,10 @@ a{text-decoration:none}
         <div class="panel" style="margin-bottom:14px">
           <div class="panel-head">
             <div class="panel-title">📋 WO Aktif di Workstation Ini</div>
-            <span class="panel-pill info" id="ws-wo-pill">—</span>
+            <div style="display:flex;gap:8px;align-items:center">
+              <span class="panel-pill info" id="ws-wo-pill">—</span>
+              <button class="btn btn-outline btn-sm" onclick="openRecordOutputNoWO()">🆓 Catat Tanpa WO</button>
+            </div>
           </div>
           <div id="ws-wo-body">
             <div class="empty" style="padding:32px">
@@ -1063,6 +1066,44 @@ a{text-decoration:none}
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('modal-record-output')">Batal</button>
       <button class="btn btn-primary" id="ro-btn-ok" onclick="doRecordOutput()">💾 Simpan &amp; Generate Keranjang</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ==================== MODAL: CATAT OUTPUT TANPA WO (migration 79) ==================== -->
+<div class="modal-overlay" id="modal-record-output-no-wo">
+  <div class="modal-box">
+    <div class="modal-title">🆓 Catat Output Tanpa WO</div>
+    <div class="modal-desc">Untuk produksi di luar WO manapun (mis. bahan menumpuk sehingga difillet lebih banyak dari target WO yang ada). Keranjang baru tetap dibuat &amp; masuk stok, tapi tidak tertaut ke WO apapun. Wajib alasan + PIN Supervisor.</div>
+    <div class="modal-info-box">
+      <div class="modal-info-row"><span class="modal-info-label">Workstation</span><span class="modal-info-val" id="ron-ws-name">—</span></div>
+    </div>
+    <div class="form-group">
+      <label>Produk Output <span style="color:#dc2626">*</span></label>
+      <select id="ron-produk" onchange="updateRONKgHint()">
+        <option value="">— Pilih Produk —</option>
+      </select>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="form-group" style="margin-bottom:0">
+        <label>Qty Ekor <span style="color:#dc2626">*</span></label>
+        <input type="text" inputmode="numeric" pattern="[0-9]*" id="ron-qty" placeholder="ekor" oninput="sanitizeIntInput(this);updateRONKgHint()">
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label>Kg Aktual <span style="color:#dc2626">*</span></label>
+        <input type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" id="ron-kg" placeholder="kg" oninput="sanitizeDecimalInput(this)">
+      </div>
+    </div>
+    <div id="ron-kg-hint" style="font-size:11px;color:#6b7280;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:6px 10px;margin-top:6px;display:none"></div>
+    <div class="form-group" style="margin-top:12px;margin-bottom:0">
+      <label>Tanggal Produksi <span style="color:#dc2626">*</span></label>
+      <input type="date" id="ron-tanggal">
+    </div>
+    <div id="ron-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-top:8px;display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-record-output-no-wo')">Batal</button>
+      <button class="btn btn-primary" id="ron-btn-ok" onclick="doRecordOutputNoWO()">🔑 Lanjut &amp; Konfirmasi Supervisor</button>
     </div>
   </div>
 </div>
@@ -1513,14 +1554,20 @@ async function loadActiveWOs() {
 // supaya WO MULTI-stage tidak dobel-hitung (output tahap antara ikut kehitung).
 async function loadTodayOutputKg() {
   const todayStr = todayISO();
+  // Filter langsung ke tujuan_lokasi='BONELESS' (bukan lewat processing_orders.tipe)
+  // supaya join ke processing_orders tetap LEFT join — baris "Tanpa WO" (order_id
+  // NULL, migration 79) tidak ikut ter-exclude seperti kalau pakai !inner/.in
+  // pada kolom hasil join (PostgREST memaksa inner join kalau begitu).
   const { data, error } = await db
     .from('processing_outputs')
-    .select('kg_output, product_id, processing_orders!inner(tipe, produk_id)')
-    .in('processing_orders.tipe', ['BONELESS', 'MULTI'])
+    .select('kg_output, product_id, order_id, processing_orders(produk_id)')
+    .eq('tujuan_lokasi', 'BONELESS')
     .eq('tanggal_produksi', todayStr);
   if (error) { console.error('loadTodayOutputKg', error); todayOutputKg = 0; return; }
   todayOutputKg = (data || [])
-    .filter(o => o.product_id === o.processing_orders?.produk_id)
+    // Baris ber-WO: tetap hanya hitung produk yang cocok target WO (perilaku lama).
+    // Baris tanpa WO: tidak ada target untuk dicocokkan → selalu dihitung.
+    .filter(o => !o.order_id || o.product_id === o.processing_orders?.produk_id)
     .reduce((s, o) => s + (Number(o.kg_output) || 0), 0);
 }
 
@@ -2347,6 +2394,9 @@ async function doPindahKeluar() {
 // Klasifikasi output berdasarkan product_id dan kategori produk
 const BYPRODUCT_KATEGORI = ['BYPRODUCT_KARKAS', 'BYPRODUCT_PARTING', 'BYPRODUCT_BONELESS'];
 function classifyOutput(o, woProdukId) {
+  // Output "Tanpa WO" (migration 79, order_id NULL) tidak punya target WO untuk
+  // dicocokkan — klasifikasi dari output_type yang disimpan sendiri saat dicatat.
+  if (!o.order_id) return o.output_type === 'BYPRODUCT' ? 'BYPRODUCT' : 'MAIN';
   if (o.product_id === woProdukId) return 'MAIN';
   if (BYPRODUCT_KATEGORI.includes(o.product_master?.kategori)) return 'BYPRODUCT';
   return 'OTHER';
@@ -3459,7 +3509,7 @@ function renderWSOutputsToday() {
   }
 
   const totalKg = wsOutputsToday
-    .filter(o => o.product_id === (o.processing_orders?.produk_id))
+    .filter(o => !o.order_id || o.product_id === (o.processing_orders?.produk_id))
     .reduce((s, o) => s + (Number(o.kg_output) || 0), 0);
   if (pill) pill.textContent = `${wsOutputsToday.length} output · ${fmtKg(totalKg)} main`;
 
@@ -3490,7 +3540,7 @@ function renderWSOutputsToday() {
       <td style="font-family:monospace;font-weight:700;font-size:12px">${bCode}
         ${isOut && !isVoid ? `<div class="tbl-sub" style="color:#dc2626">Sudah keluar: ${bsk.lokasi}</div>` : ''}</td>
       <td>${pm.nama_produk || '—'}<div class="tbl-sub">${pm.product_code || ''}</div></td>
-      <td style="font-family:monospace;font-size:11px">${wo.order_code || '—'}</td>
+      <td style="font-family:monospace;font-size:11px">${o.order_id ? (wo.order_code || '—') : '<span style="color:#9333ea;font-weight:700">🆓 Tanpa WO</span>'}</td>
       <td>${fmt(o.qty_output)} ekor<div class="tbl-sub">${fmtKg(o.kg_output)}</div></td>
       <td>${typeBadge}</td>
       <td style="font-size:12px">${o.users?.nama || '—'}</td>
@@ -3523,6 +3573,148 @@ function updateROKgHint() {
   const expMax = (qty * produk.kg_max).toFixed(1);
   hint.innerHTML = `📏 <strong>${qty} ekor ${produk.nama_produk}</strong> → expected <strong>${expMin} – ${expMax} kg</strong> (standar ${produk.kg_min}–${produk.kg_max} kg/ekor)`;
   hint.style.display = 'block';
+}
+
+// ============================================================
+// TAB 3 — CATAT OUTPUT TANPA WO (migration 79)
+// Untuk produksi di luar WO manapun (mis. bahan menumpuk sehingga difillet
+// lebih banyak dari target WO yang ada). Keranjang tetap dibuat & masuk stok,
+// order_id NULL, wajib alasan + PIN Supervisor (pola sama dgn Reject/Void/Revisi).
+// ============================================================
+function openRecordOutputNoWO() {
+  if (!selectedWSId) { showToast('Pilih workstation terlebih dahulu.', 'error'); return; }
+  const ws = allWorkstations.find(w => w.id === selectedWSId);
+  setEl('ron-ws-name', ws ? `${ws.kode} — ${ws.nama}` : '—');
+
+  const prodList = allProducts.filter(p =>
+    ['BONELESS', 'EXT', 'PART', 'BYPRODUCT_BONELESS', 'BYPRODUCT_PARTING'].includes(p.kategori)
+  );
+  const prodSel = document.getElementById('ron-produk');
+  prodSel.innerHTML = '<option value="">— Pilih Produk —</option>'
+    + prodList.map(p => `<option value="${p.id}">${p.nama_produk} (${p.product_code})</option>`).join('');
+
+  document.getElementById('ron-tanggal').value = todayISO();
+  document.getElementById('ron-qty').value     = '';
+  document.getElementById('ron-kg').value      = '';
+  document.getElementById('ron-kg-hint').style.display = 'none';
+  showErr('ron-err', '');
+  openModal('modal-record-output-no-wo');
+}
+
+function updateRONKgHint() {
+  const produkId = document.getElementById('ron-produk')?.value;
+  const qty      = parseInt(document.getElementById('ron-qty')?.value);
+  const hint     = document.getElementById('ron-kg-hint');
+  if (!hint) return;
+  const produk = allProducts.find(p => p.id === produkId);
+  if (!produk?.kg_min || !produk?.kg_max || !qty || qty <= 0) {
+    hint.style.display = 'none';
+    return;
+  }
+  const expMin = (qty * produk.kg_min).toFixed(1);
+  const expMax = (qty * produk.kg_max).toFixed(1);
+  hint.innerHTML = `📏 <strong>${qty} ekor ${produk.nama_produk}</strong> → expected <strong>${expMin} – ${expMax} kg</strong> (standar ${produk.kg_min}–${produk.kg_max} kg/ekor)`;
+  hint.style.display = 'block';
+}
+
+function doRecordOutputNoWO() {
+  const produkId = document.getElementById('ron-produk').value;
+  const qty      = parseInt(document.getElementById('ron-qty').value);
+  const kg       = parseFloat(document.getElementById('ron-kg').value);
+  const tanggal  = document.getElementById('ron-tanggal').value;
+  showErr('ron-err', '');
+
+  if (!produkId)        { showErr('ron-err', 'Pilih produk output.');            return; }
+  if (!qty || qty <= 0) { showErr('ron-err', 'Qty ekor harus lebih dari 0.');    return; }
+  if (!kg  || kg  <= 0) { showErr('ron-err', 'Kg aktual harus lebih dari 0.');   return; }
+  if (!tanggal)         { showErr('ron-err', 'Tanggal produksi wajib diisi.');   return; }
+  if (!selectedWSId)    { showErr('ron-err', 'Pilih workstation terlebih dahulu.'); return; }
+
+  const produkVal = allProducts.find(p => p.id === produkId);
+  if (produkVal?.kg_min && produkVal?.kg_max) {
+    const expMin = Number((qty * produkVal.kg_min).toFixed(1));
+    const expMax = Number((qty * produkVal.kg_max).toFixed(1));
+    if (kg < expMin - 0.05 || kg > expMax + 0.05) {
+      showErr('ron-err', `Kg tidak sesuai standar produk. ${qty} ekor ${produkVal.nama_produk} seharusnya ${fmtKg(expMin)} – ${fmtKg(expMax)} (standar ${produkVal.kg_min}–${produkVal.kg_max} kg/ekor).`);
+      return;
+    }
+  }
+
+  closeModal('modal-record-output-no-wo');
+  showRevisiPin({
+    title: '🔑 Konfirmasi Supervisor — Output Tanpa WO',
+    desc: `Keranjang ${qty} ekor / ${fmtKg(kg)} "${produkVal?.nama_produk || '—'}" akan dibuat TANPA WO. Wajib alasan & PIN Supervisor.`,
+    requireAlasan: true,
+    onConfirm: async (sup, alasan) => {
+      try {
+        const produk = produkVal || {};
+        const autoOutputType = BYPRODUCT_KATEGORI.includes(produk.kategori) ? 'BYPRODUCT' : 'PRIMARY';
+        const basketCode = await generatePRTBasketCode();
+
+        const { data: newBasket, error: bErr } = await db
+          .from('baskets')
+          .insert({
+            basket_code:      basketCode,
+            basket_type:      'BONELESS',
+            product_id:       produkId,
+            batch_id:         null,
+            tanggal_produksi: tanggal,
+            lokasi:           'BONELESS',
+            status:           'AKTIF',
+            qty_awal:         qty,
+            qty_sisa:         qty,
+            kg_awal:          Number(kg.toFixed(1)),
+            kg_sisa:          Number(kg.toFixed(1)),
+            created_by:       currentUser.id
+          })
+          .select('id')
+          .single();
+        if (bErr) throw bErr;
+
+        const { error: outErr } = await db
+          .from('processing_outputs')
+          .insert({
+            order_id:         null,
+            product_id:       produkId,
+            basket_id:        newBasket.id,
+            worker_id:        currentUser.id,
+            workstation_id:   selectedWSId,
+            qty_output:       qty,
+            kg_output:        Number(kg.toFixed(1)),
+            output_type:      autoOutputType,
+            tanggal_produksi: tanggal,
+            tujuan_lokasi:    'BONELESS',
+            alasan:           alasan,
+            approved_by:      sup.id,
+            approved_at:      new Date().toISOString(),
+            created_by:       currentUser.id
+          });
+        if (outErr) throw outErr;
+
+        const ws = allWorkstations.find(w => w.id === selectedWSId);
+        lastPrintBasket = {
+          basket_code:  basketCode,
+          produk_name:  produk.nama_produk || '—',
+          produk_code:  produk.product_code || '—',
+          qty,
+          kg:           Number(kg.toFixed(1)),
+          wo_code:      'TANPA WO',
+          wo_catatan:   alasan || '',
+          ws_kode:      ws?.kode || '—',
+          tanggal,
+          output_type:  autoOutputType,
+          worker_name:  currentUser.nama
+        };
+
+        showToast(`✅ Keranjang ${basketCode} (tanpa WO) dicatat & dikonfirmasi ${sup.nama}.`, 'success');
+        await loadAll();
+        showPrintModal(lastPrintBasket);
+      } catch(e) {
+        console.error(e);
+        showToast('Gagal menyimpan: ' + (e.message || e), 'error');
+      }
+    }
+  });
 }
 
 // ============================================================
@@ -4137,7 +4329,7 @@ async function reprintLabel(outputId) {
     produk_code:  o.product_master?.product_code || '—',
     qty:          o.qty_output,
     kg:           o.kg_output,
-    wo_code:      o.processing_orders?.order_code || '—',
+    wo_code:      o.order_id ? (o.processing_orders?.order_code || '—') : 'TANPA WO',
     wo_catatan:   wo?.catatan || '',
     ws_kode:      ws?.kode || '—',
     tanggal:      o.tanggal_produksi,
