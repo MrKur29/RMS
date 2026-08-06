@@ -492,6 +492,13 @@ function startApp(){
   document.getElementById('basket-input').addEventListener('change',e=>RPA_STATE.saveField('LaporanKartuStokKeranjang','basket-input',e.target.value));
   startClock();
   document.getElementById('basket-input').focus();
+
+  // Dibuka dari Pencarian Keranjang dengan ?code=XXX -> langsung cari
+  const qCode=new URLSearchParams(window.location.search).get('code');
+  if(qCode){
+    document.getElementById('basket-input').value=qCode;
+    cariKeranjang();
+  }
 }
 
 function startClock(){
