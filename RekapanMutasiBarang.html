@@ -96,17 +96,28 @@ a{text-decoration:none}
 .btn-toggle:hover{background:#f3f4f6}
 .btn-toggle.active{background:#0d9488;color:white;border-color:#0d9488}
 
-/* TABLE */
-.tbl-wrap{overflow-x:auto}
-.tbl{width:100%;border-collapse:collapse;font-size:12px}
-.tbl thead th{text-align:right;padding:8px 10px;background:#f9fafb;font-size:10px;font-weight:800;color:#6b7280;text-transform:uppercase;letter-spacing:.3px;border-bottom:1px solid #e5e7eb;white-space:nowrap}
-.tbl thead tr.grp th{text-align:center;font-size:10.5px;padding:7px 10px;border-bottom:1px solid #e5e7eb}
+/* TABLE — freeze panes: header (3 baris, sd Qty/Kg) + kolom Produk paling kiri.
+   .tbl-wrap dibatasi tinggi & discroll sendiri (bukan ikut scroll halaman),
+   supaya perilakunya mirip "freeze panes" spreadsheet. Offset top per baris
+   header pakai tinggi tetap (HEADER_ROW_H) supaya 3 baris thead (ada sel
+   rowspan: Produk rowspan=3, Saldo Awal/Saldo Akhir rowspan=2) bisa ditumpuk
+   sticky dengan presisi — kalau tinggi baris tidak dipaksa tetap, stacking
+   top:0/30px/60px bisa meleset beberapa px antar browser. */
+.tbl-wrap{overflow:auto;max-height:72vh;border:1px solid #e5e7eb;border-radius:8px}
+.tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:12px}
+.tbl thead th{position:sticky;height:30px;box-sizing:border-box;text-align:right;padding:4px 10px;background:#f9fafb;font-size:10px;font-weight:800;color:#6b7280;text-transform:uppercase;letter-spacing:.3px;border-bottom:1px solid #e5e7eb;white-space:nowrap;z-index:2}
+.tbl thead tr.grp th{text-align:center;font-size:10.5px;padding:4px 10px;border-bottom:1px solid #e5e7eb}
 .tbl thead th.first,.tbl thead tr.grp th.first{text-align:left}
+.tbl thead tr:nth-child(1) th{top:0}
+.tbl thead tr:nth-child(2) th{top:30px}
+.tbl thead tr:nth-child(3) th{top:60px}
 .tbl thead th.grp-awal{background:#f3f4f6;color:#374151}
 .tbl thead th.grp-masuk{background:#ecfdf5;color:#047857}
 .tbl thead th.grp-keluar{background:#fef2f2;color:#b91c1c}
 .tbl thead th.grp-akhir{background:#eff6ff;color:#1d4ed8}
+.tbl thead th.first{position:sticky;left:0;z-index:3}
 .tbl tbody td{padding:8px 10px;border-bottom:1px solid #f3f4f6;vertical-align:top}
+.tbl tbody td:first-child{position:sticky;left:0;z-index:1;background:#fff}
 .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 .col-masuk{background:#f0fdf4}
 .col-keluar{background:#fef2f2}
@@ -197,6 +208,7 @@ a{text-decoration:none}
       </div>
       <div class="nav-section-label">Penjualan</div>
       <div class="nav-item" onclick="navTo('Penjualan.html')"><span class="nav-icon">🛒</span><span class="nav-label-text">Penjualan</span></div>
+      <div class="nav-item" id="nav-cs" style="display:none" onclick="navTo('CS.html')"><span class="nav-icon">🏬</span><span class="nav-label-text">CS (Cold Storage)</span></div>
       <div class="nav-section-label">Manajemen</div>
       <div class="nav-item" onclick="navTo('Koreksi.html')">
         <span class="nav-icon">✅</span><span class="nav-label-text">Koreksi & Approval</span>
@@ -340,7 +352,7 @@ a{text-decoration:none}
               </tr>
             </thead>
             <tbody id="tbody-rekap">
-              <tr><td colspan="35"><div class="empty">Pilih rentang tanggal, lalu klik Tampilkan.</div></td></tr>
+              <tr><td colspan="37"><div class="empty">Pilih rentang tanggal, lalu klik Tampilkan.</div></td></tr>
             </tbody>
           </table>
         </div>
@@ -450,6 +462,7 @@ function startApp(){
   if (RPA_PERM.getModuleRole(currentUser, 'revisi_batch') !== null) { const rbEl = document.getElementById('nav-revisi-batch'); if (rbEl) rbEl.style.display = 'flex'; }
     if (RPA_PERM.getModuleRole(currentUser, 'void_keranjang') !== null) { const vkEl = document.getElementById('nav-void-keranjang'); if (vkEl) vkEl.style.display = 'flex'; }
     if (RPA_PERM.getModuleRole(currentUser, 'reprint_label') !== null) { const rlEl = document.getElementById('nav-reprint-label'); if (rlEl) rlEl.style.display = 'flex'; }
+    if (RPA_PERM.getModuleRole(currentUser, 'cs') !== null) { const csEl = document.getElementById('nav-cs'); if (csEl) csEl.style.display = 'flex'; }
   if (RPA_PERM.getModuleRole(currentUser, 'saldo_awal') !== null) { const saEl = document.getElementById('nav-saldo-awal'); if (saEl) saEl.style.display = 'flex'; }
   const today = todayISO();
   document.getElementById('filter-sampai').value = today;
@@ -593,11 +606,13 @@ async function computeSaldoKumulatif(cutoffDate){
     })
   );
 
-  // 6) Keluar total dari sistem: terjual, selisih write-off, musnah, by-product langsung
+  // 6) Keluar total dari sistem: terjual, selisih write-off, musnah, by-product langsung,
+  // dan CS (Cold Storage eksternal — 2026-08-06, stok CS tidak dilacak sistem ini,
+  // begitu dikonfirmasi diterima barang dianggap keluar dari perusahaan sama seperti Jual)
   tasks.push(
     fetchAllRows(()=>db.from('basket_movements')
       .select('qty_pindah,kg_pindah,confirmed_at,baskets!inner(product_id)')
-      .in('ke_lokasi',['SOLD','SELISIH','MUSNAH','BYPRODUCT_DIRECT'])
+      .in('ke_lokasi',['SOLD','SELISIH','MUSNAH','BYPRODUCT_DIRECT','CS'])
       .eq('status','CONFIRMED')
       .lte('confirmed_at', toBound)
     ).then(data=>{
@@ -621,7 +636,7 @@ async function computePeriodBreakdown(fromDate, toDate){
   const fromBound = boundStart(fromDate), toBound = boundEnd(toDate);
   const buckets = {
     karkas_in:{}, parting_in:{}, boneless_in:{}, marinasi_in:{}, thawing_in:{}, retur_in:{}, saldo_awal_in:{},
-    parting_out:{}, boneless_out:{}, marinasi_out:{}, blasting_out:{}, jual_out:{}, selisih_out:{}
+    parting_out:{}, boneless_out:{}, marinasi_out:{}, blasting_out:{}, jual_out:{}, selisih_out:{}, cs_out:{}
   };
   const tasks = [];
 
@@ -743,6 +758,19 @@ async function computePeriodBreakdown(fromDate, toDate){
     })
   );
 
+  // Keluar: CS (Chiller -> CS, cold storage eksternal — 2026-08-06, lihat migration 78.
+  // Stok CS tidak dilacak sistem ini, jadi begitu CONFIRMED dihitung sebagai keluar
+  // dari perusahaan sama seperti Jual/Selisih — TIDAK info-only seperti Blasting.)
+  tasks.push(
+    fetchAllRows(()=>db.from('basket_movements')
+      .select('qty_pindah,kg_pindah,confirmed_at,baskets!inner(product_id)')
+      .eq('ke_lokasi','CS').eq('status','CONFIRMED')
+      .gte('confirmed_at', fromBound).lte('confirmed_at', toBound)
+    ).then(data=>{
+      (data||[]).forEach(m=>bump(buckets.cs_out, m.baskets?.product_id, m.qty_pindah, m.kg_pindah));
+    })
+  );
+
   await Promise.all(tasks);
   return buckets;
 }
@@ -769,7 +797,7 @@ async function computePeriodBreakdown(fromDate, toDate){
 // terlepas dari lokasi asal/tujuan spesifiknya.
 // ══════════════════════════════════════════════════════════════
 const MASUK_KEY_MAP  = {LANTAI:'karkas', PARTING:'parting', BONELESS:'boneless', MARINASI:'marinasi', RETUR:'retur', BLASTING:'blasting'};
-const KELUAR_KEY_MAP = {PARTING:'parting', BONELESS:'boneless', MARINASI:'marinasi', BLASTING:'blasting', LOADING:'jual', SELISIH:'selisih'};
+const KELUAR_KEY_MAP = {PARTING:'parting', BONELESS:'boneless', MARINASI:'marinasi', BLASTING:'blasting', LOADING:'jual', SELISIH:'selisih', CS:'cs'};
 
 // Saldo Chiller sampai cutoffDate (inklusif) — dipakai utk Saldo Awal periode.
 // Tidak perlu breakdown per kolom di sini, cukup total masuk vs total keluar.
@@ -839,7 +867,7 @@ async function computeSaldoChiller(cutoffDate){
 async function computePeriodChiller(fromDate, toDate){
   const fromBound = boundStart(fromDate), toBound = boundEnd(toDate);
   const masuk  = {karkas:{},parting:{},boneless:{},marinasi:{},retur:{},blasting:{},lainnya:{},thawing:{},saldo_awal:{}};
-  const keluar = {parting:{},boneless:{},marinasi:{},blasting:{},jual:{},selisih:{},lainnya:{}};
+  const keluar = {parting:{},boneless:{},marinasi:{},blasting:{},jual:{},selisih:{},cs:{},lainnya:{}};
   const tasks = [];
 
   // 2026-08-06: LOADING->CHILLER (retur dari Loading Dock, mis. via "Minta Kembali
@@ -918,7 +946,7 @@ function theadSemuaLokasiHTML(){
     <th class="first" rowspan="3">Produk</th>
     <th class="grp-awal" colspan="2" rowspan="2">Saldo Awal</th>
     <th class="grp-masuk" colspan="16">Masuk</th>
-    <th class="grp-keluar" colspan="14">Keluar</th>
+    <th class="grp-keluar" colspan="16">Keluar</th>
     <th class="grp-akhir" colspan="2" rowspan="2">Saldo Akhir</th>
   </tr>
   <tr class="grp">
@@ -936,6 +964,7 @@ function theadSemuaLokasiHTML(){
     <th class="col-keluar" colspan="2" title="Transfer ke lantai Blasting — informasi, tidak dikurangkan ke Total Keluar/Saldo Akhir">Blasting*</th>
     <th class="col-keluar" colspan="2">Jual</th>
     <th class="col-keluar" colspan="2">Selisih</th>
+    <th class="col-keluar" colspan="2" title="Dikirim ke CS (Cold Storage eksternal) — stok CS tidak dilacak sistem ini, dihitung sebagai keluar dari perusahaan sama seperti Jual/Selisih">CS</th>
     <th class="col-keluar" colspan="2">Total</th>
   </tr>
   <tr>
@@ -948,6 +977,7 @@ function theadSemuaLokasiHTML(){
     <th class="col-masuk">Qty</th><th class="col-masuk">Kg</th>
     <th class="col-masuk">Qty</th><th class="col-masuk">Kg</th>
     <th class="col-masuk" style="font-weight:800">Qty</th><th class="col-masuk" style="font-weight:800">Kg</th>
+    <th class="col-keluar">Qty</th><th class="col-keluar">Kg</th>
     <th class="col-keluar">Qty</th><th class="col-keluar">Kg</th>
     <th class="col-keluar">Qty</th><th class="col-keluar">Kg</th>
     <th class="col-keluar">Qty</th><th class="col-keluar">Kg</th>
@@ -968,7 +998,7 @@ function theadChillerHTML(){
     <th class="first" rowspan="3">Produk</th>
     <th class="grp-awal" colspan="2" rowspan="2">Saldo Awal</th>
     <th class="grp-masuk" colspan="20">Masuk</th>
-    <th class="grp-keluar" colspan="16">Keluar</th>
+    <th class="grp-keluar" colspan="18">Keluar</th>
     <th class="grp-akhir" colspan="2" rowspan="2">Saldo Akhir</th>
   </tr>
   <tr class="grp">
@@ -988,6 +1018,7 @@ function theadChillerHTML(){
     <th class="col-keluar" colspan="2">Blasting</th>
     <th class="col-keluar" colspan="2" title="Dikirim ke Loading Dock untuk dijual (belum tentu sudah terjual final), sudah dikurangi barang yang diminta kembali dari Loading Dock ke Chiller pada periode yang sama">Jual*</th>
     <th class="col-keluar" colspan="2" title="Dikirim/write-off ke Selisih, sudah dikurangi kalau ada yang diminta kembali dari Selisih ke Chiller (pembatalan)">Selisih</th>
+    <th class="col-keluar" colspan="2" title="Dikirim ke CS (Cold Storage eksternal) — stok CS tidak dilacak sistem ini, dihitung sebagai keluar nyata dari Chiller">CS</th>
     <th class="col-keluar" colspan="2" title="Transfer keluar ke lokasi selain kategori di atas">Lainnya</th>
     <th class="col-keluar" colspan="2">Total</th>
   </tr>
@@ -1010,6 +1041,7 @@ function theadChillerHTML(){
     <th class="col-keluar">Qty</th><th class="col-keluar">Kg</th>
     <th class="col-keluar">Qty</th><th class="col-keluar">Kg</th>
     <th class="col-keluar">Qty</th><th class="col-keluar">Kg</th>
+    <th class="col-keluar">Qty</th><th class="col-keluar">Kg</th>
     <th class="col-keluar" style="font-weight:800">Qty</th><th class="col-keluar" style="font-weight:800">Kg</th>
     <th class="col-akhir">Qty</th><th class="col-akhir">Kg</th>
   </tr>`;
@@ -1017,11 +1049,11 @@ function theadChillerHTML(){
 
 async function tampilkanRekapChiller(dari, sampai){
   document.getElementById('thead-rekap').innerHTML = theadChillerHTML();
-  document.getElementById('tbody-rekap').innerHTML = '<tr><td colspan="41"><div class="empty">Memuat…</div></td></tr>';
+  document.getElementById('tbody-rekap').innerHTML = '<tr><td colspan="43"><div class="empty">Memuat…</div></td></tr>';
   const hint = document.getElementById('filter-hint');
   if(hint)hint.textContent = 'Menampilkan mutasi lantai Chiller saja. Masuk/Keluar dihitung dari SEMUA transfer nyata ke/dari Chiller (termasuk Blasting, dan kolom "Lainnya" utk lokasi asal/tujuan lain) — tidak dikecualikan seperti mode "Semua Lokasi".';
   const noteEl = document.getElementById('rpt-note-text');
-  if(noteEl)noteEl.innerHTML = 'Catatan: mode ini khusus stok Chiller. <b>Jual*</b> = dikirim ke Loading Dock untuk dijual (transfer nyata keluar dari Chiller), <u>sudah net</u> dari barang yang diminta kembali dari Loading Dock ke Chiller (fitur "Minta Kembali ke Chiller" di Chiller.html) pada periode yang sama — mis. kirim 3 lalu kembali 1 tampil sbg 2, bukan konfirmasi sudah laku (beda dari mode "Semua Lokasi" yang baru menghitung Jual saat benar-benar terjual, Loading → Sold). <b>Selisih</b> = sama, sudah dikurangi kalau ada pembatalan/reversal dari Selisih kembali ke Chiller. Kalau retur/pembatalan terjadi di periode BERBEDA dari pengiriman aslinya, kolom Jual/Selisih pada periode retur bisa tampil minus — itu wajar, bukan bug. <b>Blasting</b> di sini IKUT dihitung ke Total Keluar/Saldo Akhir (beda dari mode "Semua Lokasi" yang mengecualikannya) karena barang itu benar-benar keluar dari stok Chiller. <b>Lainnya</b> = transfer ke/dari lokasi di luar kategori bernama (di luar Loading Dock &amp; Selisih yang sudah di-net-kan ke atas) — kalau kolom ini sering terisi, beri tahu supaya kategorinya bisa ditambah namanya. Koreksi yang sudah disetujui (Koreksi &amp; Approval) belum tercermin di rekap ini.';
+  if(noteEl)noteEl.innerHTML = 'Catatan: mode ini khusus stok Chiller. <b>Jual*</b> = dikirim ke Loading Dock untuk dijual (transfer nyata keluar dari Chiller), <u>sudah net</u> dari barang yang diminta kembali dari Loading Dock ke Chiller (fitur "Minta Kembali ke Chiller" di Chiller.html) pada periode yang sama — mis. kirim 3 lalu kembali 1 tampil sbg 2, bukan konfirmasi sudah laku (beda dari mode "Semua Lokasi" yang baru menghitung Jual saat benar-benar terjual, Loading → Sold). <b>Selisih</b> = sama, sudah dikurangi kalau ada pembatalan/reversal dari Selisih kembali ke Chiller. Kalau retur/pembatalan terjadi di periode BERBEDA dari pengiriman aslinya, kolom Jual/Selisih pada periode retur bisa tampil minus — itu wajar, bukan bug. <b>Blasting</b> di sini IKUT dihitung ke Total Keluar/Saldo Akhir (beda dari mode "Semua Lokasi" yang mengecualikannya) karena barang itu benar-benar keluar dari stok Chiller. <b>CS</b> = dikirim ke CS (Cold Storage eksternal, modul CS.html) dan sudah dikonfirmasi diterima — IKUT dihitung ke Total Keluar/Saldo Akhir karena stok CS tidak dilacak sistem ini. <b>Lainnya</b> = transfer ke/dari lokasi di luar kategori bernama (di luar Loading Dock &amp; Selisih yang sudah di-net-kan ke atas) — kalau kolom ini sering terisi, beri tahu supaya kategorinya bisa ditambah namanya. Koreksi yang sudah disetujui (Koreksi &amp; Approval) belum tercermin di rekap ini.';
 
   const cutoffDate = addDaysISO(dari,-1);
   const [saldoAwalMap, periode] = await Promise.all([
@@ -1067,6 +1099,7 @@ async function tampilkanRekapChiller(dari, sampai){
       blasting: periode.keluar.blasting[pid] || {qty:0,kg:0}, // di mode ini IKUT total (beda dari Semua Lokasi)
       jual:     periode.keluar.jual[pid]     || {qty:0,kg:0},
       selisih:  periode.keluar.selisih[pid]  || {qty:0,kg:0},
+      cs:       periode.keluar.cs[pid]       || {qty:0,kg:0},
       lainnya:  periode.keluar.lainnya[pid]  || {qty:0,kg:0}
     };
     const totalMasuk = Object.values(masuk).reduce(addUnit, ZERO);
@@ -1096,13 +1129,13 @@ async function tampilkanRekapChiller(dari, sampai){
 function renderRekapTableChiller(rows){
   const tbody = document.getElementById('tbody-rekap');
   if(!rows.length){
-    tbody.innerHTML = '<tr><td colspan="41"><div class="empty">Tidak ada saldo maupun mutasi barang pada periode ini.</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="43"><div class="empty">Tidak ada saldo maupun mutasi barang pada periode ini.</div></td></tr>';
     return;
   }
   const tot = {
     saldo_awal:{qty:0,kg:0},
     masuk:{karkas:{qty:0,kg:0},parting:{qty:0,kg:0},boneless:{qty:0,kg:0},marinasi:{qty:0,kg:0},thawing:{qty:0,kg:0},retur:{qty:0,kg:0},blasting:{qty:0,kg:0},saldo_awal:{qty:0,kg:0},lainnya:{qty:0,kg:0}},
-    keluar:{parting:{qty:0,kg:0},boneless:{qty:0,kg:0},marinasi:{qty:0,kg:0},blasting:{qty:0,kg:0},jual:{qty:0,kg:0},selisih:{qty:0,kg:0},lainnya:{qty:0,kg:0}},
+    keluar:{parting:{qty:0,kg:0},boneless:{qty:0,kg:0},marinasi:{qty:0,kg:0},blasting:{qty:0,kg:0},jual:{qty:0,kg:0},selisih:{qty:0,kg:0},cs:{qty:0,kg:0},lainnya:{qty:0,kg:0}},
     total_masuk:{qty:0,kg:0}, total_keluar:{qty:0,kg:0}, saldo_akhir:{qty:0,kg:0}
   };
   const accum = (t,u)=>{ t.qty+=u.qty; t.kg+=u.kg; };
@@ -1137,6 +1170,7 @@ function renderRekapTableChiller(rows){
       ${cell(r.keluar.blasting,'col-keluar')}
       ${cell(r.keluar.jual,'col-keluar')}
       ${cell(r.keluar.selisih,'col-keluar')}
+      ${cell(r.keluar.cs,'col-keluar')}
       ${cell(r.keluar.lainnya,'col-keluar')}
       ${cell(r.total_keluar,'col-keluar').replace(/<td /g,'<td style="font-weight:700" ')}
       ${cell(r.saldo_akhir,'col-akhir')}
@@ -1162,6 +1196,7 @@ function renderRekapTableChiller(rows){
     ${cell(tot.keluar.blasting,'')}
     ${cell(tot.keluar.jual,'')}
     ${cell(tot.keluar.selisih,'')}
+    ${cell(tot.keluar.cs,'')}
     ${cell(tot.keluar.lainnya,'')}
     ${cell(tot.total_keluar,'')}
     ${cell(tot.saldo_akhir,'')}
@@ -1172,14 +1207,14 @@ function renderRekapTableChiller(rows){
 
 function exportHeadersChiller(){
   const pairs = ['Saldo Awal','Masuk: Karkas','Masuk: Parting','Masuk: Boneless','Masuk: Marinasi','Masuk: Thawing','Masuk: Retur','Masuk: Blasting','Masuk: Saldo Awal (Opname)','Masuk: Lainnya','Total Masuk',
-    'Keluar: Parting','Keluar: Boneless','Keluar: Marinasi','Keluar: Blasting','Keluar: Jual (ke Loading Dock, net retur)','Keluar: Selisih (net pembatalan)','Keluar: Lainnya','Total Keluar','Saldo Akhir'];
+    'Keluar: Parting','Keluar: Boneless','Keluar: Marinasi','Keluar: Blasting','Keluar: Jual (ke Loading Dock, net retur)','Keluar: Selisih (net pembatalan)','Keluar: CS','Keluar: Lainnya','Total Keluar','Saldo Akhir'];
   const headers = ['Kode Produk','Nama Produk','Kategori','Grade'];
   pairs.forEach(p=>{ headers.push(p+' (Qty)'); headers.push(p+' (Kg)'); });
   return headers;
 }
 function exportRowChiller(r){
   const seq = [r.saldo_awal, r.masuk.karkas, r.masuk.parting, r.masuk.boneless, r.masuk.marinasi, r.masuk.thawing, r.masuk.retur, r.masuk.blasting, r.masuk.saldo_awal, r.masuk.lainnya, r.total_masuk,
-    r.keluar.parting, r.keluar.boneless, r.keluar.marinasi, r.keluar.blasting, r.keluar.jual, r.keluar.selisih, r.keluar.lainnya, r.total_keluar, r.saldo_akhir];
+    r.keluar.parting, r.keluar.boneless, r.keluar.marinasi, r.keluar.blasting, r.keluar.jual, r.keluar.selisih, r.keluar.cs, r.keluar.lainnya, r.total_keluar, r.saldo_akhir];
   const row = [r.product_code, r.nama_produk, r.kategori||'', r.grade||''];
   seq.forEach(u=>{ row.push(u.qty); row.push(u.kg); });
   return row;
@@ -1207,7 +1242,7 @@ async function tampilkanRekap(){
       await tampilkanRekapChiller(dari, sampai);
     }catch(e){
       console.error(e);
-      document.getElementById('tbody-rekap').innerHTML = '<tr><td colspan="41"><div class="empty">Gagal memuat data mutasi barang.</div></td></tr>';
+      document.getElementById('tbody-rekap').innerHTML = '<tr><td colspan="43"><div class="empty">Gagal memuat data mutasi barang.</div></td></tr>';
       showToast('Gagal memuat rekap: '+(e.message||''),'error');
     }
     return;
@@ -1218,8 +1253,8 @@ async function tampilkanRekap(){
   const hint = document.getElementById('filter-hint');
   if(hint)hint.textContent = 'Baris = nama Barang. Saldo Awal dihitung otomatis dari seluruh histori (opname Saldo Awal + semua mutasi) sampai H-1 dari tanggal mulai. Hanya barang yang punya Saldo Awal dan/atau mutasi pada periode ini yang ditampilkan.';
   const noteEl = document.getElementById('rpt-note-text');
-  if(noteEl)noteEl.innerHTML = `Catatan: <b>Jual</b> = keranjang yang sudah dikirim final ke pelanggan (Loading → Sold), sudah bersih dari retur/selisih dock karena leg tersebut memang tidak pernah tercatat sebagai terjual. <b>Selisih</b> = write-off yang sudah disetujui Supervisor di modul Penjualan &amp; Selisih (hanya mencakup selisih kurang — sistem belum punya mekanisme selisih lebih). <b>Retur</b> = retur barang dari Pelanggan (Return Slip) — fitur ini belum tersedia di sistem, kolom selalu 0. <b>Keluar: Blasting*</b> = transfer terkonfirmasi ke lantai Blasting (barang masuk proses pembekuan) — ditampilkan untuk visibilitas tapi <u>tidak</u> ikut dikurangkan ke Total Keluar/Saldo Akhir gabungan, karena barang belum keluar dari perusahaan, cuma pindah ke tahap proses berikutnya. Koreksi yang sudah disetujui (Koreksi &amp; Approval) belum tercermin di rekap ini. By-product Karkas memakai model stok terpisah dan belum tercakup.`;
-  document.getElementById('tbody-rekap').innerHTML = '<tr><td colspan="35"><div class="empty">Memuat…</div></td></tr>';
+  if(noteEl)noteEl.innerHTML = `Catatan: <b>Jual</b> = keranjang yang sudah dikirim final ke pelanggan (Loading → Sold), sudah bersih dari retur/selisih dock karena leg tersebut memang tidak pernah tercatat sebagai terjual. <b>Selisih</b> = write-off yang sudah disetujui Supervisor di modul Penjualan &amp; Selisih (hanya mencakup selisih kurang — sistem belum punya mekanisme selisih lebih). <b>Retur</b> = retur barang dari Pelanggan (Return Slip) — fitur ini belum tersedia di sistem, kolom selalu 0. <b>Keluar: Blasting*</b> = transfer terkonfirmasi ke lantai Blasting (barang masuk proses pembekuan) — ditampilkan untuk visibilitas tapi <u>tidak</u> ikut dikurangkan ke Total Keluar/Saldo Akhir gabungan, karena barang belum keluar dari perusahaan, cuma pindah ke tahap proses berikutnya. <b>Keluar: CS</b> = dikirim ke CS (Cold Storage eksternal, modul CS.html) dan sudah dikonfirmasi diterima — <u>ikut</u> dikurangkan ke Total Keluar/Saldo Akhir (beda dari Blasting) karena stok CS tidak dilacak sistem ini, barang dianggap sudah keluar dari perusahaan. Koreksi yang sudah disetujui (Koreksi &amp; Approval) belum tercermin di rekap ini. By-product Karkas memakai model stok terpisah dan belum tercakup.`;
+  document.getElementById('tbody-rekap').innerHTML = '<tr><td colspan="37"><div class="empty">Memuat…</div></td></tr>';
 
   try{
     const cutoffDate = addDaysISO(dari, -1);
@@ -1235,7 +1270,7 @@ async function tampilkanRekap(){
       ...Object.keys(periode.thawing_in), ...Object.keys(periode.retur_in), ...Object.keys(periode.saldo_awal_in),
       ...Object.keys(periode.parting_out), ...Object.keys(periode.boneless_out),
       ...Object.keys(periode.marinasi_out), ...Object.keys(periode.blasting_out),
-      ...Object.keys(periode.jual_out), ...Object.keys(periode.selisih_out)
+      ...Object.keys(periode.jual_out), ...Object.keys(periode.selisih_out), ...Object.keys(periode.cs_out)
     ]);
 
     let products = [];
@@ -1268,7 +1303,8 @@ async function tampilkanRekap(){
         marinasi: periode.marinasi_out[pid] || {qty:0,kg:0},
         blasting: periode.blasting_out[pid] || {qty:0,kg:0}, // info-only, TIDAK masuk totalKeluar (lihat catatan footer)
         jual:     periode.jual_out[pid]    || {qty:0,kg:0},
-        selisih:  periode.selisih_out[pid] || {qty:0,kg:0}
+        selisih:  periode.selisih_out[pid] || {qty:0,kg:0},
+        cs:       periode.cs_out[pid]      || {qty:0,kg:0}  // IKUT totalKeluar — beda dari blasting, lihat catatan footer
       };
 
       const totalMasuk = Object.values(masuk).reduce(addUnit, ZERO);
@@ -1301,7 +1337,7 @@ async function tampilkanRekap(){
 
   }catch(e){
     console.error(e);
-    document.getElementById('tbody-rekap').innerHTML = '<tr><td colspan="35"><div class="empty">Gagal memuat data mutasi barang.</div></td></tr>';
+    document.getElementById('tbody-rekap').innerHTML = '<tr><td colspan="37"><div class="empty">Gagal memuat data mutasi barang.</div></td></tr>';
     showToast('Gagal memuat rekap: '+(e.message||''),'error');
   }
 }
@@ -1311,13 +1347,13 @@ function cell(u, cls){ return `<td class="num ${cls}">${num(u.qty,2)}</td><td cl
 function renderRekapTable(rows){
   const tbody = document.getElementById('tbody-rekap');
   if(!rows.length){
-    tbody.innerHTML = '<tr><td colspan="35"><div class="empty">Tidak ada saldo maupun mutasi barang pada periode ini.</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="37"><div class="empty">Tidak ada saldo maupun mutasi barang pada periode ini.</div></td></tr>';
     return;
   }
   const tot = {
     saldo_awal:{qty:0,kg:0},
     masuk:{karkas:{qty:0,kg:0},parting:{qty:0,kg:0},boneless:{qty:0,kg:0},marinasi:{qty:0,kg:0},thawing:{qty:0,kg:0},retur:{qty:0,kg:0},saldo_awal:{qty:0,kg:0}},
-    keluar:{parting:{qty:0,kg:0},boneless:{qty:0,kg:0},marinasi:{qty:0,kg:0},blasting:{qty:0,kg:0},jual:{qty:0,kg:0},selisih:{qty:0,kg:0}},
+    keluar:{parting:{qty:0,kg:0},boneless:{qty:0,kg:0},marinasi:{qty:0,kg:0},blasting:{qty:0,kg:0},jual:{qty:0,kg:0},selisih:{qty:0,kg:0},cs:{qty:0,kg:0}},
     total_masuk:{qty:0,kg:0}, total_keluar:{qty:0,kg:0}, saldo_akhir:{qty:0,kg:0}
   };
   const accum = (t,u)=>{ t.qty+=u.qty; t.kg+=u.kg; };
@@ -1350,6 +1386,7 @@ function renderRekapTable(rows){
       ${cell(r.keluar.blasting,'col-keluar')}
       ${cell(r.keluar.jual,'col-keluar')}
       ${cell(r.keluar.selisih,'col-keluar')}
+      ${cell(r.keluar.cs,'col-keluar')}
       ${cell(r.total_keluar,'col-keluar').replace(/<td /g,'<td style="font-weight:700" ')}
       ${cell(r.saldo_akhir,'col-akhir')}
     </tr>`;
@@ -1372,6 +1409,7 @@ function renderRekapTable(rows){
     ${cell(tot.keluar.blasting,'')}
     ${cell(tot.keluar.jual,'')}
     ${cell(tot.keluar.selisih,'')}
+    ${cell(tot.keluar.cs,'')}
     ${cell(tot.total_keluar,'')}
     ${cell(tot.saldo_akhir,'')}
   </tr>`;
@@ -1384,14 +1422,14 @@ function renderRekapTable(rows){
 // ══════════════════════════════════════════════════════════════
 function exportHeaders(){
   const pairs = ['Saldo Awal','Masuk: Karkas','Masuk: Parting','Masuk: Boneless','Masuk: Marinasi','Masuk: Thawing','Masuk: Retur','Masuk: Saldo Awal (Opname)','Total Masuk',
-    'Keluar: Parting','Keluar: Boneless','Keluar: Marinasi','Keluar: Blasting (info, di luar Total)','Keluar: Jual','Keluar: Selisih','Total Keluar','Saldo Akhir'];
+    'Keluar: Parting','Keluar: Boneless','Keluar: Marinasi','Keluar: Blasting (info, di luar Total)','Keluar: Jual','Keluar: Selisih','Keluar: CS','Total Keluar','Saldo Akhir'];
   const headers = ['Kode Produk','Nama Produk','Kategori','Grade'];
   pairs.forEach(p=>{ headers.push(p+' (Qty)'); headers.push(p+' (Kg)'); });
   return headers;
 }
 function exportRow(r){
   const seq = [r.saldo_awal, r.masuk.karkas, r.masuk.parting, r.masuk.boneless, r.masuk.marinasi, r.masuk.thawing, r.masuk.retur, r.masuk.saldo_awal, r.total_masuk,
-    r.keluar.parting, r.keluar.boneless, r.keluar.marinasi, r.keluar.blasting, r.keluar.jual, r.keluar.selisih, r.total_keluar, r.saldo_akhir];
+    r.keluar.parting, r.keluar.boneless, r.keluar.marinasi, r.keluar.blasting, r.keluar.jual, r.keluar.selisih, r.keluar.cs, r.total_keluar, r.saldo_akhir];
   const row = [r.product_code, r.nama_produk, r.kategori||'', r.grade||''];
   seq.forEach(u=>{ row.push(u.qty); row.push(u.kg); });
   return row;

@@ -228,11 +228,14 @@ a{text-decoration:none}
 .btn-dest-marinasi:hover,.btn-dest-marinasi.selected{background:#d97706;color:white;border-color:#d97706}
 .btn-dest-loading{background:#f0fdf4;color:#166534;border-color:#bbf7d0}
 .btn-dest-loading:hover,.btn-dest-loading.selected{background:#16a34a;color:white;border-color:#16a34a}
+.btn-dest-cs{background:#ede9fe;color:#5b21b6;border-color:#ddd6fe}
+.btn-dest-cs:hover,.btn-dest-cs.selected{background:#7c3aed;color:white;border-color:#7c3aed}
 /* Partial transfer toggle */
 .partial-toggle{display:flex;gap:0;border:1.5px solid #d1d5db;border-radius:8px;overflow:hidden;margin:14px 0 0}
 .partial-toggle button{flex:1;padding:8px;font-size:13px;font-weight:600;cursor:pointer;border:none;background:#f9fafb;color:#6b7280;transition:all .15s}
 .partial-toggle button.active{background:#1d4ed8;color:white}
-.partial-toggle button:first-child{border-right:1.5px solid #d1d5db}
+.partial-toggle button:not(:last-child){border-right:1.5px solid #d1d5db}
+.partial-toggle.toggle-3 button{font-size:11.5px;padding:8px 4px}
 .partial-input-box{display:none;background:#f0f9ff;border:1.5px solid #bae6fd;border-radius:8px;padding:12px;margin-top:10px}
 .partial-input-box.show{display:block}
 .partial-input-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -388,6 +391,7 @@ a{text-decoration:none}
       <div class="nav-item" onclick="navTo('ByProductKarkas.html')"><span class="nav-icon">📦</span><span class="nav-label-text">By-product Karkas</span></div>
       <div class="nav-section-label">Penjualan</div>
       <div class="nav-item" onclick="navTo('Penjualan.html')"><span class="nav-icon">🛒</span><span class="nav-label-text">Penjualan</span></div>
+      <div class="nav-item" id="nav-cs" style="display:none" onclick="navTo('CS.html')"><span class="nav-icon">🏬</span><span class="nav-label-text">CS (Cold Storage)</span></div>
       <div class="nav-section-label">Manajemen</div>
       <div class="nav-item" onclick="navTo('Koreksi.html')"><span class="nav-icon">✅</span><span class="nav-label-text">Koreksi &amp; Approval</span></div>
       <div class="nav-item" onclick="navTo('Laporan.html')"><span class="nav-icon">📊</span><span class="nav-label-text">Laporan</span></div>
@@ -808,25 +812,26 @@ a{text-decoration:none}
       <div class="modal-info-row"><span class="modal-info-label">Dari Lokasi</span><span class="modal-info-val" id="mk-dari">—</span></div>
       <div class="modal-info-row"><span class="modal-info-label">Batch</span><span class="modal-info-val" id="mk-batch">—</span></div>
     </div>
-    <!-- Toggle Terima / Alihkan ke Loading Dock -->
-    <div class="partial-toggle">
+    <!-- Toggle Terima / Alihkan ke Loading Dock / Alihkan ke CS -->
+    <div class="partial-toggle toggle-3">
       <button id="mk-toggle-terima"   class="active" onclick="setKonfirmMode(false)">✅ Terima ke Chiller</button>
-      <button id="mk-toggle-alihkan"  onclick="setKonfirmMode(true)">🚛 Alihkan ke Loading Dock</button>
+      <button id="mk-toggle-loading"  onclick="setKonfirmMode('LOADING')">🚛 Alihkan ke Loading</button>
+      <button id="mk-toggle-cs"       onclick="setKonfirmMode('CS')">🏬 Alihkan ke CS</button>
     </div>
-    <!-- Input jumlah dialihkan (muncul hanya saat Alihkan ke Loading Dock) -->
+    <!-- Input jumlah dialihkan (muncul hanya saat Alihkan ke Loading Dock / CS) -->
     <div class="partial-input-box" id="mk-alihkan-box">
       <div class="partial-input-row">
         <div>
-          <label>Ekor ke Loading Dock <span style="color:#dc2626">*</span></label>
+          <label>Ekor <span id="mk-alihkan-label-1">ke Loading Dock</span> <span style="color:#dc2626">*</span></label>
           <input type="text" inputmode="numeric" pattern="[0-9]*" id="mk-qty-alihkan" placeholder="ekor" oninput="sanitizeIntInput(this)">
         </div>
         <div>
-          <label>Kg ke Loading Dock <span style="color:#dc2626">*</span></label>
+          <label>Kg <span id="mk-alihkan-label-2">ke Loading Dock</span> <span style="color:#dc2626">*</span></label>
           <input type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" id="mk-kg-alihkan" placeholder="kg" oninput="sanitizeDecimalInput(this)">
         </div>
       </div>
       <div class="partial-max-hint" id="mk-alihkan-hint">Maks: — ekor / — kg</div>
-      <div style="font-size:11px;color:#92400e;margin-top:6px">ℹ️ Sisanya tetap masuk &amp; tersimpan di Chiller. Loading Dock perlu mengkonfirmasi penerimaan sebelum barang tercatat pindah dari Chiller.</div>
+      <div style="font-size:11px;color:#92400e;margin-top:6px" id="mk-alihkan-note">ℹ️ Sisanya tetap masuk &amp; tersimpan di Chiller. Loading Dock perlu mengkonfirmasi penerimaan sebelum barang tercatat pindah dari Chiller.</div>
     </div>
     <div id="mk-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-bottom:10px;display:none"></div>
     <div class="modal-footer">
@@ -875,6 +880,7 @@ a{text-decoration:none}
       <button class="btn-dest btn-dest-blasting" id="dest-blasting" onclick="selectDest('BLASTING')">🧊<br>Blasting</button>
       <button class="btn-dest btn-dest-marinasi" id="dest-marinasi" onclick="selectDest('MARINASI')">🌶️<br>Marinasi</button>
       <button class="btn-dest btn-dest-loading"  id="dest-loading"  onclick="selectDest('LOADING')">🚛<br>Loading Dock</button>
+      <button class="btn-dest btn-dest-cs"       id="dest-cs"       onclick="selectDest('CS')">🏬<br>CS</button>
     </div>
     <!-- Toggle Kirim Semua / Sebagian -->
     <div style="font-size:13px;font-weight:700;color:#374151;margin-top:14px;margin-bottom:4px">Jumlah yang Dikirim</div>
@@ -1058,7 +1064,8 @@ let clockTimer       = null;
 let activeMovementId = null;
 let activeBasketId   = null;
 let selectedDest     = null;
-let konfirmAlihkanMode = false;
+let konfirmAlihkanMode = false;   // true kalau mode Terima bukan yang aktif (LOADING atau CS)
+let konfirmAlihkanTarget = null;  // 'LOADING' | 'CS' | null
 let cancelMovementId = null;   // untuk modal-cancel-mv
 let returnBasketId   = null;   // untuk modal-return
 
@@ -1387,7 +1394,7 @@ function openModal(id) { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 
 function lokasiLabel(l) {
-  const map = {LANTAI:'Lantai Produksi',CHILLER:'Chiller',LOADING:'Loading Dock',PARTING:'Parting',BONELESS:'Boneless',MARINASI:'Marinasi',BLASTING:'Blasting',SOLD:'Sold',BYPRODUCT_DIRECT:'By-product'};
+  const map = {LANTAI:'Lantai Produksi',CHILLER:'Chiller',LOADING:'Loading Dock',PARTING:'Parting',BONELESS:'Boneless',MARINASI:'Marinasi',BLASTING:'Blasting',SOLD:'Sold',BYPRODUCT_DIRECT:'By-product',CS:'CS'};
   return map[l] || l || '—';
 }
 
@@ -1477,6 +1484,7 @@ function startApp() {
   if (RPA_PERM.getModuleRole(currentUser, 'revisi_batch') !== null) { const rbEl = document.getElementById('nav-revisi-batch'); if (rbEl) rbEl.style.display = 'flex'; }
     if (RPA_PERM.getModuleRole(currentUser, 'void_keranjang') !== null) { const vkEl = document.getElementById('nav-void-keranjang'); if (vkEl) vkEl.style.display = 'flex'; }
     if (RPA_PERM.getModuleRole(currentUser, 'reprint_label') !== null) { const rlEl = document.getElementById('nav-reprint-label'); if (rlEl) rlEl.style.display = 'flex'; }
+    if (RPA_PERM.getModuleRole(currentUser, 'cs') !== null) { const csEl = document.getElementById('nav-cs'); if (csEl) csEl.style.display = 'flex'; }
   if (RPA_PERM.isViewOnly(currentUser.moduleRole)) {
     const smi = document.getElementById('scan-masuk-input');
     const ski = document.getElementById('scan-keluar-input');
@@ -2317,7 +2325,7 @@ async function doScanMasuk() {
     resEl.className = 'scan-result scan-ok';
     detailEl.innerHTML = `Produk: <strong>${prodStr}</strong><br>Qty: <strong>${fmt(mv.qty_pindah)} ekor / ${fmtKg(mv.kg_pindah)}</strong><br>Dari: <strong>${lokasiLabel(mv.dari_lokasi)}</strong><br>Batch: <strong>${lcb?.batch_code||'—'}</strong><br><span style="color:#16a34a">✅ Siap dikonfirmasi masuk Chiller</span>`;
     actEl.innerHTML = `
-      <button class="btn btn-green" onclick="confirmFromScan('${mv.id}');document.getElementById('scan-masuk-input').value=''">✅ Konfirmasi Masuk</button>
+      <button class="btn btn-green" onclick="openKonfirmFromScan('${mv.id}')">✅ Konfirmasi Masuk</button>
       <button class="btn btn-red" onclick="openTolakModal('${mv.id}','${basket.basket_code}');clearScanResult('scan-masuk-result');document.getElementById('scan-masuk-input').value=''">✗ Tolak</button>`;
 
   } catch(e) {
@@ -2325,6 +2333,21 @@ async function doScanMasuk() {
     resEl.className = 'scan-result scan-err';
     detailEl.innerHTML = '❌ Kesalahan sistem. Coba lagi.';
   }
+}
+
+// Dipanggil dari hasil "Scan Keranjang Masuk" — 2026-08-06: dulu langsung
+// konfirmasi polos (Terima ke Chiller saja, tanpa opsi Alihkan), beda dari
+// alur daftar pending yang buka modal-konfirm dengan toggle Terima/Alihkan
+// ke Loading/CS. Sekarang disamakan: buka modal yang sama supaya operator
+// yang scan juga bisa langsung alihkan tanpa harus pindah ke daftar pending.
+// pendingMovements di-refresh dulu karena openKonfirmModal()/setKonfirmMode()
+// mencari movement dari cache itu (join basket/produk lengkap) — movement
+// hasil scan belum tentu sudah ada di cache kalau baru saja masuk.
+async function openKonfirmFromScan(movementId) {
+  clearScanResult('scan-masuk-result');
+  document.getElementById('scan-masuk-input').value = '';
+  await loadPendingMasuk();
+  openKonfirmModal(movementId);
 }
 
 async function confirmFromScan(movementId) {
@@ -2420,15 +2443,29 @@ function openKonfirmModal(movementId) {
   openModal('modal-konfirm');
 }
 
-function setKonfirmMode(alihkan) {
-  konfirmAlihkanMode = alihkan;
-  document.getElementById('mk-toggle-terima').classList.toggle('active', !alihkan);
-  document.getElementById('mk-toggle-alihkan').classList.toggle('active', alihkan);
-  document.getElementById('mk-alihkan-box').classList.toggle('show', alihkan);
-  document.getElementById('mk-btn-ok').textContent = alihkan ? '✅ Konfirmasi & Alihkan' : '✅ Konfirmasi Masuk';
+// target: false (Terima ke Chiller) | 'LOADING' | 'CS'
+const ALIHKAN_LABELS = { LOADING: 'ke Loading Dock', CS: 'ke CS' };
+const ALIHKAN_NOTES = {
+  LOADING: 'ℹ️ Sisanya tetap masuk &amp; tersimpan di Chiller. Loading Dock perlu mengkonfirmasi penerimaan sebelum barang tercatat pindah dari Chiller.',
+  CS:      'ℹ️ Sisanya tetap masuk &amp; tersimpan di Chiller. CS perlu mengkonfirmasi penerimaan sebelum barang tercatat pindah dari Chiller. Stok di CS tidak dilacak lagi oleh sistem ini setelah dikonfirmasi.'
+};
+function setKonfirmMode(target) {
+  konfirmAlihkanMode   = !!target;
+  konfirmAlihkanTarget = target || null;
+  document.getElementById('mk-toggle-terima').classList.toggle('active', !target);
+  document.getElementById('mk-toggle-loading').classList.toggle('active', target === 'LOADING');
+  document.getElementById('mk-toggle-cs').classList.toggle('active', target === 'CS');
+  document.getElementById('mk-alihkan-box').classList.toggle('show', konfirmAlihkanMode);
+  document.getElementById('mk-btn-ok').textContent = konfirmAlihkanMode ? '✅ Konfirmasi & Alihkan' : '✅ Konfirmasi Masuk';
   document.getElementById('mk-err').style.display = 'none';
+  if (konfirmAlihkanMode) {
+    const label = ALIHKAN_LABELS[target] || '';
+    setEl('mk-alihkan-label-1', label);
+    setEl('mk-alihkan-label-2', label);
+    document.getElementById('mk-alihkan-note').innerHTML = ALIHKAN_NOTES[target] || '';
+  }
   const mv = pendingMovements.find(m => m.id === activeMovementId);
-  if (alihkan && mv) {
+  if (konfirmAlihkanMode && mv) {
     document.getElementById('mk-qty-alihkan').value = mv.qty_pindah;
     document.getElementById('mk-kg-alihkan').value  = mv.kg_pindah;
     setEl('mk-alihkan-hint', `Maks: ${fmt(mv.qty_pindah)} ekor / ${fmtKg(mv.kg_pindah)}`);
@@ -2439,9 +2476,11 @@ async function doKonfirmasi() {
   const btn = document.getElementById('mk-btn-ok');
   const err = document.getElementById('mk-err');
   const mv  = pendingMovements.find(m => m.id === activeMovementId);
+  const target = konfirmAlihkanTarget; // 'LOADING' | 'CS' | null
+  const targetLabel = target === 'CS' ? 'CS' : 'Loading Dock';
 
-  // Kalau mode Alihkan ke Loading Dock: validasi jumlah yang dialihkan dulu,
-  // sebelum memanggil RPC apa pun.
+  // Kalau mode Alihkan (Loading Dock / CS): validasi jumlah yang dialihkan
+  // dulu, sebelum memanggil RPC apa pun.
   let qtyAlihkan = null, kgAlihkan = null, isPartialAlihkan = false;
   if (konfirmAlihkanMode) {
     qtyAlihkan = parseFloat(document.getElementById('mk-qty-alihkan').value);
@@ -2471,32 +2510,33 @@ async function doKonfirmasi() {
     const r = typeof data === 'string' ? JSON.parse(data) : data;
     if (!(r.ok ?? r.success)) throw new Error(r.error);
 
-    // Langkah 2 (hanya kalau mode Alihkan): buat movement CHILLER → LOADING baru
-    // berstatus PENDING, sama seperti alur "Pindah Keluar" manual — Loading Dock
-    // tetap perlu konfirmasi terima. basket_id pakai basket hasil konfirmasi di
-    // atas (bisa basket asal, atau basket split baru kalau movement asal partial).
+    // Langkah 2 (hanya kalau mode Alihkan): buat movement CHILLER → LOADING/CS
+    // baru berstatus PENDING, sama seperti alur "Pindah Keluar" manual —
+    // penerima tetap perlu konfirmasi terima. basket_id pakai basket hasil
+    // konfirmasi di atas (bisa basket asal, atau basket split baru kalau
+    // movement asal partial).
     if (konfirmAlihkanMode) {
       try {
         const { error: err2 } = await db.from('basket_movements').insert({
           basket_id:    r.basket_id,
           batch_id:     mv?.batch_id || null,
           dari_lokasi:  'CHILLER',
-          ke_lokasi:    'LOADING',
+          ke_lokasi:    target,
           qty_pindah:   qtyAlihkan,
           kg_pindah:    kgAlihkan,
           is_partial:   isPartialAlihkan,
           status:       'PENDING',
-          catatan:      'Dialihkan ke Loading Dock saat konfirmasi masuk Chiller',
+          catatan:      `Dialihkan ke ${targetLabel} saat konfirmasi masuk Chiller`,
           submitted_by: currentUser.id
         });
         if (err2) throw err2;
       } catch (e2) {
         // Barang sudah tercatat masuk Chiller (langkah 1 sukses) — hanya
-        // pengalihan ke Loading Dock yang gagal dibuat. Jangan dianggap gagal
-        // total; beri tahu operator supaya bisa pindahkan manual lewat "Pindah Keluar".
+        // pengalihan yang gagal dibuat. Jangan dianggap gagal total; beri
+        // tahu operator supaya bisa pindahkan manual lewat "Pindah Keluar".
         closeModal('modal-konfirm');
-        showToast('✅ Masuk Chiller dikonfirmasi, tapi gagal membuat pengalihan ke Loading Dock: ' + (e2.message||'Error') + '. Silakan pindahkan manual lewat tombol "Pindah Keluar".', 'error');
-        activeMovementId = null; konfirmAlihkanMode = false;
+        showToast(`✅ Masuk Chiller dikonfirmasi, tapi gagal membuat pengalihan ke ${targetLabel}: ` + (e2.message||'Error') + '. Silakan pindahkan manual lewat tombol "Pindah Keluar".', 'error');
+        activeMovementId = null; konfirmAlihkanMode = false; konfirmAlihkanTarget = null;
         loadAll();
         return;
       }
@@ -2505,11 +2545,11 @@ async function doKonfirmasi() {
     closeModal('modal-konfirm');
     showToast(
       konfirmAlihkanMode
-        ? `✅ Masuk Chiller dikonfirmasi — ${fmt(qtyAlihkan)} ekor / ${fmtKg(kgAlihkan)} dialihkan ke Loading Dock (menunggu konfirmasi penerima)`
+        ? `✅ Masuk Chiller dikonfirmasi — ${fmt(qtyAlihkan)} ekor / ${fmtKg(kgAlihkan)} dialihkan ke ${targetLabel} (menunggu konfirmasi penerima)`
         : '✅ Keranjang dikonfirmasi masuk Chiller!',
       'success'
     );
-    activeMovementId = null; konfirmAlihkanMode = false;
+    activeMovementId = null; konfirmAlihkanMode = false; konfirmAlihkanTarget = null;
     loadAll();
   } catch(e) {
     err.textContent = 'Gagal: '+(e.message||'Terjadi kesalahan'); err.style.display = 'block';
@@ -2671,7 +2711,7 @@ async function _populatePindahModal(b) {
   const btn = document.getElementById('mp-btn-ok');
   btn.disabled = true; btn.textContent = 'Memeriksa…';
   setPartialMode(false);
-  ['dest-parting','dest-boneless','dest-blasting','dest-marinasi','dest-loading'].forEach(id => document.getElementById(id).classList.remove('selected'));
+  ['dest-parting','dest-boneless','dest-blasting','dest-marinasi','dest-loading','dest-cs'].forEach(id => document.getElementById(id).classList.remove('selected'));
   openModal('modal-pindah');
 
   // Cek pending outgoing movements — hitung sisa efektif
@@ -2718,8 +2758,8 @@ async function _populatePindahModal(b) {
 
 function selectDest(dest) {
   selectedDest = dest;
-  const map = {PARTING:'dest-parting',BONELESS:'dest-boneless',BLASTING:'dest-blasting',MARINASI:'dest-marinasi',LOADING:'dest-loading'};
-  ['dest-parting','dest-boneless','dest-blasting','dest-marinasi','dest-loading'].forEach(id=>document.getElementById(id).classList.remove('selected'));
+  const map = {PARTING:'dest-parting',BONELESS:'dest-boneless',BLASTING:'dest-blasting',MARINASI:'dest-marinasi',LOADING:'dest-loading',CS:'dest-cs'};
+  ['dest-parting','dest-boneless','dest-blasting','dest-marinasi','dest-loading','dest-cs'].forEach(id=>document.getElementById(id).classList.remove('selected'));
   if (map[dest]) document.getElementById(map[dest]).classList.add('selected');
   document.getElementById('mp-err').style.display = 'none';
 }

@@ -231,6 +231,7 @@ table.rb-table tbody tr.selected{background:#ecfdf5}
       </div>
       <div class="nav-section-label">Penjualan</div>
       <div class="nav-item" onclick="navTo('Penjualan.html')"><span class="nav-icon">🛒</span><span class="nav-label-text">Penjualan</span></div>
+      <div class="nav-item" id="nav-cs" style="display:none" onclick="navTo('CS.html')"><span class="nav-icon">🏬</span><span class="nav-label-text">CS (Cold Storage)</span></div>
       <div class="nav-section-label">Manajemen</div>
       <div class="nav-item" onclick="navTo('Koreksi.html')">
         <span class="nav-icon">✅</span><span class="nav-label-text">Koreksi & Approval</span>
@@ -443,6 +444,7 @@ function startApp(){
   if(RPA_PERM.getModuleRole(currentUser,'saldo_awal')!==null){const el=document.getElementById('nav-saldo-awal');if(el)el.style.display='flex'}
   if(RPA_PERM.getModuleRole(currentUser,'reprint_label')!==null){const rlEl=document.getElementById('nav-reprint-label');if(rlEl)rlEl.style.display='flex'}
 
+  if (RPA_PERM.getModuleRole(currentUser, 'cs') !== null) { const csEl = document.getElementById('nav-cs'); if (csEl) csEl.style.display = 'flex'; }
   if(!RPA_PERM.canApprove(moduleRole)){
     document.getElementById('viewer-note-area').innerHTML =
       `<div class="viewer-note">👁️ Anda punya akses <b>lihat saja</b> untuk modul ini — hanya Supervisor/Admin yang bisa memindahkan keranjang ke batch lain.</div>`;

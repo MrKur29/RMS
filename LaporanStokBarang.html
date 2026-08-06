@@ -188,6 +188,7 @@ a{text-decoration:none}
       </div>
       <div class="nav-section-label">Penjualan</div>
       <div class="nav-item" onclick="navTo('Penjualan.html')"><span class="nav-icon">🛒</span><span class="nav-label-text">Penjualan</span></div>
+      <div class="nav-item" id="nav-cs" style="display:none" onclick="navTo('CS.html')"><span class="nav-icon">🏬</span><span class="nav-label-text">CS (Cold Storage)</span></div>
       <div class="nav-section-label">Manajemen</div>
       <div class="nav-item" onclick="navTo('Koreksi.html')">
         <span class="nav-icon">✅</span><span class="nav-label-text">Koreksi & Approval</span>
@@ -412,6 +413,7 @@ function startApp(){
   if (RPA_PERM.getModuleRole(currentUser, 'revisi_batch') !== null) { const rbEl = document.getElementById('nav-revisi-batch'); if (rbEl) rbEl.style.display = 'flex'; }
     if (RPA_PERM.getModuleRole(currentUser, 'void_keranjang') !== null) { const vkEl = document.getElementById('nav-void-keranjang'); if (vkEl) vkEl.style.display = 'flex'; }
     if (RPA_PERM.getModuleRole(currentUser, 'reprint_label') !== null) { const rlEl = document.getElementById('nav-reprint-label'); if (rlEl) rlEl.style.display = 'flex'; }
+    if (RPA_PERM.getModuleRole(currentUser, 'cs') !== null) { const csEl = document.getElementById('nav-cs'); if (csEl) csEl.style.display = 'flex'; }
   if (RPA_PERM.getModuleRole(currentUser, 'saldo_awal') !== null) { const saEl = document.getElementById('nav-saldo-awal'); if (saEl) saEl.style.display = 'flex'; }
   document.getElementById('filter-tgl-saldo').value = todayISO();
   RPA_STATE.bindScroll('LaporanStokBarang');
@@ -618,6 +620,25 @@ async function buildStokAggregate(lokasi, asOfDate){
         }
       });
     })()
+  );
+
+  // G) Saldo Awal (stok opname cutover, migration 49) — basket lahir langsung di
+  //    lokasi ini lewat SaldoAwal.html, tidak lewat basket_movements/carcass_baskets
+  //    manapun, jadi harus dihitung masuk terpisah di sini (2026-08-06).
+  tasks.push(
+    db.from('baskets')
+      .select('product_id,qty_awal,kg_awal,created_at')
+      .eq('basket_type','SALDO_AWAL')
+      .eq('lokasi',lokasi)
+      .neq('status','VOID')
+      .lte('created_at',toBound)
+      .then(({data,error})=>{
+        if(error){console.error('buildStokAggregate G',error);return}
+        (data||[]).forEach(b=>{
+          add(b.product_id,'masuk_qty',Number(b.qty_awal)||0);
+          add(b.product_id,'masuk_kg', Number(b.kg_awal)||0);
+        });
+      })
   );
 
   await Promise.all(tasks);

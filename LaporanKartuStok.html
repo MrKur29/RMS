@@ -205,6 +205,7 @@ a{text-decoration:none}
       </div>
       <div class="nav-section-label">Penjualan</div>
       <div class="nav-item" onclick="navTo('Penjualan.html')"><span class="nav-icon">🛒</span><span class="nav-label-text">Penjualan</span></div>
+      <div class="nav-item" id="nav-cs" style="display:none" onclick="navTo('CS.html')"><span class="nav-icon">🏬</span><span class="nav-label-text">CS (Cold Storage)</span></div>
       <div class="nav-section-label">Manajemen</div>
       <div class="nav-item" onclick="navTo('Koreksi.html')">
         <span class="nav-icon">✅</span><span class="nav-label-text">Koreksi & Approval</span>
@@ -463,6 +464,7 @@ async function startApp(){
   if (RPA_PERM.getModuleRole(currentUser, 'revisi_batch') !== null) { const rbEl = document.getElementById('nav-revisi-batch'); if (rbEl) rbEl.style.display = 'flex'; }
     if (RPA_PERM.getModuleRole(currentUser, 'void_keranjang') !== null) { const vkEl = document.getElementById('nav-void-keranjang'); if (vkEl) vkEl.style.display = 'flex'; }
     if (RPA_PERM.getModuleRole(currentUser, 'reprint_label') !== null) { const rlEl = document.getElementById('nav-reprint-label'); if (rlEl) rlEl.style.display = 'flex'; }
+    if (RPA_PERM.getModuleRole(currentUser, 'cs') !== null) { const csEl = document.getElementById('nav-cs'); if (csEl) csEl.style.display = 'flex'; }
   if (RPA_PERM.getModuleRole(currentUser, 'saldo_awal') !== null) { const saEl = document.getElementById('nav-saldo-awal'); if (saEl) saEl.style.display = 'flex'; }
   document.getElementById('filter-tgl-dari').value = daysAgoISO(30);
   document.getElementById('filter-tgl-sampai').value = todayISO();
@@ -772,6 +774,31 @@ async function fetchAllEvents(productId, lokasi, dateTo){
         });
       });
     })()
+  );
+
+  // G) Saldo Awal (stok opname cutover, migration 49) — basket lahir langsung di
+  //    lokasi ini lewat SaldoAwal.html, tidak lewat basket_movements/carcass_baskets
+  //    manapun, jadi harus dicatat sebagai event masuk terpisah di sini (2026-08-06).
+  queries.push(
+    db.from('baskets')
+      .select('id,basket_code,qty_awal,kg_awal,created_at,keterangan')
+      .eq('basket_type','SALDO_AWAL')
+      .eq('product_id',productId)
+      .eq('lokasi',lokasi)
+      .neq('status','VOID')
+      .lte('created_at',toBound)
+      .then(({data,error})=>{
+        if(error){console.error('fetchAllEvents G',error);return}
+        (data||[]).forEach(b=>{
+          events.push({
+            date:new Date(b.created_at), tipe:'Saldo Awal (Opname)', tipeCls:'tp-produksi',
+            asalTujuan:asalTujuanLabel(lokasi), basketCode:b.basket_code,
+            ket:b.keterangan||'Stok opname cutover',
+            masuk_qty:Number(b.qty_awal)||0, masuk_kg:Number(b.kg_awal)||0,
+            keluar_qty:0, keluar_kg:0
+          });
+        });
+      })
   );
 
   await Promise.all(queries);
