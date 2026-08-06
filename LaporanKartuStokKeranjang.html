@@ -733,11 +733,14 @@ async function tampilkanLedger(basket){
   //    Belum diverifikasi ulang saldo berjalannya utuh untuk data campuran
   //    lama+baru — kalau kelihatan ganjil, cek dulu di sini.
   const{data:pickRows,error:pickErr}=await db.from('picking_slip_items')
-    .select('id,qty_ekor,berat_kg,picking_slips(ps_code,tanggal,status,nama_pelanggan)')
+    .select('id,qty_ekor,berat_kg,picking_slips(ps_code,tanggal,status,nama_pelanggan,confirmed_at,created_at)')
     .eq('basket_id',basket.id);
   if(pickErr)console.error('[KartuStokKeranjang] picking_slip_items gagal:',pickErr);
   (pickRows||[]).forEach(r=>{
-    events.push({date:new Date(r.picking_slips?.tanggal||basket.created_at),tipe:'Terjual',tipeCls:'tp-sold',
+    // Jam pakai confirmed_at (saat benar2 terjual) → created_at (saat draft dibuat) → tanggal (DATE-only, fallback terakhir).
+    // `tanggal` sengaja dihindari sebagai sumber jam utama: kolom DATE tanpa waktu, kalau di-parse
+    // langsung selalu jadi tengah malam UTC yang lalu digeser ke WIB (+7) → selalu tampil 07.00, bukan jam sebenarnya.
+    events.push({date:new Date(r.picking_slips?.confirmed_at||r.picking_slips?.created_at||r.picking_slips?.tanggal||basket.created_at),tipe:'Terjual',tipeCls:'tp-sold',
       ket:`Picking Slip ${esc(r.picking_slips?.ps_code||'—')} — ${esc(r.picking_slips?.nama_pelanggan||'—')} (status ${esc(r.picking_slips?.status||'—')}) · ${fmt(r.qty_ekor)} ${esc(satuan)} · ${fmtKg(r.berat_kg)}`,
       masuk_qty:0,masuk_kg:0,keluar_qty:0,keluar_kg:0,isInfo:true});
   });
