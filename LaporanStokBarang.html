@@ -8,6 +8,8 @@
 <script src="permissions.js"></script>
 <script src="viewstate.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f2f5;color:#111827;font-size:14px}
@@ -90,10 +92,14 @@ a{text-decoration:none}
 .btn-primary{background:#0d9488;color:white}
 .btn-primary:hover{background:#0f766e}
 .btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-outline{background:#f9fafb;color:#374151;border:1.5px solid #d1d5db;padding:7px 12px;border-radius:6px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px;cursor:pointer;white-space:nowrap}
+.btn-outline:hover{background:#f3f4f6}
 .btn-csv{background:#f0fdf4;color:#15803d;border:1.5px solid #86efac;padding:7px 12px;border-radius:6px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px;cursor:pointer;white-space:nowrap}
 .btn-csv:hover{background:#dcfce7}
 .btn-xlsx{background:#eff6ff;color:#1d4ed8;border:1.5px solid #93c5fd;padding:7px 12px;border-radius:6px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px;cursor:pointer;white-space:nowrap}
 .btn-xlsx:hover{background:#dbeafe}
+.btn-pdf{background:#fef2f2;color:#b91c1c;border:1.5px solid #fca5a5;padding:7px 12px;border-radius:6px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px;cursor:pointer;white-space:nowrap}
+.btn-pdf:hover{background:#fee2e2}
 
 /* TABLE */
 .tbl-wrap{overflow-x:auto}
@@ -109,6 +115,19 @@ a{text-decoration:none}
 .rpt-note{font-size:11.5px;color:#9ca3af;padding:12px 16px;border-top:1px solid #f3f4f6;line-height:1.6}
 .tot-row td{font-weight:800;background:#f9fafb}
 .arrow-cell{color:#0d9488;font-weight:800;text-align:center}
+#print-header{display:none}
+
+@media print{
+  .sidebar,.sidebar-overlay,.topbar,.panel:first-of-type,.btn-csv,.btn-xlsx,#btn-print{display:none !important}
+  #app-screen,.app-layout,.main-area,.content-area{height:auto !important;overflow:visible !important;display:block !important}
+  body{background:white}
+  .content-area{padding:0}
+  .panel{box-shadow:none;border:1px solid #e5e7eb;break-inside:avoid}
+  #print-header{display:block !important;margin-bottom:14px}
+  #print-header h2{font-size:16px}
+  #print-header p{font-size:12px;color:#374151;margin-top:2px}
+  .col-print-hide{display:none !important}
+}
 </style>
 </head>
 <body>
@@ -288,9 +307,16 @@ a{text-decoration:none}
             <span class="panel-title" id="result-title">—</span>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn-outline" id="btn-print" onclick="printLaporan()">🖨️ Print</button>
             <button class="btn-csv" onclick="exportStokCSV()">⬇ CSV</button>
             <button class="btn-xlsx" onclick="exportStokXLSX()">⬇ Excel</button>
+            <button class="btn-pdf" onclick="exportStokPDF()">⬇ PDF</button>
           </div>
+        </div>
+
+        <div id="print-header">
+          <h2>🗃️ Laporan Stok Barang</h2>
+          <p id="print-filter-desc">—</p>
         </div>
 
         <div class="tbl-wrap">
@@ -298,10 +324,10 @@ a{text-decoration:none}
             <thead>
               <tr>
                 <th>Produk</th>
-                <th>Kategori</th>
+                <th class="col-print-hide">Kategori</th>
                 <th class="num">Saldo Qty</th>
                 <th class="num">Saldo Kg</th>
-                <th style="width:30px"></th>
+                <th style="width:30px" class="col-print-hide"></th>
               </tr>
             </thead>
             <tbody id="tbody-stok">
@@ -647,6 +673,8 @@ async function buildStokAggregate(lokasi, asOfDate){
 
 function renderStokTable(rows, lokasi, asOfDate){
   const tbody=document.getElementById('tbody-stok');
+  const printDesc = document.getElementById('print-filter-desc');
+  if(printDesc) printDesc.textContent = `Lokasi: ${lokasiLabel(lokasi)}  •  Saldo per ${fmtDateID(asOfDate)}`;
   if(!rows.length){
     tbody.innerHTML = '<tr><td colspan="5"><div class="empty">Tidak ada stok pada lokasi &amp; tanggal ini.</div></td></tr>';
     return;
@@ -659,13 +687,19 @@ function renderStokTable(rows, lokasi, asOfDate){
         <div class="produk-name">${esc(r.nama_produk)}</div>
         <div class="produk-code">${esc(r.product_code)}</div>
       </td>
-      <td>${esc(r.kategori)||'—'}${r.grade?' <span class="badge">Grade '+esc(r.grade)+'</span>':''}</td>
+      <td class="col-print-hide">${esc(r.kategori)||'—'}${r.grade?' <span class="badge">Grade '+esc(r.grade)+'</span>':''}</td>
       <td class="num">${num(r.saldo_qty)}</td>
       <td class="num">${num(r.saldo_kg)}</td>
-      <td class="arrow-cell">→</td>
+      <td class="arrow-cell col-print-hide">→</td>
     </tr>`).join('');
-  html += `<tr class="tot-row"><td>TOTAL</td><td></td><td class="num">${num(totQty)}</td><td class="num">${num(totKg)}</td><td></td></tr>`;
+  html += `<tr class="tot-row"><td>TOTAL</td><td class="col-print-hide"></td><td class="num">${num(totQty)}</td><td class="num">${num(totKg)}</td><td class="col-print-hide"></td></tr>`;
   tbody.innerHTML = html;
+}
+
+// ── PRINT ──
+function printLaporan(){
+  if(!stokRows.length){ showToast('Tampilkan data dulu sebelum print.','warning'); return; }
+  window.print();
 }
 
 function bukaKartuStok(productId, lokasi, asOfDate){
@@ -691,6 +725,37 @@ function exportStokXLSX(){
   const headers = ['Kode Produk','Nama Produk','Kategori','Grade','Saldo Qty','Saldo Kg'];
   const rows = stokRows.map(r=>[r.product_code, r.nama_produk, r.kategori||'', r.grade||'', r.saldo_qty, r.saldo_kg]);
   exportXLSX(headers, rows, 'Stok Barang', todayFilename(`stokbarang_${lokasi}_${asOfDate}`) + 'xlsx');
+}
+function exportStokPDF(){
+  if(!stokRows.length){showToast('Belum ada data untuk diekspor.','warning');return}
+  if(typeof window.jspdf==='undefined'){showToast('Library PDF belum dimuat. Coba refresh.','error');return}
+  const lokasi = document.getElementById('filter-lokasi').value;
+  const asOfDate = document.getElementById('filter-tgl-saldo').value;
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+
+  doc.setFontSize(14);
+  doc.text('Laporan Stok Barang', 14, 16);
+  doc.setFontSize(10);
+  doc.setTextColor(100);
+  doc.text(`Lokasi: ${lokasiLabel(lokasi)}  •  Saldo per ${fmtDateID(asOfDate)}`, 14, 22);
+
+  const totQty = stokRows.reduce((s,r)=>s+r.saldo_qty,0);
+  const totKg  = stokRows.reduce((s,r)=>s+r.saldo_kg,0);
+  const body = stokRows.map(r=>[r.nama_produk, num(r.saldo_qty), num(r.saldo_kg)]);
+  body.push(['TOTAL', num(totQty), num(totKg)]);
+
+  doc.autoTable({
+    startY: 28,
+    head: [['Produk','Saldo Qty','Saldo Kg']],
+    body,
+    styles: { fontSize: 9, cellPadding: 3 },
+    headStyles: { fillColor: [13,148,136] },
+    columnStyles: { 1: {halign:'right'}, 2: {halign:'right'} },
+    didParseCell: (data) => { if (data.row.index === body.length-1) data.cell.styles.fontStyle = 'bold'; }
+  });
+
+  doc.save(todayFilename(`stokbarang_${lokasi}_${asOfDate}`) + 'pdf');
 }
 </script>
 </body>
