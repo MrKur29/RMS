@@ -340,6 +340,13 @@ a { text-decoration: none; }
 .is-supervisor .supervisor-card { display: block; }
 .supervisor-card { display: none; }
 
+/* Ringkasan lintas-modul (cards/batch/chiller/pending) sementara hanya
+   untuk supervisor/admin, sampai versi per-modul dikembangkan. */
+.dashboard-op-panels { display: none; }
+.is-supervisor .dashboard-op-panels { display: block; }
+.dashboard-empty-state { display: block; }
+.is-supervisor .dashboard-empty-state { display: none; }
+
 /* ===== TABLE SCROLL WRAPPER ===== */
 .tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .tbl-wrap .tbl { min-width: 600px; }
@@ -592,6 +599,19 @@ a { text-decoration: none; }
         <!-- CONTENT -->
         <div class="content-area">
 
+            <!-- EMPTY STATE: non-supervisor, sampai dashboard per-modul dibuat -->
+            <div class="dashboard-empty-state">
+                <div class="panel">
+                    <div class="empty" style="padding:60px 16px">
+                        <div class="e-icon">📋</div>
+                        Ringkasan dashboard belum tersedia untuk peran Anda.<br>
+                        Gunakan menu di samping untuk membuka modul yang bisa Anda akses.
+                    </div>
+                </div>
+            </div>
+
+            <div class="dashboard-op-panels">
+
             <!-- SUMMARY CARDS -->
             <div class="cards-row" id="cards-row">
                 <!-- Diisi oleh JS -->
@@ -682,6 +702,8 @@ a { text-decoration: none; }
                     </div>
                 </div>
             </div>
+
+            </div><!-- end dashboard-op-panels -->
 
             <!-- ROW 4: Supervisor sections -->
             <div class="supervisor-section">
@@ -1022,7 +1044,17 @@ async function loadDashboard() {
     btn.classList.add('loading');
 
     try {
-        const isSupervisor = currentUser.role === 'SUPERVISOR';
+        const isSupervisor = currentUser.role === 'SUPERVISOR' || currentUser.is_system_admin;
+
+        if (!isSupervisor) {
+            // Ringkasan lintas-modul disembunyikan untuk non-supervisor untuk
+            // sementara (lihat .dashboard-op-panels di CSS) — belum ada
+            // versi per-modul, jadi jangan query data yang tidak akan
+            // ditampilkan sama sekali.
+            document.getElementById('last-updated').textContent =
+                'Update: ' + new Date().toLocaleTimeString('id-ID', { hour:'2-digit', minute:'2-digit' });
+            return;
+        }
 
         const queries = [
             db.from('v_ringkasan_hari_ini').select('*').maybeSingle(),
@@ -1079,7 +1111,7 @@ function renderCards(d) {
     const review    = Number(d.total_needs_review || 0);
     const koreksi   = Number(d.total_koreksi_pending || 0);
     const wmsIssue  = Number(d.wms_sync_issue || 0);
-    const isSup     = currentUser.role === 'SUPERVISOR';
+    const isSup     = currentUser.role === 'SUPERVISOR' || currentUser.is_system_admin;
 
     // Update badge nav koreksi
     if (koreksi > 0) {
