@@ -860,12 +860,22 @@ async function tambahEntry(){
   };
 
   try {
-    const { error } = await db.from('byproduct_karkas_entries').insert(payload);
+    const { data: inserted, error } = await db.from('byproduct_karkas_entries')
+      .insert(payload)
+      .select('id,tanggal,product_id,qty_bungkus,kg,nama_pelanggan,keterangan,tujuan,status,label_code,label_printed,created_at,product_master(id,product_code,nama_produk)')
+      .single();
     if(error) throw error;
     toast(`Entry ditambahkan${tujuan==='CHILLER'?' — menunggu konfirmasi chiller':''}`, 'success');
     resetForm();
     loadNamaPelanggan(); // refresh datalist
     loadAll();
+    // Tujuan Chiller → langsung buka preview label supaya operator bisa cetak di tempat
+    if(tujuan==='CHILLER' && inserted){
+      printTarget = inserted;
+      const container = document.getElementById('qr-label-container');
+      if (container) container.innerHTML = RPALabel.buildStandardLabelHTML(toLabelData(inserted));
+      showModal('modal-label');
+    }
   } catch(e){ toast('Gagal simpan: '+e.message,'error'); }
   finally{ btn.disabled=false; btn.textContent='+ Tambah'; }
 }
