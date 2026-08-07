@@ -674,6 +674,37 @@ async function fetchAllEventsSemuaProduk(dateFrom, dateTo){
     })()
   );
 
+  // G) Saldo Awal (stok opname cutover, migration 49) — basket lahir langsung di
+  //    Chiller lewat SaldoAwal.html, tidak lewat basket_movements/processing_*
+  //    manapun, jadi harus dicatat sebagai event masuk terpisah di sini. Dicatat
+  //    begitu keranjang dibuat (created_at), TIDAK menunggu sesi di-FINAL-kan —
+  //    per keputusan user 2026-08-07, konsisten dengan LaporanStokBarang/
+  //    LaporanKartuStok/RekapanMutasiBarang.
+  queries.push(
+    db.from('baskets')
+      .select('id,basket_code,product_id,qty_awal,kg_awal,created_at,saldo_awal_sessions(tanggal_opname,catatan)')
+      .eq('basket_type','SALDO_AWAL')
+      .eq('lokasi',LOKASI)
+      .neq('status','VOID')
+      .gte('created_at',fromBound)
+      .lte('created_at',toBound)
+      .then(({data,error})=>{
+        if(error){console.error('fetchAllEventsSemuaProduk G',error);return}
+        (data||[]).forEach(b=>{
+          const s=b.saldo_awal_sessions;
+          events.push({
+            date:new Date(b.created_at), tipe:'Stok Awal', tipeCls:'tp-produksi',
+            asalTujuan:'Saldo Awal',
+            product_id:b.product_id,
+            basketCode:b.basket_code||'—',
+            ket:`Saldo Awal (Stok Opname)${s?.tanggal_opname?' — '+fmtDateID(s.tanggal_opname):''}${s?.catatan?' — '+s.catatan:''}`,
+            masuk_qty:Number(b.qty_awal)||0, masuk_kg:Number(b.kg_awal)||0,
+            keluar_qty:0, keluar_kg:0
+          });
+        });
+      })
+  );
+
   await Promise.all(queries);
 
   // F) Lengkapi Keterangan untuk baris yang menyentuh Loading (penjualan) dengan No PS & nama customer,
