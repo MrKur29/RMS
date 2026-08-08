@@ -1288,8 +1288,15 @@ function renderBatchModuleCards(containerId, rows) {
     const jumlahBatch    = rows.length;
     const totalEkor      = sumBy(rows, 'total_karkas_qty');
     const totalKgKarkas  = sumBy(rows, 'total_karkas_kg');
-    const totalKgKandang = sumBy(rows, 'kg_kandang');
-    const pctYield        = totalKgKandang > 0 ? (totalKgKarkas / totalKgKandang * 100) : null;
+    // Yield = Kg Karkas / Kg Kandang, TAPI cuma dihitung dari batch yang
+    // kg_kandang-nya sudah diisi (biasanya baru keisi begitu batch dibuat
+    // ACTIVE) — batch yang belum diisi kg_kandang-nya dibuang dari numerator
+    // maupun denominator, supaya tidak mengecilkan/membesarkan % secara
+    // tidak wajar akibat data yang belum lengkap.
+    const rowsWithKandang  = rows.filter(r => r.kg_kandang != null && Number(r.kg_kandang) > 0);
+    const totalKgKandang   = sumBy(rowsWithKandang, 'kg_kandang');
+    const totalKgKarkasIsi = sumBy(rowsWithKandang, 'total_karkas_kg');
+    const pctYield          = totalKgKandang > 0 ? (totalKgKarkasIsi / totalKgKandang * 100) : null;
 
     el.innerHTML = `
         <div class="summary-card c-blue">
@@ -1324,6 +1331,11 @@ function renderBatchBulanTable(rows) {
 
     tbody.innerHTML = rows.map(r => {
         const abwKandang = (r.ekor_kandang ? Number(r.kg_kandang) / Number(r.ekor_kandang) : null);
+        // Yield per-batch = Kg Karkas / Kg Kandang, langsung dari
+        // pct_rendemen_kandang di view v_batch_bulan_ini — sudah otomatis
+        // NULL kalau kg_kandang belum diisi (NULLIF di SQL-nya), jadi baris
+        // yang belum lengkap datanya tampil "—" bukan angka yang menyesatkan.
+        const pctYield = r.pct_rendemen_kandang;
         return `
         <tr>
             <td><strong>${r.batch_code || '—'}</strong></td>
@@ -1332,7 +1344,7 @@ function renderBatchBulanTable(rows) {
             <td>${abwKandang != null ? fmt(abwKandang, 2) : '<span style="color:#9ca3af">—</span>'}</td>
             <td>${fmt(r.total_karkas_qty)}</td>
             <td><strong>${fmt(r.total_karkas_kg, 1)}</strong></td>
-            <td>${r.pct_rendemen_kandang != null ? fmt(r.pct_rendemen_kandang, 1) + '%' : '<span style="color:#9ca3af">—</span>'}</td>
+            <td>${pctYield != null ? fmt(pctYield, 1) + '%' : '<span style="color:#9ca3af">—</span>'}</td>
         </tr>
     `;
     }).join('');
