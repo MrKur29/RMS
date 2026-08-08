@@ -542,6 +542,16 @@ const LOKASI_OPTIONS = [
 ];
 function lokasiLabel(v){ return (LOKASI_OPTIONS.find(l=>l.value===v)||{}).label || v || '-'; }
 
+// Label posisi TERKINI basket (bukan posisi saat opname) — dipakai sebagai info
+// tambahan di tabel sesi opname supaya tetap transparan kalau basket sudah
+// berpindah/terjual/habis SETELAH dicatat, tanpa menimpa catatan opname aslinya.
+function currentStateLabel(e){
+  if(e.status === 'VOID') return 'Void';
+  if(e.lokasi === 'SOLD') return 'Terjual';
+  if(e.status === 'HABIS') return 'Habis/Terpakai';
+  return lokasiLabel(e.lokasi);
+}
+
 const KATEGORI_LABELS = {
   'KARKAS':'Karkas','CU':'Cut Up','EXT':'EXT','PART':'Part','BONELESS':'Boneless',
   'MARINASI':'Marinasi','BYPRODUCT_KARKAS':'BP Karkas','BYPRODUCT_PARTING':'BP Parting','BYPRODUCT_BONELESS':'BP Boneless'
@@ -818,7 +828,7 @@ function renderSessionHeader(){
         <span>🔒 Sesi ini sudah <strong>Diselesaikan</strong>${currentSession.revisi_count>0?` <span style="color:#b45309">(direvisi ${currentSession.revisi_count}×, alasan terakhir: "${currentSession.last_revisi_alasan||'-'}")</span>`:''}</span>
         ${(!viewOnly && canApprove) ? '<button class="btn-revisi" onclick="openRevisiPin()">🔑 Revisi (PIN Supervisor)</button>' : ''}
       </div>`;
-    bar.style.display = '';
+    bar.style.display = 'block';
   } else {
     panelForm.style.display = viewOnly ? 'none' : '';
     btnSelesai.style.display = (viewOnly || !canApprove) ? 'none' : '';
@@ -870,11 +880,17 @@ async function tambahEntry(){
       qty_awal: qty, qty_sisa: qty,
       kg_awal: kg, kg_sisa: kg,
       lokasi,
+      // lokasi_opname: dibekukan SEKALI di sini. Kolom `lokasi` di atas akan terus
+      // berubah kalau keranjang ini nanti dipindah/dijual (lihat migration 81) —
+      // lokasi_opname TIDAK PERNAH disentuh proses lain, supaya laporan sesi opname
+      // tetap jadi dokumen tetap ("apa yang tercatat pada tanggal opname"), bukan
+      // ikut berubah mengikuti posisi terkini barang.
+      lokasi_opname: lokasi,
       keterangan,
       status: 'AKTIF',
       saldo_awal_session_id: currentSession.id,
       created_by: currentUser.id
-    }).select('id,basket_code,product_id,qty_awal,kg_awal,lokasi,keterangan,tanggal_produksi,created_at,product_master(nama_produk,product_code,satuan_qty)').single();
+    }).select('id,basket_code,product_id,qty_awal,kg_awal,lokasi,lokasi_opname,status,keterangan,tanggal_produksi,created_at,product_master(nama_produk,product_code,satuan_qty)').single();
     if(bErr) throw bErr;
 
     entriesList.unshift(basket);
@@ -889,7 +905,9 @@ async function tambahEntry(){
     showModal('modal-label');
     resetForm();
   } catch(e){
-    if(e.message.includes('keterangan')){
+    if(e.message.includes('lokasi_opname')){
+      toast('⚠️ Skema belum siap — pastikan migration 81 sudah dijalankan di Supabase','warning',7000);
+    } else if(e.message.includes('keterangan')){
       toast('⚠️ Skema belum siap — pastikan migration 65 sudah dijalankan di Supabase','warning',7000);
     } else if(e.message.includes('does not exist') || e.message.includes('SALDO_AWAL') || e.message.includes('check constraint')){
       toast('⚠️ Skema belum siap — pastikan migration 49 sudah dijalankan di Supabase','warning',7000);
@@ -912,7 +930,7 @@ async function syncSessionCount(){
 async function loadEntries(){
   try {
     const { data, error } = await db.from('baskets')
-      .select('id,basket_code,product_id,qty_awal,kg_awal,lokasi,keterangan,tanggal_produksi,created_at,product_master(nama_produk,product_code,satuan_qty)')
+      .select('id,basket_code,product_id,qty_awal,kg_awal,lokasi,lokasi_opname,status,keterangan,tanggal_produksi,created_at,product_master(nama_produk,product_code,satuan_qty)')
       .eq('saldo_awal_session_id', currentSession.id)
       .order('created_at', {ascending:false});
     if(error) throw error;
@@ -940,9 +958,14 @@ function renderEntries(){
     if(!locked){
       aksi += ` <button class="btn-action btn-delete" onclick="openHapus('${e.id}')">🗑️</button>`;
     }
+    // Lokasi saat opname = nilai BEKU (lokasi_opname). Fallback ke `lokasi` hanya
+    // untuk baris lama yang dibuat sebelum migration 81 dijalankan/backfill.
+    const opnameLoc = e.lokasi_opname || e.lokasi;
+    const stateNow  = currentStateLabel(e);
+    const hasMoved  = e.lokasi_opname && (e.lokasi !== e.lokasi_opname || e.status !== 'AKTIF');
     return `<tr>
       <td style="font-weight:700">${e.basket_code}</td>
-      <td><span class="badge badge-lokasi">${lokasiLabel(e.lokasi)}</span></td>
+      <td><span class="badge badge-lokasi">${lokasiLabel(opnameLoc)}</span>${hasMoved?`<div style="font-size:10px;color:#9ca3af;margin-top:2px">kini: ${stateNow}</div>`:''}</td>
       <td>${prod?prod.nama_produk:'-'}</td>
       <td style="text-align:right">${fmtNum(e.qty_awal)} ${prod?.satuan_qty||''}</td>
       <td style="text-align:right">${fmtKg(e.kg_awal)}</td>

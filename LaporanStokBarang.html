@@ -651,16 +651,33 @@ async function buildStokAggregate(lokasi, asOfDate){
   // G) Saldo Awal (stok opname cutover, migration 49) — basket lahir langsung di
   //    lokasi ini lewat SaldoAwal.html, tidak lewat basket_movements/carcass_baskets
   //    manapun, jadi harus dihitung masuk terpisah di sini (2026-08-06).
+  //
+  //    2026-08-08 FIX: filter pakai `lokasi_opname` (migration 81, lokasi BEKU
+  //    saat opname), BUKAN `lokasi` (lokasi TERKINI). `lokasi` berubah tiap kali
+  //    basket ini pindah/terjual — pakai itu bikin laporan "sebagai per tanggal
+  //    opname" salah menampilkan barang di lokasi tujuan (atau "SOLD") padahal
+  //    saat itu masih di lokasi asal. Selain itu, basket hasil split (kode
+  //    "<akar>-N", lihat migration 60/82) SENGAJA dilewati — kontribusinya ke
+  //    lokasi tujuan sudah terhitung lewat basket_movements di Section B,
+  //    ikut menghitungnya lagi di sini akan DOUBLE COUNT.
+  //    2026-08-08 FIX #2: filter tanggal pakai `saldo_awal_sessions.tanggal_opname`
+  //    (tanggal FISIK opname), BUKAN `created_at` (kapan baris ini disimpan ke
+  //    sistem). Ini beda kalau ada revisi sesi FINAL untuk nambah keranjang yang
+  //    ketinggalan — keranjang itu baru DISIMPAN belakangan (created_at = hari
+  //    ini), tapi secara opname tetap harus dihitung ada sejak tanggal_opname.
+  //    RekapanMutasiBarang.html sudah benar dari awal (2026-08-06), Laporan ini
+  //    dan LaporanKartuStok/LaporanRincianTransaksiChiller belum — disamakan.
   tasks.push(
     db.from('baskets')
-      .select('product_id,qty_awal,kg_awal,created_at')
+      .select('basket_code,product_id,qty_awal,kg_awal,created_at,saldo_awal_sessions!inner(tanggal_opname)')
       .eq('basket_type','SALDO_AWAL')
-      .eq('lokasi',lokasi)
+      .eq('lokasi_opname',lokasi)
       .neq('status','VOID')
-      .lte('created_at',toBound)
+      .lte('saldo_awal_sessions.tanggal_opname',asOfDate)
       .then(({data,error})=>{
         if(error){console.error('buildStokAggregate G',error);return}
         (data||[]).forEach(b=>{
+          if(!/^SA-[0-9]{6}-[0-9]{4}$/.test(b.basket_code)) return;  // lewati hasil split
           add(b.product_id,'masuk_qty',Number(b.qty_awal)||0);
           add(b.product_id,'masuk_kg', Number(b.kg_awal)||0);
         });

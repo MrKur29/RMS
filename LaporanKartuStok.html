@@ -782,19 +782,30 @@ async function fetchAllEvents(productId, lokasi, dateTo){
   // G) Saldo Awal (stok opname cutover, migration 49) — basket lahir langsung di
   //    lokasi ini lewat SaldoAwal.html, tidak lewat basket_movements/carcass_baskets
   //    manapun, jadi harus dicatat sebagai event masuk terpisah di sini (2026-08-06).
+  //
+  //    2026-08-08 FIX: pakai `lokasi_opname` (migration 81), bukan `lokasi` yang
+  //    berubah begitu basket ini pindah/terjual — lihat catatan yang sama di
+  //    LaporanStokBarang.html. Basket hasil split (kode "<akar>-N") dilewati,
+  //    kontribusinya sudah tercatat lewat event transfer basket_movements.
+  //    2026-08-08 FIX #2: filter DAN tanggal event yang ditampilkan pakai
+  //    `saldo_awal_sessions.tanggal_opname` (tanggal FISIK opname), bukan
+  //    `created_at` (kapan baris disimpan) — supaya keranjang yang ditambahkan
+  //    belakangan lewat revisi sesi FINAL tetap muncul & terurut di tanggal
+  //    opname aslinya, bukan hilang dari laporan "sampai tanggal opname".
   queries.push(
     db.from('baskets')
-      .select('id,basket_code,qty_awal,kg_awal,created_at,keterangan')
+      .select('id,basket_code,qty_awal,kg_awal,created_at,keterangan,saldo_awal_sessions!inner(tanggal_opname)')
       .eq('basket_type','SALDO_AWAL')
       .eq('product_id',productId)
-      .eq('lokasi',lokasi)
+      .eq('lokasi_opname',lokasi)
       .neq('status','VOID')
-      .lte('created_at',toBound)
+      .lte('saldo_awal_sessions.tanggal_opname',dateTo)
       .then(({data,error})=>{
         if(error){console.error('fetchAllEvents G',error);return}
         (data||[]).forEach(b=>{
+          if(!/^SA-[0-9]{6}-[0-9]{4}$/.test(b.basket_code)) return;  // lewati hasil split
           events.push({
-            date:new Date(b.created_at), tipe:'Saldo Awal (Opname)', tipeCls:'tp-produksi',
+            date:new Date(b.saldo_awal_sessions.tanggal_opname), tipe:'Saldo Awal (Opname)', tipeCls:'tp-produksi',
             asalTujuan:asalTujuanLabel(lokasi), basketCode:b.basket_code,
             ket:b.keterangan||'Stok opname cutover',
             masuk_qty:Number(b.qty_awal)||0, masuk_kg:Number(b.kg_awal)||0,

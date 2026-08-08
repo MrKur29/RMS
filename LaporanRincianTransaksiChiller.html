@@ -680,20 +680,30 @@ async function fetchAllEventsSemuaProduk(dateFrom, dateTo){
   //    begitu keranjang dibuat (created_at), TIDAK menunggu sesi di-FINAL-kan —
   //    per keputusan user 2026-08-07, konsisten dengan LaporanStokBarang/
   //    LaporanKartuStok/RekapanMutasiBarang.
+  //    2026-08-08 FIX: pakai `lokasi_opname` (migration 81), bukan `lokasi` yang
+  //    berubah begitu basket ini pindah/terjual — lihat catatan yang sama di
+  //    LaporanStokBarang.html. Basket hasil split (kode "<akar>-N") dilewati,
+  //    kontribusinya sudah tercatat lewat event transfer basket_movements.
+  //    2026-08-08 FIX #2: filter DAN tanggal event pakai
+  //    `saldo_awal_sessions.tanggal_opname` (tanggal FISIK opname), bukan
+  //    `created_at` (kapan baris disimpan) — supaya keranjang yang ditambahkan
+  //    belakangan lewat revisi sesi FINAL tetap muncul di rentang tanggal yang
+  //    benar, bukan hilang atau salah tanggal.
   queries.push(
     db.from('baskets')
-      .select('id,basket_code,product_id,qty_awal,kg_awal,created_at,saldo_awal_sessions(tanggal_opname,catatan)')
+      .select('id,basket_code,product_id,qty_awal,kg_awal,created_at,saldo_awal_sessions!inner(tanggal_opname,catatan)')
       .eq('basket_type','SALDO_AWAL')
-      .eq('lokasi',LOKASI)
+      .eq('lokasi_opname',LOKASI)
       .neq('status','VOID')
-      .gte('created_at',fromBound)
-      .lte('created_at',toBound)
+      .gte('saldo_awal_sessions.tanggal_opname',dateFrom)
+      .lte('saldo_awal_sessions.tanggal_opname',dateTo)
       .then(({data,error})=>{
         if(error){console.error('fetchAllEventsSemuaProduk G',error);return}
         (data||[]).forEach(b=>{
+          if(!/^SA-[0-9]{6}-[0-9]{4}$/.test(b.basket_code)) return;  // lewati hasil split
           const s=b.saldo_awal_sessions;
           events.push({
-            date:new Date(b.created_at), tipe:'Stok Awal', tipeCls:'tp-produksi',
+            date:new Date(s.tanggal_opname), tipe:'Stok Awal', tipeCls:'tp-produksi',
             asalTujuan:'Saldo Awal',
             product_id:b.product_id,
             basketCode:b.basket_code||'—',

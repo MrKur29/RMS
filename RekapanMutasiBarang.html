@@ -570,14 +570,21 @@ async function computeSaldoKumulatif(cutoffDate){
 
   // 4) Opname Saldo Awal (dicatat begitu keranjang dibuat, TIDAK menunggu sesi
   //    di-FINAL-kan — per keputusan user 2026-08-07, tanggal_opname <= cutoff)
+  //    2026-08-08 FIX: basket hasil split dari transfer sebagian (kode "<akar>-N",
+  //    migration 60/82) mewarisi basket_type='SALDO_AWAL' dari basket sumbernya
+  //    lewat row-copy — kalau ikut dijumlah di sini, qty_awal-nya DOUBLE COUNT
+  //    (sudah termasuk di qty_awal basket akar). Hanya basket akar yang dihitung.
   tasks.push(
     fetchAllRows(()=>db.from('baskets')
-      .select('product_id,qty_awal,kg_awal,saldo_awal_sessions!inner(status,tanggal_opname)')
+      .select('basket_code,product_id,qty_awal,kg_awal,saldo_awal_sessions!inner(status,tanggal_opname)')
       .eq('basket_type','SALDO_AWAL')
       .neq('status','VOID')
       .lte('saldo_awal_sessions.tanggal_opname', cutoffDate)
     ).then(data=>{
-      (data||[]).forEach(b=>bump(masuk,b.product_id,b.qty_awal,b.kg_awal));
+      (data||[]).forEach(b=>{
+        if(!/^SA-[0-9]{6}-[0-9]{4}$/.test(b.basket_code)) return;  // lewati hasil split
+        bump(masuk,b.product_id,b.qty_awal,b.kg_awal);
+      });
     })
   );
 
@@ -724,15 +731,20 @@ async function computePeriodBreakdown(fromDate, toDate){
   // computeSaldoKumulatif() sudah benar sejak awal, ini cuma nambah
   // visibilitas per-periode). TIDAK menunggu sesi di-FINAL-kan — dicatat begitu
   // keranjang dibuat, sama seperti laporan lain — per keputusan user 2026-08-07.
+  // 2026-08-08 FIX: lewati basket hasil split (kode "<akar>-N") — sudah dijelaskan
+  // di computeSaldoKumulatif() di atas, pola bug yang sama.
   tasks.push(
     fetchAllRows(()=>db.from('baskets')
-      .select('product_id,qty_awal,kg_awal,saldo_awal_sessions!inner(status,tanggal_opname)')
+      .select('basket_code,product_id,qty_awal,kg_awal,saldo_awal_sessions!inner(status,tanggal_opname)')
       .eq('basket_type','SALDO_AWAL')
       .neq('status','VOID')
       .gte('saldo_awal_sessions.tanggal_opname', fromDate)
       .lte('saldo_awal_sessions.tanggal_opname', toDate)
     ).then(data=>{
-      (data||[]).forEach(b=>bump(buckets.saldo_awal_in,b.product_id,b.qty_awal,b.kg_awal));
+      (data||[]).forEach(b=>{
+        if(!/^SA-[0-9]{6}-[0-9]{4}$/.test(b.basket_code)) return;
+        bump(buckets.saldo_awal_in,b.product_id,b.qty_awal,b.kg_awal);
+      });
     })
   );
 
@@ -841,13 +853,25 @@ async function computeSaldoChiller(cutoffDate){
 
   // Opname Saldo Awal yang dicatat DI Chiller — TIDAK menunggu sesi FINAL
   // (per keputusan user 2026-08-07).
+  //
+  // 2026-08-08 FIX: pakai `lokasi_opname` (migration 81), bukan `lokasi` yang
+  // TERKINI. Bug lama: begitu basket SALDO_AWAL yang diopname di Chiller pindah
+  // PENUH (bukan partial) ke lokasi lain, `.eq('lokasi','CHILLER')` berhenti
+  // match — qty_awal-nya hilang dari "masuk" di sini, PADAHAL "keluar" di atas
+  // (dari_lokasi='CHILLER', basket_movements) tetap menghitung transfer keluarnya.
+  // Akibatnya saldo Chiller under-counted 2x lipat dari qty basket itu. Basket
+  // hasil split (kode "<akar>-N") dilewati — sudah kehitung lewat basket
+  // sumbernya + basket_movements di atas.
   tasks.push(
     fetchAllRows(()=>db.from('baskets')
-      .select('product_id,qty_awal,kg_awal,lokasi,saldo_awal_sessions!inner(status,tanggal_opname)')
-      .eq('basket_type','SALDO_AWAL').eq('lokasi','CHILLER').neq('status','VOID')
+      .select('basket_code,product_id,qty_awal,kg_awal,lokasi_opname,saldo_awal_sessions!inner(status,tanggal_opname)')
+      .eq('basket_type','SALDO_AWAL').eq('lokasi_opname','CHILLER').neq('status','VOID')
       .lte('saldo_awal_sessions.tanggal_opname', cutoffDate)
     ).then(data=>{
-      (data||[]).forEach(b=>bump(masuk,b.product_id,b.qty_awal,b.kg_awal));
+      (data||[]).forEach(b=>{
+        if(!/^SA-[0-9]{6}-[0-9]{4}$/.test(b.basket_code)) return;
+        bump(masuk,b.product_id,b.qty_awal,b.kg_awal);
+      });
     })
   );
 
@@ -926,14 +950,17 @@ async function computePeriodChiller(fromDate, toDate){
   // Masuk: Saldo Awal (stok opname cutover, migration 49) dicatat DI Chiller,
   // tanggal_opname jatuh di periode ini. TIDAK menunggu sesi di-FINAL-kan —
   // dicatat begitu keranjang dibuat (per keputusan user 2026-08-07).
+  //
+  // 2026-08-08 FIX: pakai `lokasi_opname`, bukan `lokasi` TERKINI — pola bug
+  // sama seperti computeSaldoChiller() di atas. Basket hasil split dilewati.
   tasks.push(
     fetchAllRows(()=>db.from('baskets')
-      .select('product_id,qty_awal,kg_awal,saldo_awal_sessions!inner(status,tanggal_opname)')
-      .eq('basket_type','SALDO_AWAL').eq('lokasi','CHILLER').neq('status','VOID')
+      .select('basket_code,product_id,qty_awal,kg_awal,saldo_awal_sessions!inner(status,tanggal_opname)')
+      .eq('basket_type','SALDO_AWAL').eq('lokasi_opname','CHILLER').neq('status','VOID')
       .gte('saldo_awal_sessions.tanggal_opname', fromDate)
       .lte('saldo_awal_sessions.tanggal_opname', toDate)
     ).then(data=>{
-      (data||[]).forEach(b=>bump(masuk.saldo_awal,b.product_id,b.qty_awal,b.kg_awal));
+      (data||[]).filter(b=>/^SA-[0-9]{6}-[0-9]{4}$/.test(b.basket_code)).forEach(b=>bump(masuk.saldo_awal,b.product_id,b.qty_awal,b.kg_awal));
     })
   );
 
