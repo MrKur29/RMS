@@ -1061,7 +1061,7 @@ function renderWOList() {
       ? `<div class="tbl-sub" style="margin-top:3px"><span class="badge b-multi" style="font-size:9px;padding:1px 5px">${stageCount} stage</span></div>`
       : '';
     return `<tr>
-      <td style="font-family:monospace;font-weight:800;font-size:12px">${wo.order_code}</td>
+      <td style="font-family:monospace;font-weight:800;font-size:12px">${wo.order_code}${wo.catatan ? `<div class="tbl-sub" style="font-family:sans-serif;font-weight:400;white-space:normal">${wo.catatan}</div>` : ''}</td>
       <td>${tipeBadge(wo.tipe, wo.stages)}${stageInfo}</td>
       <td>${produkName}</td>
       <td>${target}</td>
