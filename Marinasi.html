@@ -3226,6 +3226,7 @@ function renderWSWOList() {
       // Input progress: semua input WO ini (filter ke WS ini)
       const wsInputs  = (wo.processing_inputs || []).filter(i => !i.workstation_id || i.workstation_id === selectedWSId);
       const inputKg   = wsInputs.reduce((s, i) => s + (Number(i.kg_diambil) || 0), 0);
+      const inputEkor = wsInputs.reduce((s, i) => s + (Number(i.qty_input) || 0), 0);
       const inputCount= wsInputs.length;
       // Target per WS (dari wo_workstations) atau fallback WO target
       const wws       = (wo.wo_workstations || []).find(w => w.workstation_id === selectedWSId);
@@ -3246,7 +3247,7 @@ function renderWSWOList() {
         '<td>' + (pm.nama_produk || '—') + '<div class="tbl-sub">' + (pm.product_code || '') + '</div></td>' +
         '<td>' + fmtKg(wo.target_kg) + '<div class="tbl-sub">' + fmt(wo.target_qty_ekor) + ' ekor</div></td>' +
         '<td>' +
-          '<div style="font-size:12px;font-weight:700;color:#374151">' + fmtKg(inputKg) + '</div>' +
+          '<div style="font-size:12px;font-weight:700;color:#374151">' + fmtKg(inputKg) + ' · ' + fmt(inputEkor) + ' ekor</div>' +
           '<div class="tbl-sub">' + inputCount + ' keranjang' + (inputPct !== null ? ' · ' + inputPct + '%' : '') + '</div>' +
         '</td>' +
         '<td>' + progressBar(wo) + '</td>' +

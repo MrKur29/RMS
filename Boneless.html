@@ -3456,6 +3456,7 @@ function renderWSWOList() {
       // Input progress: semua input WO (di Boneless, input adalah shared di level WO)
       const wsInputs  = wo.processing_inputs || [];
       const inputKg   = wsInputs.reduce((s, i) => s + (Number(i.kg_diambil) || 0), 0);
+      const inputEkor = wsInputs.reduce((s, i) => s + (Number(i.qty_input) || 0), 0);
       const inputCount= wsInputs.length;
       const wsTargetKg= Number(wo.target_kg || 0);
       const inputPct  = wsTargetKg > 0 ? Math.min(100, Math.round(inputKg / wsTargetKg * 100)) : null;
@@ -3475,7 +3476,7 @@ function renderWSWOList() {
         '<td>' + (pm.nama_produk || '—') + '<div class="tbl-sub">' + (pm.product_code || '') + '</div></td>' +
         '<td>' + fmtKg(wo.target_kg) + '<div class="tbl-sub">' + fmt(wo.target_qty_ekor) + ' ekor</div></td>' +
         '<td>' +
-          '<div style="font-size:12px;font-weight:700;color:#374151">' + fmtKg(inputKg) + '</div>' +
+          '<div style="font-size:12px;font-weight:700;color:#374151">' + fmtKg(inputKg) + ' · ' + fmt(inputEkor) + ' ekor</div>' +
           '<div class="tbl-sub">' + inputCount + ' keranjang' + (inputPct !== null ? ' · ' + inputPct + '%' : '') + '</div>' +
         '</td>' +
         '<td>' + progressBar(wo) + '</td>' +

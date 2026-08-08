@@ -781,6 +781,47 @@ a{text-decoration:none}
   </div>
 </div>
 
+<!-- ============================================================
+     MODAL: REVISI TANGGAL PICKING SLIP (Supervisor only)
+     Hanya mengubah kolom tanggal (header dokumen / cetak) — TIDAK
+     mempengaruhi tanggal keluar stok di laporan manapun, karena laporan
+     mengambil tanggal dari basket_movements (CHILLER→LOADING) yang
+     confirmed, bukan dari picking_slips.tanggal. Kode PS (PSC-yymmdd-xxx)
+     juga TIDAK ikut berubah — tetap merujuk tanggal saat PS dibuat.
+     ============================================================ -->
+<div class="modal-backdrop" id="modal-edit-tgl-ps">
+  <div class="modal-box modal-sm">
+    <div class="modal-head">
+      <div class="modal-title">📅 Revisi Tanggal Picking Slip</div>
+      <button class="modal-close" onclick="closeEditTanggalPs()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-field" style="margin-bottom:10px">
+        <label>Kode PS</label>
+        <div id="etp-code" style="font-family:monospace;font-weight:800;color:#2563eb"></div>
+      </div>
+      <div class="form-field" style="margin-bottom:10px">
+        <label>Tanggal Saat Ini</label>
+        <div id="etp-tgl-lama" style="font-size:13px;color:#6b7280"></div>
+      </div>
+      <div class="form-field" style="margin-bottom:10px">
+        <label>Tanggal Baru</label>
+        <input type="date" id="etp-tgl-baru">
+      </div>
+      <div class="form-field" style="margin-bottom:10px">
+        <label>Alasan Revisi <span style="color:#dc2626">*</span></label>
+        <textarea id="etp-alasan" rows="2" placeholder="Kenapa tanggal ini perlu direvisi…"></textarea>
+      </div>
+      <div style="font-size:11px;color:#9ca3af">Catatan: kode PS tidak ikut berubah, dan revisi ini tidak memengaruhi tanggal keluar stok di laporan (itu tetap ikut tanggal konfirmasi pindah dari Chiller ke Loading).</div>
+      <div class="pin-error" id="etp-err" style="display:none"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeEditTanggalPs()">Batal</button>
+      <button class="btn btn-primary" id="etp-btn-ok" onclick="simpanEditTanggalPs()">✅ Simpan Revisi</button>
+    </div>
+  </div>
+</div>
+
 <!-- TOAST -->
 <div id="toast-container"></div>
 
@@ -1048,6 +1089,7 @@ function renderPsTable(rows){
           <button class="btn btn-ghost btn-sm" onclick="openDetail('${ps.id}')">👁 Detail</button>
           ${ps.status==='DRAFT' ? `<button class="btn btn-success btn-sm" onclick="confirmPs('${ps.id}')">✓ Confirm</button>` : ''}
           ${ps.status==='CONFIRMED' ? `<button class="btn btn-ghost btn-sm" onclick="openRetur('${ps.id}')">↩️ Retur</button>` : ''}
+          <button class="btn btn-ghost btn-sm" onclick="openEditTanggalPs('${ps.id}','${ps.ps_code}','${ps.tanggal}')" title="Revisi tanggal dokumen (tidak mengubah tanggal keluar stok)">📅 Tanggal</button>
         </div>
       </td>
     </tr>
@@ -1062,6 +1104,61 @@ function updateCards(rows){
   document.getElementById('card-confirmed').textContent = confirmed.length;
   document.getElementById('card-draft').textContent     = drafts.length;
   document.getElementById('card-total-kg').textContent  = totalKg.toFixed(1);
+}
+
+/* ============================================================
+   REVISI TANGGAL PICKING SLIP (Supervisor only)
+   Hanya mengubah picking_slips.tanggal (header dokumen/cetak). Tidak
+   menyentuh stok, basket_movements, atau kode PS. Lihat migration 83.
+   ============================================================ */
+let editTglPsData = null;
+
+function openEditTanggalPs(psId, psCode, tanggalLama){
+  editTglPsData = { id: psId, ps_code: psCode, tanggal_lama: tanggalLama };
+  document.getElementById('etp-code').textContent = psCode;
+  document.getElementById('etp-tgl-lama').textContent = tanggalLama
+    ? new Date(tanggalLama + 'T00:00').toLocaleDateString('id-ID', { day:'2-digit', month:'long', year:'numeric' })
+    : '—';
+  document.getElementById('etp-tgl-baru').value = tanggalLama || '';
+  document.getElementById('etp-alasan').value = '';
+  document.getElementById('etp-err').style.display = 'none';
+  document.getElementById('modal-edit-tgl-ps').classList.add('open');
+}
+
+function closeEditTanggalPs(){
+  document.getElementById('modal-edit-tgl-ps').classList.remove('open');
+  editTglPsData = null;
+}
+
+function simpanEditTanggalPs(){
+  const errEl = document.getElementById('etp-err');
+  errEl.style.display = 'none';
+  if(!editTglPsData) return;
+
+  const tglBaru = document.getElementById('etp-tgl-baru').value;
+  const alasan  = document.getElementById('etp-alasan').value.trim();
+
+  if(!tglBaru){ errEl.textContent = 'Tanggal baru wajib diisi.'; errEl.style.display = 'block'; return; }
+  if(!alasan){ errEl.textContent = 'Alasan revisi wajib diisi.'; errEl.style.display = 'block'; return; }
+  if(tglBaru === editTglPsData.tanggal_lama){ errEl.textContent = 'Tanggal baru sama dengan tanggal sebelumnya.'; errEl.style.display = 'block'; return; }
+
+  const psId   = editTglPsData.id;
+  const psCode = editTglPsData.ps_code;
+
+  showSupervisorPin({
+    title: '🔑 Revisi Tanggal Picking Slip',
+    desc: `Mengubah tanggal dokumen PS ${psCode}. Ini tidak mengubah tanggal keluar stok di laporan (tetap ikut tanggal konfirmasi Chiller→Loading) maupun kode PS.`,
+    onConfirm: async (sup) => {
+      const { data, error } = await db.rpc('revise_picking_slip_tanggal', {
+        p_ps_id: psId, p_tanggal_baru: tglBaru, p_alasan: alasan, p_user_id: sup.id,
+      });
+      if(error){ toast('Gagal: ' + error.message, 'error'); return; }
+      if(!data?.ok){ toast('Gagal: ' + (data?.msg || 'Unknown error'), 'error'); return; }
+      toast(`✅ Tanggal PS ${psCode} direvisi ke ${new Date(tglBaru+'T00:00').toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'})}`, 'success', 5000);
+      closeEditTanggalPs();
+      await loadPickingSlips();
+    }
+  });
 }
 
 /* ============================================================
