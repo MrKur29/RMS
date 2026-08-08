@@ -227,17 +227,17 @@ a { text-decoration: none; }
 .tbl tbody tr:last-child td { border-bottom: none; }
 .tbl tbody tr:hover td { background: #fafafa; }
 
-/* Batch Hari Ini: fixed layout, kolom disesuaikan (total width tetap 100%) */
-#tbl-batch-hari-ini { table-layout: fixed; font-size: 12px; }
-#tbl-batch-hari-ini thead th { font-size: 9px; padding: 9px 10px; white-space: nowrap; line-height: 1.4; }
-#tbl-batch-hari-ini tbody td { padding: 10px 10px; white-space: nowrap; }
-#tbl-batch-hari-ini th:nth-child(1), #tbl-batch-hari-ini td:nth-child(1) { width: 16%; } /* Kode Batch (10 karakter) */
-#tbl-batch-hari-ini th:nth-child(2), #tbl-batch-hari-ini td:nth-child(2) { width: 9%; }  /* Status */
-#tbl-batch-hari-ini th:nth-child(3), #tbl-batch-hari-ini td:nth-child(3) { width: 20%; white-space: normal; } /* Sumber */
-#tbl-batch-hari-ini th:nth-child(4), #tbl-batch-hari-ini td:nth-child(4) { width: 11%; } /* ABW Kandang */
-#tbl-batch-hari-ini th:nth-child(5), #tbl-batch-hari-ini td:nth-child(5) { width: 14%; } /* Ekor Karkas */
-#tbl-batch-hari-ini th:nth-child(6), #tbl-batch-hari-ini td:nth-child(6) { width: 14%; } /* Kg Karkas */
-#tbl-batch-hari-ini th:nth-child(7), #tbl-batch-hari-ini td:nth-child(7) { width: 16%; } /* Yield */
+/* Batch Bulan Berjalan: fixed layout, kolom disesuaikan (total width tetap 100%) */
+#tbl-batch-bulan-ini { table-layout: fixed; font-size: 12px; }
+#tbl-batch-bulan-ini thead th { font-size: 9px; padding: 9px 10px; white-space: nowrap; line-height: 1.4; }
+#tbl-batch-bulan-ini tbody td { padding: 10px 10px; white-space: nowrap; }
+#tbl-batch-bulan-ini th:nth-child(1), #tbl-batch-bulan-ini td:nth-child(1) { width: 16%; } /* Kode Batch (10 karakter) */
+#tbl-batch-bulan-ini th:nth-child(2), #tbl-batch-bulan-ini td:nth-child(2) { width: 9%; }  /* Status */
+#tbl-batch-bulan-ini th:nth-child(3), #tbl-batch-bulan-ini td:nth-child(3) { width: 20%; white-space: normal; } /* Sumber */
+#tbl-batch-bulan-ini th:nth-child(4), #tbl-batch-bulan-ini td:nth-child(4) { width: 11%; } /* ABW Kandang */
+#tbl-batch-bulan-ini th:nth-child(5), #tbl-batch-bulan-ini td:nth-child(5) { width: 14%; } /* Ekor Karkas */
+#tbl-batch-bulan-ini th:nth-child(6), #tbl-batch-bulan-ini td:nth-child(6) { width: 14%; } /* Kg Karkas */
+#tbl-batch-bulan-ini th:nth-child(7), #tbl-batch-bulan-ini td:nth-child(7) { width: 16%; } /* Yield */
 
 /* ===== BADGES ===== */
 .badge {
@@ -346,6 +346,22 @@ a { text-decoration: none; }
 .is-supervisor .dashboard-op-panels { display: block; }
 .dashboard-empty-state { display: block; }
 .is-supervisor .dashboard-empty-state { display: none; }
+
+/* ===== WIDGET PER-MODUL (baru) =====
+   Ganti pola isSupervisor binary di atas — tiap modul dapat section sendiri,
+   visibilitasnya ditentukan JS dari RPA_PERM.hasModuleAccess(currentUser,
+   '<module_key>'), bukan dari role. Default disembunyikan (display:none
+   inline di HTML) sampai JS menentukan user punya akses. */
+.module-section { margin-bottom: 24px; }
+.module-section-title {
+    font-size: 15px; font-weight: 800; color: #111827;
+    margin-bottom: 10px; display: flex; align-items: center; gap: 8px;
+}
+.module-section-sublabel {
+    font-size: 11px; font-weight: 700; color: #9ca3af;
+    text-transform: uppercase; letter-spacing: 0.6px; margin: 14px 0 8px;
+}
+.module-section-title + .module-section-sublabel { margin-top: 0; }
 
 /* ===== TABLE SCROLL WRAPPER ===== */
 .tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
@@ -599,8 +615,10 @@ a { text-decoration: none; }
         <!-- CONTENT -->
         <div class="content-area">
 
-            <!-- EMPTY STATE: non-supervisor, sampai dashboard per-modul dibuat -->
-            <div class="dashboard-empty-state">
+            <!-- EMPTY STATE: ditampilkan hanya kalau user bukan supervisor DAN
+                 tidak punya akses ke modul manapun yang sudah punya widget
+                 dashboard sendiri (lihat toggleEmptyState() di script). -->
+            <div class="dashboard-empty-state" id="dashboard-empty-state">
                 <div class="panel">
                     <div class="empty" style="padding:60px 16px">
                         <div class="e-icon">📋</div>
@@ -610,19 +628,89 @@ a { text-decoration: none; }
                 </div>
             </div>
 
+            <!-- ==================== MODUL: BATCH AYAM HIDUP ====================
+                 Visibilitas ditentukan JS (loadBatchAyamHidupWidget) dari
+                 RPA_PERM.hasModuleAccess(currentUser, 'karkas') — sengaja TIDAK
+                 dibungkus .dashboard-op-panels/.is-supervisor supaya operator
+                 (bukan cuma supervisor) yang punya akses modul karkas juga
+                 melihat widget ini. -->
+            <div class="module-section" id="module-batch-ayam-hidup" style="display:none">
+                <div class="module-section-title">🐔 Batch Ayam Hidup</div>
+
+                <div class="module-section-sublabel">Hari Ini</div>
+                <div class="cards-row" id="cards-batch-hari-ini">
+                    <div class="summary-card c-blue">
+                        <div class="sc-label">Jumlah Batch</div>
+                        <div class="sc-value skeleton" style="width:50px;height:32px"></div>
+                    </div>
+                    <div class="summary-card c-green">
+                        <div class="sc-label">Karkas Ekor</div>
+                        <div class="sc-value skeleton" style="width:70px;height:32px"></div>
+                    </div>
+                    <div class="summary-card c-teal">
+                        <div class="sc-label">Karkas Kg</div>
+                        <div class="sc-value skeleton" style="width:70px;height:32px"></div>
+                    </div>
+                    <div class="summary-card c-purple">
+                        <div class="sc-label">% Yield</div>
+                        <div class="sc-value skeleton" style="width:60px;height:32px"></div>
+                    </div>
+                </div>
+
+                <div class="module-section-sublabel">Bulan Berjalan</div>
+                <div class="cards-row" id="cards-batch-bulan-ini">
+                    <div class="summary-card c-blue">
+                        <div class="sc-label">Jumlah Batch</div>
+                        <div class="sc-value skeleton" style="width:50px;height:32px"></div>
+                    </div>
+                    <div class="summary-card c-green">
+                        <div class="sc-label">Karkas Ekor</div>
+                        <div class="sc-value skeleton" style="width:70px;height:32px"></div>
+                    </div>
+                    <div class="summary-card c-teal">
+                        <div class="sc-label">Karkas Kg</div>
+                        <div class="sc-value skeleton" style="width:70px;height:32px"></div>
+                    </div>
+                    <div class="summary-card c-purple">
+                        <div class="sc-label">% Yield</div>
+                        <div class="sc-value skeleton" style="width:60px;height:32px"></div>
+                    </div>
+                </div>
+
+                <div class="full-col">
+                    <div class="panel">
+                        <div class="panel-head">
+                            <span class="panel-title">📋 Daftar Batch Bulan Berjalan</span>
+                            <span class="panel-pill" id="pill-batch-bulan">—</span>
+                        </div>
+                        <div class="tbl-wrap">
+                        <table class="tbl" id="tbl-batch-bulan-ini">
+                            <thead>
+                                <tr>
+                                    <th>Kode Batch</th>
+                                    <th>Status</th>
+                                    <th>Sumber</th>
+                                    <th>ABW<br>Kdg</th>
+                                    <th>Ekor<br>Karkas</th>
+                                    <th>Kg<br>Karkas</th>
+                                    <th>Yield</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbody-batch-bulan">
+                                <tr><td colspan="7"><div class="empty"><div class="e-icon">⏳</div>Memuat...</div></td></tr>
+                            </tbody>
+                        </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- ==================== END MODUL: BATCH AYAM HIDUP ==================== -->
+
             <div class="dashboard-op-panels">
 
             <!-- SUMMARY CARDS -->
             <div class="cards-row" id="cards-row">
                 <!-- Diisi oleh JS -->
-                <div class="summary-card c-blue">
-                    <div class="sc-label">Batch Aktif</div>
-                    <div class="sc-value skeleton" style="width:50px;height:32px"></div>
-                </div>
-                <div class="summary-card c-green">
-                    <div class="sc-label">Karkas Hari Ini</div>
-                    <div class="sc-value skeleton" style="width:70px;height:32px"></div>
-                </div>
                 <div class="summary-card c-amber">
                     <div class="sc-label">Pending Konfirmasi</div>
                     <div class="sc-value skeleton" style="width:50px;height:32px"></div>
@@ -633,34 +721,9 @@ a { text-decoration: none; }
                 </div>
             </div>
 
-            <!-- ROW 2: Batch Hari Ini + Stok Chiller -->
-            <div class="two-col">
-                <!-- BATCH -->
-                <div class="panel">
-                    <div class="panel-head">
-                        <span class="panel-title">🐔 Batch Hari Ini</span>
-                        <span class="panel-pill" id="pill-batch">—</span>
-                    </div>
-                    <div class="tbl-wrap">
-                    <table class="tbl" id="tbl-batch-hari-ini">
-                        <thead>
-                            <tr>
-                                <th>Kode Batch</th>
-                                <th>Status</th>
-                                <th>Sumber</th>
-                                <th>ABW<br>Kdg</th>
-                                <th>Ekor<br>Karkas</th>
-                                <th>Kg<br>Karkas</th>
-                                <th>Yield</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tbody-batch">
-                            <tr><td colspan="7"><div class="empty"><div class="e-icon">⏳</div>Memuat...</div></td></tr>
-                        </tbody>
-                    </table>
-                    </div>
-                </div>
-
+            <!-- ROW 2: Stok Chiller (Batch Hari Ini pindah ke modul Batch Ayam
+                 Hidup di atas, sudah tidak dobel di sini) -->
+            <div class="full-col">
                 <!-- STOK CHILLER -->
                 <div class="panel">
                     <div class="panel-head">
@@ -1046,11 +1109,21 @@ async function loadDashboard() {
     try {
         const isSupervisor = currentUser.role === 'SUPERVISOR' || currentUser.is_system_admin;
 
+        // Widget per-modul: jalan untuk SEMUA user (operator maupun
+        // supervisor) — visibilitasnya masing-masing ditentukan sendiri lewat
+        // RPA_PERM.hasModuleAccess, bukan lewat role. Ini widget per-modul
+        // pertama; modul lain masih nunggu giliran dikonversi (lihat
+        // dashboard-op-panels di bawah, masih pola lama).
+        const hasKarkasAccess = await loadBatchAyamHidupWidget();
+
+        const emptyEl = document.getElementById('dashboard-empty-state');
+        if (emptyEl) emptyEl.style.display = (isSupervisor || hasKarkasAccess) ? 'none' : 'block';
+
         if (!isSupervisor) {
-            // Ringkasan lintas-modul disembunyikan untuk non-supervisor untuk
-            // sementara (lihat .dashboard-op-panels di CSS) — belum ada
-            // versi per-modul, jadi jangan query data yang tidak akan
-            // ditampilkan sama sekali.
+            // Ringkasan lintas-modul (cards-row/chiller/pending di bawah)
+            // masih disembunyikan untuk non-supervisor sampai modul-modul itu
+            // juga dikonversi jadi widget per-modul (lihat .dashboard-op-panels
+            // di CSS) — jangan query data yang tidak akan ditampilkan.
             document.getElementById('last-updated').textContent =
                 'Update: ' + new Date().toLocaleTimeString('id-ID', { hour:'2-digit', minute:'2-digit' });
             return;
@@ -1060,7 +1133,6 @@ async function loadDashboard() {
             db.from('v_ringkasan_hari_ini').select('*').maybeSingle(),
             db.from('v_stok_chiller').select('*'),
             db.from('v_pending_konfirmasi').select('*'),
-            db.from('v_batch_hari_ini').select('*'),
         ];
 
         if (isSupervisor) {
@@ -1076,12 +1148,11 @@ async function loadDashboard() {
 
         const results = await Promise.all(queries);
 
-        const [ringkasan, stok, pending, batch] = results;
-        const review   = isSupervisor ? results[4] : { data: [] };
-        const koreksi  = isSupervisor ? results[5] : { data: [] };
+        const [ringkasan, stok, pending] = results;
+        const review   = isSupervisor ? results[3] : { data: [] };
+        const koreksi  = isSupervisor ? results[4] : { data: [] };
 
         renderCards(ringkasan.data);
-        renderBatch(batch.data || []);
         renderChiller(stok.data || []);
         renderPending(pending.data || []);
 
@@ -1121,16 +1192,6 @@ function renderCards(d) {
     }
 
     let html = `
-        <div class="summary-card c-blue">
-            <div class="sc-label">Batch Aktif</div>
-            <div class="sc-value">${d.batch_aktif || 0}</div>
-            <div class="sc-sub">batch hari ini</div>
-        </div>
-        <div class="summary-card c-green">
-            <div class="sc-label">Karkas Ditimbang</div>
-            <div class="sc-value small">${fmt(d.karkas_qty_hari_ini || 0)} ekor</div>
-            <div class="sc-sub">${fmt(d.karkas_kg_hari_ini || 0, 1)} kg total</div>
-        </div>
         <div class="summary-card ${pending > 0 ? 'c-amber' : 'c-green'}">
             <div class="sc-label">Pending Konfirmasi</div>
             <div class="sc-value">${pending}</div>
@@ -1175,14 +1236,89 @@ function renderCards(d) {
 }
 
 // ============================================================
-// RENDER: BATCH HARI INI
+// MODUL: BATCH AYAM HIDUP (widget per-modul, gated per RPA_PERM)
 // ============================================================
-function renderBatch(rows) {
-    document.getElementById('pill-batch').textContent = rows.length + ' batch';
+// Satu fetch ke v_batch_bulan_ini (migration 80) dipakai untuk KEDUA
+// kebutuhan: baris tanggal=hari ini -> card "Hari Ini", semua baris -> card
+// "Bulan Berjalan" + tabel. Return value dipakai loadDashboard() untuk
+// menentukan apakah dashboard-empty-state harus disembunyikan.
+async function loadBatchAyamHidupWidget() {
+    const section = document.getElementById('module-batch-ayam-hidup');
+    const hasAccess = RPA_PERM.hasModuleAccess(currentUser, 'karkas');
+    if (!hasAccess) {
+        if (section) section.style.display = 'none';
+        return false;
+    }
+    if (section) section.style.display = 'block';
 
-    const tbody = document.getElementById('tbody-batch');
+    try {
+        const { data, error } = await db.from('v_batch_bulan_ini').select('*');
+        if (error) throw error;
+
+        const rows     = data || [];
+        const todayStr = todayISO();
+        const todayRows = rows.filter(r => r.tanggal === todayStr);
+
+        renderBatchModuleCards('cards-batch-hari-ini', todayRows);
+        renderBatchModuleCards('cards-batch-bulan-ini', rows);
+        renderBatchBulanTable(rows);
+    } catch (e) {
+        console.error('loadBatchAyamHidupWidget error:', e);
+    }
+
+    return true;
+}
+
+// Tanggal hari ini format YYYY-MM-DD di zona Asia/Jakarta (bukan UTC) — sama
+// seperti konvensi todayISO() yang sudah dipakai di Parting/Boneless/dst,
+// supaya cocok dengan lcb.tanggal (DATE column) tanpa geser sehari di dekat
+// tengah malam.
+function todayISO() {
+    return new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Jakarta' }).split(' ')[0];
+}
+
+function sumBy(rows, field) {
+    return rows.reduce((s, r) => s + (Number(r[field]) || 0), 0);
+}
+
+function renderBatchModuleCards(containerId, rows) {
+    const el = document.getElementById(containerId);
+    if (!el) return;
+
+    const jumlahBatch    = rows.length;
+    const totalEkor      = sumBy(rows, 'total_karkas_qty');
+    const totalKgKarkas  = sumBy(rows, 'total_karkas_kg');
+    const totalKgKandang = sumBy(rows, 'kg_kandang');
+    const pctYield        = totalKgKandang > 0 ? (totalKgKarkas / totalKgKandang * 100) : null;
+
+    el.innerHTML = `
+        <div class="summary-card c-blue">
+            <div class="sc-label">Jumlah Batch</div>
+            <div class="sc-value">${jumlahBatch}</div>
+        </div>
+        <div class="summary-card c-green">
+            <div class="sc-label">Karkas Ekor</div>
+            <div class="sc-value small">${fmt(totalEkor)} ekor</div>
+        </div>
+        <div class="summary-card c-teal">
+            <div class="sc-label">Karkas Kg</div>
+            <div class="sc-value small">${fmt(totalKgKarkas, 1)} kg</div>
+        </div>
+        <div class="summary-card c-purple">
+            <div class="sc-label">% Yield</div>
+            <div class="sc-value small">${pctYield != null ? fmt(pctYield, 1) + '%' : '—'}</div>
+        </div>
+    `;
+}
+
+function renderBatchBulanTable(rows) {
+    const pill = document.getElementById('pill-batch-bulan');
+    if (pill) pill.textContent = rows.length + ' batch';
+
+    const tbody = document.getElementById('tbody-batch-bulan');
+    if (!tbody) return;
     if (!rows.length) {
-        tbody.innerHTML = `<tr><td colspan="7"><div class="empty"><div class="e-icon">🐔</div>Belum ada batch hari ini</div></td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7"><div class="empty"><div class="e-icon">🐔</div>Belum ada batch bulan ini</div></td></tr>`;
         return;
     }
 
