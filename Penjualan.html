@@ -631,8 +631,8 @@ a{text-decoration:none}
           <input type="text" id="buat-ps-code" readonly placeholder="Auto-generate…" style="background:#f9fafb;font-weight:700;color:#2563eb;font-family:monospace">
         </div>
         <div class="form-field">
-          <label>Tanggal</label>
-          <input type="date" id="buat-tanggal" onchange="refreshPsCode()">
+          <label>Tanggal <span style="font-weight:400;color:#9ca3af">(otomatis, dari tanggal pindah Chiller → Loading)</span></label>
+          <input type="date" id="buat-tanggal" disabled style="background:#f9fafb;font-weight:700;color:#111827">
         </div>
       </div>
       <div class="form-row">
@@ -840,6 +840,21 @@ let buatItems = [];     // keranjang yang dipilih untuk PS baru
 let loadingStock = [];  // keranjang di lokasi LOADING
 
 /* ============================================================
+   TIMEZONE HELPERS — WIB / GMT+7
+   Jangan pakai new Date().toISOString().slice(0,10) langsung: itu
+   tanggal UTC, jadi dini hari WIB (00:00–06:59) masih kebaca "kemarin".
+   Semua tanggal transaksi di halaman ini harus lewat helper ini.
+   ============================================================ */
+const WIB_OFFSET_MS = 7 * 60 * 60 * 1000;
+function jakartaDateStr(ts){
+  const d = ts ? new Date(ts) : new Date();
+  return new Date(d.getTime() + WIB_OFFSET_MS).toISOString().slice(0,10);
+}
+function todayJakarta(){
+  return jakartaDateStr();
+}
+
+/* ============================================================
    CLOCK
    ============================================================ */
 function updateClock(){
@@ -948,8 +963,7 @@ function startApp(){
   }
   const restoredFilters = RPA_STATE.bindFilters('Penjualan', ['.filter-bar']);
   if (!restoredFilters) {
-    const today = new Date().toISOString().slice(0,10);
-    document.getElementById('filter-tanggal').value = today;
+    document.getElementById('filter-tanggal').value = todayJakarta();
   }
   RPA_STATE.bindScroll('Penjualan');
   Promise.all([loadMasters(), loadPickingSlips(), loadPendingMovements(), loadLoadingStock(), loadSelisihPending(), loadReturList(), loadProductsAktif()]);
@@ -1089,7 +1103,11 @@ function renderPsTable(rows){
           <button class="btn btn-ghost btn-sm" onclick="openDetail('${ps.id}')">👁 Detail</button>
           ${ps.status==='DRAFT' ? `<button class="btn btn-success btn-sm" onclick="confirmPs('${ps.id}')">✓ Confirm</button>` : ''}
           ${ps.status==='CONFIRMED' ? `<button class="btn btn-ghost btn-sm" onclick="openRetur('${ps.id}')">↩️ Retur</button>` : ''}
-          <button class="btn btn-ghost btn-sm" onclick="openEditTanggalPs('${ps.id}','${ps.ps_code}','${ps.tanggal}')" title="Revisi tanggal dokumen (tidak mengubah tanggal keluar stok)">📅 Tanggal</button>
+          <!-- Tombol "📅 Tanggal" (revisi manual, migration 83) DIMATIKAN 2026-08-08:
+               tanggal PS sekarang otomatis mengikuti tanggal pindah Chiller→Loading
+               saat PS dibuat, jadi revisi manual tidak dibutuhkan lagi. Modal &
+               fungsi openEditTanggalPs()/simpanEditTanggalPs() masih ada di bawah
+               tapi sudah tidak terpanggil dari mana pun. -->
         </div>
       </td>
     </tr>
@@ -1259,8 +1277,7 @@ function formatRelTime(ts){
 async function openModalBuat(){
   buatItems = [];
   document.getElementById('buat-ps-code').value = '';
-  const today = new Date().toISOString().slice(0,10);
-  document.getElementById('buat-tanggal').value = today;
+  document.getElementById('buat-tanggal').value = todayJakarta();
   document.getElementById('buat-pelanggan').value = '';
   document.getElementById('buat-supir').value = '';
   document.getElementById('buat-tujuan').value = '';
@@ -1282,9 +1299,32 @@ function closeModalBuat(){
 }
 
 async function refreshPsCode(){
-  const tgl = document.getElementById('buat-tanggal').value || new Date().toISOString().slice(0,10);
+  const tgl = document.getElementById('buat-tanggal').value || todayJakarta();
   const { data } = await db.rpc('generate_ps_code', { p_tanggal: tgl });
   document.getElementById('buat-ps-code').value = data || '';
+}
+
+/* ============================================================
+   TANGGAL PICKING SLIP — OTOMATIS DARI TANGGAL PINDAH CHILLER→LOADING
+   Input manual dimatikan 2026-08-08 (menggantikan fitur "Revisi Tanggal"
+   yang juga dimatikan — lihat daftar PS). Tanggal PS sekarang ikut
+   tanggal (WIB) barang keluar dari Chiller ke Loading — dipakai movement
+   PENDING sekalipun belum resmi dikonfirmasi, karena momen konfirmasi
+   terima sekarang menyatu dengan Simpan Picking Slip. Kalau item yang
+   dipilih berasal dari beberapa tanggal pindah berbeda, dipakai yang
+   PALING AWAL (tanggal keberangkatan pertama dari batch ini).
+   ============================================================ */
+function updateTanggalDariItems(){
+  const tgls = buatItems
+    .map(i => i.tgl_pindah ? jakartaDateStr(i.tgl_pindah) : null)
+    .filter(Boolean)
+    .sort();
+  const tglTerpilih = tgls.length ? tgls[0] : todayJakarta();
+  const el = document.getElementById('buat-tanggal');
+  if(el.value !== tglTerpilih){
+    el.value = tglTerpilih;
+    refreshPsCode();
+  }
 }
 
 /* ============================================================
@@ -1300,10 +1340,10 @@ async function refreshLoadingStock(){
 
   const [atLoadingRes, pendingRes] = await Promise.all([
     db.from('baskets')
-      .select('id,basket_code,qty_sisa,kg_sisa,product_id,product_master(nama_produk)')
+      .select('id,basket_code,qty_sisa,kg_sisa,created_at,product_id,product_master(nama_produk)')
       .eq('lokasi','LOADING').eq('status','AKTIF').order('basket_code'),
     db.from('basket_movements')
-      .select('id,basket_id,qty_pindah,kg_pindah,baskets!inner(basket_code,product_id,product_master(nama_produk))')
+      .select('id,basket_id,qty_pindah,kg_pindah,created_at,baskets!inner(basket_code,product_id,product_master(nama_produk))')
       .eq('dari_lokasi','CHILLER').eq('ke_lokasi','LOADING').eq('status','PENDING')
       .order('created_at',{ascending:true})
   ]);
@@ -1313,13 +1353,13 @@ async function refreshLoadingStock(){
       basket_id: b.id, basket_code: b.basket_code, product_id: b.product_id,
       nama_item: b.product_master?.nama_produk || '—',
       qty_awal: b.qty_sisa || 0, kg_awal: +(b.kg_sisa || 0),
-      pending_movement_id: null, pending: false
+      pending_movement_id: null, pending: false, tgl_pindah: b.created_at || null
     })),
     ...(pendingRes.data||[]).map(m => ({
       basket_id: m.basket_id, basket_code: m.baskets?.basket_code, product_id: m.baskets?.product_id,
       nama_item: m.baskets?.product_master?.nama_produk || '—',
       qty_awal: m.qty_pindah || 0, kg_awal: +(m.kg_pindah || 0),
-      pending_movement_id: m.id, pending: true
+      pending_movement_id: m.id, pending: true, tgl_pindah: m.created_at || null
     }))
   ];
 
@@ -1361,9 +1401,11 @@ function addBasketToList(b){
     qty_final:           b.qty_awal,
     kg_final:            +(b.kg_awal || 0),
     resolusi:            'NONE',
-    alasan:              ''
+    alasan:              '',
+    tgl_pindah:          b.tgl_pindah || null
   });
   renderBuatItems();
+  updateTanggalDariItems();
   refreshLoadingStock();
 }
 
@@ -1391,7 +1433,7 @@ async function doScanKeranjang(){
 
   const { data: atLoading } = await db
     .from('baskets')
-    .select('id,basket_code,qty_sisa,kg_sisa,lokasi,status,product_id,product_master(nama_produk)')
+    .select('id,basket_code,qty_sisa,kg_sisa,lokasi,status,created_at,product_id,product_master(nama_produk)')
     .eq('basket_code', kode)
     .maybeSingle();
 
@@ -1400,12 +1442,12 @@ async function doScanKeranjang(){
       basket_id: atLoading.id, basket_code: atLoading.basket_code, product_id: atLoading.product_id,
       nama_item: atLoading.product_master?.nama_produk || '—',
       qty_awal: atLoading.qty_sisa || 0, kg_awal: +(atLoading.kg_sisa || 0),
-      pending_movement_id: null, pending: false
+      pending_movement_id: null, pending: false, tgl_pindah: atLoading.created_at || null
     };
   } else {
     const { data: pendingMv } = await db
       .from('basket_movements')
-      .select('id,basket_id,qty_pindah,kg_pindah,baskets!inner(basket_code,product_id,product_master(nama_produk))')
+      .select('id,basket_id,qty_pindah,kg_pindah,created_at,baskets!inner(basket_code,product_id,product_master(nama_produk))')
       .eq('dari_lokasi','CHILLER').eq('ke_lokasi','LOADING').eq('status','PENDING')
       .eq('baskets.basket_code', kode)
       .order('created_at',{ascending:true})
@@ -1415,7 +1457,7 @@ async function doScanKeranjang(){
         basket_id: pendingMv.basket_id, basket_code: pendingMv.baskets?.basket_code, product_id: pendingMv.baskets?.product_id,
         nama_item: pendingMv.baskets?.product_master?.nama_produk || '—',
         qty_awal: pendingMv.qty_pindah || 0, kg_awal: +(pendingMv.kg_pindah || 0),
-        pending_movement_id: pendingMv.id, pending: true
+        pending_movement_id: pendingMv.id, pending: true, tgl_pindah: pendingMv.created_at || null
       };
     }
   }
@@ -1535,6 +1577,7 @@ function updateItemAlasan(idx, val){
 function removeItem(idx){
   buatItems.splice(idx, 1);
   renderBuatItems();
+  updateTanggalDariItems();
   refreshLoadingStock();
 }
 
