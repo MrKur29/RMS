@@ -1673,17 +1673,20 @@ async function toggleClosedWODetail(woId) {
   body.innerHTML = '⏳ Memuat…';
   try {
     const { data: inputs } = await db.from('processing_inputs')
-      .select('workstation_id, kg_diambil, qty_input, baskets(basket_code), product_master(nama_produk)')
+      .select('workstation_id, kg_diambil, qty_input, baskets(basket_code, status), product_master(nama_produk)')
       .eq('order_id', woId);
     const { data: outputs } = await db.from('processing_outputs')
-      .select('workstation_id, kg_output, qty_output, output_type, baskets(basket_code), product_master(nama_produk), users!worker_id(nama)')
+      .select('workstation_id, kg_output, qty_output, output_type, baskets(basket_code, status), product_master(nama_produk), users!worker_id(nama)')
       .eq('order_id', woId).order('created_at', { ascending: false });
 
     const iList  = inputs  || [];
     const oList  = outputs || [];
-    const totalInKg  = iList.reduce((s, i) => s + (Number(i.kg_diambil) || 0), 0);
-    const totalOutKg = oList.filter(o => o.output_type === 'PRIMARY').reduce((s, o) => s + (Number(o.kg_output) || 0), 0);
-    const totalByKg  = oList.filter(o => o.output_type === 'BYPRODUCT').reduce((s, o) => s + (Number(o.kg_output) || 0), 0);
+    // Keranjang VOID (baskets.status = 'VOID', satu-satunya sumber kebenaran —
+    // lihat Migration 67) tetap ditampilkan di daftar dengan badge 🗑️ VOID,
+    // tapi tidak ikut dihitung ke total kg/qty supaya rekap WO tidak bengkak.
+    const totalInKg  = iList.filter(i => i.baskets?.status !== 'VOID').reduce((s, i) => s + (Number(i.kg_diambil) || 0), 0);
+    const totalOutKg = oList.filter(o => o.output_type === 'PRIMARY'   && o.baskets?.status !== 'VOID').reduce((s, o) => s + (Number(o.kg_output) || 0), 0);
+    const totalByKg  = oList.filter(o => o.output_type === 'BYPRODUCT' && o.baskets?.status !== 'VOID').reduce((s, o) => s + (Number(o.kg_output) || 0), 0);
 
     let html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">';
 
@@ -1691,9 +1694,13 @@ async function toggleClosedWODetail(woId) {
     html += '<div><div style="font-size:11px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">📥 Input (' + iList.length + ' keranjang · ' + fmtKg(totalInKg) + ')</div>';
     if (iList.length) {
       html += '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Keranjang</th><th>Produk</th><th>Kg</th></tr></thead><tbody>' +
-        iList.map(i => '<tr><td style="font-family:monospace;font-size:11px">' + (i.baskets?.basket_code || '—') + '</td>' +
-          '<td>' + (i.product_master?.nama_produk || '—') + '</td>' +
-          '<td>' + fmtKg(i.kg_diambil) + '<div class="tbl-sub">' + fmt(i.qty_input) + ' ekor</div></td></tr>').join('') +
+        iList.map(i => {
+          const isVoid = i.baskets?.status === 'VOID';
+          return '<tr' + (isVoid ? ' style="opacity:.55"' : '') + '><td style="font-family:monospace;font-size:11px">' + (i.baskets?.basket_code || '—') +
+            (isVoid ? ' <span class="badge b-block">🗑️ VOID</span>' : '') + '</td>' +
+            '<td>' + (i.product_master?.nama_produk || '—') + '</td>' +
+            '<td>' + fmtKg(i.kg_diambil) + '<div class="tbl-sub">' + fmt(i.qty_input) + ' ekor</div></td></tr>';
+        }).join('') +
         '</tbody></table></div>';
     } else { html += '<div style="color:#9ca3af;padding:8px 0">Tidak ada data input.</div>'; }
     html += '</div>';
@@ -1703,10 +1710,13 @@ async function toggleClosedWODetail(woId) {
     if (oList.length) {
       html += '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Keranjang</th><th>Produk</th><th>Qty / Kg</th><th>Tipe</th></tr></thead><tbody>' +
         oList.map(o => {
-          const badge = o.output_type === 'PRIMARY'
-            ? '<span class="badge b-aktif">Primary</span>'
-            : '<span class="badge" style="background:#fce7f3;color:#9d174d">Byproduct</span>';
-          return '<tr><td style="font-family:monospace;font-size:11px">' + (o.baskets?.basket_code || '—') + '</td>' +
+          const isVoid = o.baskets?.status === 'VOID';
+          const badge = isVoid
+            ? '<span class="badge b-block">🗑️ VOID</span>'
+            : o.output_type === 'PRIMARY'
+              ? '<span class="badge b-aktif">Primary</span>'
+              : '<span class="badge" style="background:#fce7f3;color:#9d174d">Byproduct</span>';
+          return '<tr' + (isVoid ? ' style="opacity:.55"' : '') + '><td style="font-family:monospace;font-size:11px">' + (o.baskets?.basket_code || '—') + '</td>' +
             '<td>' + (o.product_master?.nama_produk || '—') + '</td>' +
             '<td>' + fmt(o.qty_output) + ' ekor<div class="tbl-sub">' + fmtKg(o.kg_output) + '</div></td>' +
             '<td>' + badge + '</td></tr>';

@@ -489,7 +489,7 @@ async function fetchPengambilan(fromBound,toBound){
   const movQ = db.from('basket_movements')
     .select(`
       id, qty_pindah, kg_pindah, dari_lokasi, catatan, confirmed_at,
-      baskets ( basket_code, basket_type, tanggal_produksi, product_master ( nama_produk, product_code ) )
+      baskets ( basket_code, basket_type, tanggal_produksi, status, product_master ( nama_produk, product_code ) )
     `)
     .eq('ke_lokasi', dest)
     .eq('status', 'CONFIRMED')
@@ -502,7 +502,7 @@ async function fetchPengambilan(fromBound,toBound){
   const thawQ = db.from('thawing_outputs')
     .select(`
       id, qty, kg, created_at,
-      baskets ( basket_code, tanggal_produksi ),
+      baskets ( basket_code, tanggal_produksi, status ),
       product_master ( nama_produk, product_code )
     `)
     .eq('destinasi', dest)
@@ -514,7 +514,12 @@ async function fetchPengambilan(fromBound,toBound){
   if(movRes.error) throw movRes.error;
   if(thawRes.error) throw thawRes.error;
 
-  const fromMov = (movRes.data||[]).map(r=>{
+  // Keranjang VOID (baskets.status = 'VOID', sumber kebenaran — Migration 67)
+  // dikeluarkan sepenuhnya, konsisten dengan fetchHasil() di bawah.
+  const movData  = (movRes.data ||[]).filter(r => r.baskets?.status  !== 'VOID');
+  const thawData = (thawRes.data||[]).filter(r => r.baskets?.status !== 'VOID');
+
+  const fromMov = movData.map(r=>{
     const rawCat = r.dari_lokasi || r.baskets?.basket_type || 'LAINNYA';
     return {
       barang: r.baskets?.product_master?.nama_produk || '—',
@@ -527,7 +532,7 @@ async function fetchPengambilan(fromBound,toBound){
     };
   });
 
-  const fromThaw = (thawRes.data||[]).map(r=>({
+  const fromThaw = thawData.map(r=>({
     barang: r.product_master?.nama_produk || '—',
     ek: Number(r.qty)||0,
     kg: Number(r.kg)||0,
