@@ -1639,7 +1639,7 @@ async function loadClosedWOs() {
       id, order_code, status, tipe, target_kg, target_qty_ekor, tanggal, updated_at, produk_id,
       product_master ( nama_produk, product_code, kategori ),
       wo_workstations ( workstation_id, selesai_at, workstations ( kode ) ),
-      processing_outputs ( id, product_id, output_type, kg_output, qty_output, product_master ( kategori ) )
+      processing_outputs ( id, product_id, output_type, kg_output, qty_output, product_master ( kategori ), baskets ( status ) )
     `)
     .in('tipe', ['BONELESS', 'MULTI'])
     .in('status', ['COMPLETED','CANCELLED'])
@@ -1670,11 +1670,13 @@ function renderClosedWOs() {
     const pm       = wo.product_master || {};
     const wwsList  = wo.wo_workstations || [];
     const wsStr    = wwsList.map(w => w.workstations?.kode || '').filter(Boolean).join(', ') || '—';
+    // Keranjang VOID dikeluarkan dari total output — sama seperti panel Detail
+    // (toggleClosedWODetail), lihat baskets.status (Migration 67).
     const outKg    = (wo.processing_outputs || [])
-      .filter(o => o.product_id === wo.produk_id)
+      .filter(o => o.product_id === wo.produk_id && o.baskets?.status !== 'VOID')
       .reduce((s, o) => s + (Number(o.kg_output) || 0), 0);
     const outQty   = (wo.processing_outputs || [])
-      .filter(o => o.product_id === wo.produk_id)
+      .filter(o => o.product_id === wo.produk_id && o.baskets?.status !== 'VOID')
       .reduce((s, o) => s + (Number(o.qty_output) || 0), 0);
     const pct      = wo.target_kg > 0 ? Math.round(outKg / wo.target_kg * 100) : null;
     const pctColor = pct === null ? '' : (pct >= 90 ? 'color:#166534' : (pct >= 70 ? 'color:#92400e' : 'color:#991b1b'));

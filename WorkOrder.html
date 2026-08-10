@@ -744,14 +744,17 @@ function showErr(id,msg){const e=document.getElementById(id);if(e){e.textContent
 // TERAKHIR (lihat doCreateWO: "Final product = output of last stage"), jadi
 // ini otomatis mengecualikan output stage-stage sebelumnya. Pola sama seperti
 // Boneless.html (yang sudah benar sejak awal).
+// Keranjang VOID (baskets.status = 'VOID', sumber kebenaran — Migration 67)
+// juga dikeluarkan — sama seperti fix WO Detail di Parting/Boneless.html
+// 2026-08-10, keranjang output yang di-void jangan ikut kehitung ke actual.
 function getActualKg(wo) {
   return (wo.processing_outputs||[])
-    .filter(o => o.product_id === wo.produk_id)
+    .filter(o => o.product_id === wo.produk_id && o.baskets?.status !== 'VOID')
     .reduce((s,o) => s + (Number(o.kg_output)||0), 0);
 }
 function getActualQty(wo) {
   return (wo.processing_outputs||[])
-    .filter(o => o.product_id === wo.produk_id)
+    .filter(o => o.product_id === wo.produk_id && o.baskets?.status !== 'VOID')
     .reduce((s,o) => s + (Number(o.qty_output)||0), 0);
 }
 function getSelisihPct(wo) {
@@ -943,7 +946,8 @@ async function loadWOs() {
         tanggal_produksi, worker_id, workstation_id,
         users!processing_outputs_worker_id_fkey ( nama ),
         product_master!processing_outputs_product_id_fkey ( nama_produk ),
-        workstations ( kode )
+        workstations ( kode ),
+        baskets ( basket_code, status )
       )
     `)
     .order('created_at', { ascending: false });
@@ -1338,16 +1342,19 @@ async function openDetailWO(woId) {
     detTbody.innerHTML = `<tr><td colspan="7"><div class="empty" style="padding:12px">Belum ada output yang dicatat.</div></td></tr>`;
   } else {
     detTbody.innerHTML = outputs.map(o => {
+      const isVoid     = o.baskets?.status === 'VOID';
       const workerName = o.users?.nama || '—';
       const wsName     = o.workstations?.kode || '—';
       const prodName   = o.product_master?.nama_produk || '—';
-      const typeBadge  = o.output_type === 'PRIMARY'
-        ? '<span class="badge b-approved" style="font-size:10px">Primary</span>'
-        : '<span class="badge b-pending" style="font-size:10px">Byproduct</span>';
-      return `<tr>
+      const typeBadge  = isVoid
+        ? '<span class="badge b-cancelled" style="font-size:10px">🗑️ VOID</span>'
+        : o.output_type === 'PRIMARY'
+          ? '<span class="badge b-approved" style="font-size:10px">Primary</span>'
+          : '<span class="badge b-pending" style="font-size:10px">Byproduct</span>';
+      return `<tr${isVoid ? ' style="opacity:.55"' : ''}>
         <td style="font-weight:700">${workerName}</td>
         <td>${wsName}</td>
-        <td>${prodName}</td>
+        <td>${prodName}${o.baskets?.basket_code ? `<div style="font-size:10px;color:#9ca3af;font-family:monospace">${o.baskets.basket_code}</div>` : ''}</td>
         <td>${typeBadge}</td>
         <td>${fmt(o.qty_output)}</td>
         <td>${fmtKg(o.kg_output)}</td>
