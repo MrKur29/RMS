@@ -936,7 +936,7 @@ function renderSubmissionBar(){
         <span>🔒 Data tanggal ini sudah <strong>Disubmit</strong> oleh ${nama} — ${waktu}${revisiInfo}</span>
         ${viewOnly ? '' : '<button class="btn-revisi" onclick="openRevisiPin()">🔑 Revisi (PIN Supervisor)</button>'}
       </div>`;
-    bar.style.display = '';
+    bar.style.display = 'block';
   } else {
     bar.innerHTML = '';
     bar.style.display = 'none';
