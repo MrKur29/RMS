@@ -1464,25 +1464,48 @@ async function doReturn(){
   const catatan=document.getElementById('mr-catatan').value.trim();
   btn.disabled=true;btn.textContent='Memproses…';
   try{
-    // Kurangi sisa keranjang lebih dulu lewat RPC ber-row-lock
-    // (blasting_apply_qty_delta, migration 77) -- baca qty_sisa fresh dari
-    // DB saat itu juga, bukan dari cache blastingStock. Ini mencegah race
-    // dengan aksi lain (mis. Alokasi ke Rak) yang menulis qty_sisa basket
-    // yang sama -- penyebab bug BL-260806-0025 (2026-08-06).
-    const{data:decRes,error:decErr}=await db.rpc('blasting_apply_qty_delta',{
-      p_basket_id:basketId,p_delta_ekor:-ekor,p_delta_kg:-kg
+    // Siapkan pengiriman lewat RPC ber-row-lock (blasting_return_prepare,
+    // migration 86). Kalau ekor yang dikirim LEBIH KECIL dari qty_sisa
+    // basket ini saat itu juga (partial return -- sebagian ekor masih akan
+    // tetap tinggal di lantai Blasting untuk dialokasikan lagi), RPC ini
+    // MEMECAH basket: sisa tetap di basket asal (basketId), dan qty yang
+    // dikirim dipindahkan ke basket BARU ("<kode asal>-N") yang dipakai
+    // sebagai basket_id movement ini.
+    //
+    // Ini penting karena konfirmasi_movement() Case B (is_partial=false,
+    // dipakai untuk "kirim penuh") MENIMPA lokasi + qty_sisa basket yang
+    // direferensikan movement dengan qty_pindah saat dikonfirmasi -- benar
+    // kalau basket itu memang seluruhnya pindah, tapi FATAL kalau basket
+    // yang sama masih menyisakan stok di Blasting (sisa itu ikut tertimpa
+    // dan hilang dari pembukuan). Dengan basket_id BARU yang isinya persis
+    // qty yang dikirim, "kirim penuh" jadi benar-benar penuh dari sudut
+    // pandang basket itu -- basket asal (dengan sisanya) tidak tersentuh
+    // sama sekali oleh konfirmasi.
+    //
+    // Penyebab bug BK-260810-0287 (ditemukan 2026-08-11): keranjang 50
+    // ekor sempat dialokasikan lalu dibatalkan dari rak (kembali ke lantai
+    // Blasting), lalu 40 dari 50 ekor dikembalikan ke Chiller memakai
+    // basket_id yang SAMA. Saat Chiller konfirmasi, qty_sisa basket
+    // ditimpa jadi 40 -- 10 ekor yang seharusnya masih di lantai Blasting
+    // lenyap dari pembukuan, tidak pernah tercatat sebagai stok di mana
+    // pun. Lihat migration 86 untuk detail & recovery data.
+    const{data:prepRes,error:prepErr}=await db.rpc('blasting_return_prepare',{
+      p_basket_id:basketId,p_ekor:ekor,p_kg:kg,p_user_id:currentUser.id
     });
-    const dec=typeof decRes==='string'?JSON.parse(decRes):decRes;
-    if(decErr||!dec?.ok)throw new Error(dec?.error||(decErr&&decErr.message)||'Gagal mengurangi sisa keranjang.');
+    const prep=typeof prepRes==='string'?JSON.parse(prepRes):prepRes;
+    if(prepErr||!prep?.ok)throw new Error(prep?.error||(prepErr&&prepErr.message)||'Gagal menyiapkan pengiriman.');
     const{error:mvErr}=await db.from('basket_movements').insert({
-      basket_id:basketId,dari_lokasi:'BLASTING',ke_lokasi:'CHILLER',
-      qty_pindah:ekor,kg_pindah:kg,status:'PENDING',
+      basket_id:prep.basket_id,dari_lokasi:'BLASTING',ke_lokasi:'CHILLER',
+      qty_pindah:ekor,kg_pindah:kg,status:'PENDING',is_partial:false,
       catatan:catatan||null,submitted_by:currentUser.id
     });
     if(mvErr){
-      // Kompensasi: kembalikan qty_sisa yang sudah dikurangi RPC di atas,
-      // karena movement pengiriman gagal dibuat.
-      await db.rpc('blasting_apply_qty_delta',{p_basket_id:basketId,p_delta_ekor:ekor,p_delta_kg:kg});
+      // Kompensasi: batalkan split (kalau ada) & kembalikan qty_sisa ke
+      // basket asal, karena movement pengiriman gagal dibuat.
+      await db.rpc('blasting_return_undo',{
+        p_result_basket_id:prep.basket_id,p_original_basket_id:basketId,
+        p_is_split:prep.is_split,p_ekor:ekor,p_kg:kg
+      });
       throw mvErr;
     }
     showToast('Keranjang dikirim ke Chiller (menunggu konfirmasi Chiller).','success');
