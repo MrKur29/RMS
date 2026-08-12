@@ -235,6 +235,7 @@ a{text-decoration:none}
       <div class="nav-item" id="nav-void-keranjang" style="display:none" onclick="navTo('VoidKeranjang.html')">
         <span class="nav-icon">🗑️</span><span class="nav-label-text">Void Keranjang</span>
       </div>
+      <div class="nav-item" id="nav-pelanggan" style="display:none" onclick="navTo('KelolaPelanggan.html')"><span class="nav-icon">📇</span><span class="nav-label-text">Kelola Pelanggan</span></div>
       <div class="nav-item active">
         <span class="nav-icon">🖨️</span><span class="nav-label-text">Reprint Label</span>
         <span class="nav-tag">Aktif</span>
@@ -382,6 +383,7 @@ function startApp(){
   if(RPA_PERM.getModuleRole(currentUser,'saldo_awal')!==null){const el=document.getElementById('nav-saldo-awal');if(el)el.style.display='flex'}
   if(RPA_PERM.getModuleRole(currentUser,'revisi_batch')!==null){const el=document.getElementById('nav-revisi-batch');if(el)el.style.display='flex'}
   if(RPA_PERM.getModuleRole(currentUser,'void_keranjang')!==null){const el=document.getElementById('nav-void-keranjang');if(el)el.style.display='flex'}
+  if(RPA_PERM.getModuleRole(currentUser,'pelanggan')!==null){const el=document.getElementById('nav-pelanggan');if(el)el.style.display='flex'}
 
   startClock();
   document.getElementById('search-code').focus();

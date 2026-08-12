@@ -223,6 +223,7 @@ a{text-decoration:none}
       <div class="nav-section-label">Penjualan</div>
       <div class="nav-item" onclick="navTo('Penjualan.html')"><span class="nav-icon">🛒</span><span class="nav-label-text">Penjualan</span></div>
       <div class="nav-item" id="nav-cs" style="display:none" onclick="navTo('CS.html')"><span class="nav-icon">🏬</span><span class="nav-label-text">CS (Cold Storage)</span></div>
+      <div class="nav-item" id="nav-pelanggan" style="display:none" onclick="navTo('KelolaPelanggan.html')"><span class="nav-icon">📇</span><span class="nav-label-text">Kelola Pelanggan</span></div>
       <div class="nav-section-label">Manajemen</div>
       <div class="nav-item" onclick="navTo('Koreksi.html')">
         <span class="nav-icon">✅</span><span class="nav-label-text">Koreksi & Approval</span>
@@ -447,6 +448,7 @@ function startApp(){
     if (RPA_PERM.getModuleRole(currentUser, 'void_keranjang') !== null) { const vkEl = document.getElementById('nav-void-keranjang'); if (vkEl) vkEl.style.display = 'flex'; }
     if (RPA_PERM.getModuleRole(currentUser, 'reprint_label') !== null) { const rlEl = document.getElementById('nav-reprint-label'); if (rlEl) rlEl.style.display = 'flex'; }
     if (RPA_PERM.getModuleRole(currentUser, 'cs') !== null) { const csEl = document.getElementById('nav-cs'); if (csEl) csEl.style.display = 'flex'; }
+    if(RPA_PERM.getModuleRole(currentUser,'pelanggan')!==null){const el=document.getElementById('nav-pelanggan');if(el)el.style.display='flex'}
   if (RPA_PERM.getModuleRole(currentUser, 'saldo_awal') !== null) { const saEl = document.getElementById('nav-saldo-awal'); if (saEl) saEl.style.display = 'flex'; }
   const restoredFilters=RPA_STATE.bindFilters('LaporanProduksiKarkasHarian', ['#panel-picker']);
   if(!restoredFilters){

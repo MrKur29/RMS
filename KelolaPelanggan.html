@@ -1,0 +1,996 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kelola Pelanggan — Kurnia's Food</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="permissions.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f2f5;color:#111827;font-size:14px}
+button{cursor:pointer;font-family:inherit}
+a{text-decoration:none}
+
+/* LOGIN */
+#login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(135deg,#0f172a 0%,#134e4a 60%,#0d9488 100%)}
+.login-card{background:white;border-radius:16px;padding:44px 40px;width:400px;box-shadow:0 25px 60px rgba(0,0,0,.4)}
+.login-logo{text-align:center;margin-bottom:36px}
+.login-logo .icon{font-size:48px;display:block;margin-bottom:12px}
+.login-logo h1{font-size:22px;font-weight:800;color:#111827}
+.login-logo p{font-size:13px;color:#6b7280;margin-top:4px}
+.form-group{margin-bottom:20px}
+.form-group label{display:block;font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
+.form-group input,.form-group select,.form-group textarea{width:100%;padding:11px 14px;border:1.5px solid #d1d5db;border-radius:8px;font-size:15px;transition:border-color .2s,box-shadow .2s;color:#111827;background:white;font-family:inherit}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{outline:none;border-color:#0d9488;box-shadow:0 0 0 3px rgba(13,148,136,.12)}
+.form-group textarea{resize:vertical;min-height:64px;font-size:14px}
+.btn-login{width:100%;padding:13px;background:#0d9488;color:white;border:none;border-radius:8px;font-size:15px;font-weight:700;transition:background .2s}
+.btn-login:hover{background:#0f766e}
+.btn-login:disabled{background:#5eead4;cursor:not-allowed}
+.login-error{background:#fee2e2;color:#dc2626;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:18px;border:1px solid #fecaca;display:none}
+.login-version{text-align:center;margin-top:20px;font-size:11px;color:#9ca3af}
+
+/* APP LAYOUT */
+#app-screen{display:none;height:100vh;overflow:hidden}
+.app-layout{display:flex;height:100%}
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:90}
+.sidebar-overlay.visible{display:block}
+
+/* SIDEBAR */
+.sidebar{width:230px;flex-shrink:0;background:#0f172a;color:white;display:flex;flex-direction:column;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.1) transparent;transition:transform .28s cubic-bezier(.4,0,.2,1);z-index:100}
+.sidebar-brand{padding:20px 18px 16px;border-bottom:1px solid rgba(255,255,255,.08)}
+.sidebar-nav{flex:1;padding:10px 0}
+.nav-section-label{font-size:10px;font-weight:700;color:rgba(255,255,255,.3);text-transform:uppercase;letter-spacing:1px;padding:12px 18px 4px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 18px;font-size:13px;color:rgba(255,255,255,.65);cursor:pointer;transition:all .15s;border-left:3px solid transparent}
+.nav-item:hover:not(.disabled){background:rgba(255,255,255,.07);color:white}
+.nav-item.active{background:rgba(13,148,136,.2);color:#5eead4;border-left-color:#0d9488}
+.nav-item.disabled{opacity:.3;cursor:not-allowed}
+.nav-icon{font-size:15px;width:22px;text-align:center;flex-shrink:0}
+.nav-label-text{flex:1}
+.nav-tag{font-size:9px;font-weight:700;padding:2px 5px;border-radius:4px;background:rgba(13,148,136,.3);color:#5eead4}
+.sidebar-footer{padding:14px 18px;border-top:1px solid rgba(255,255,255,.08)}
+.user-card{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.user-avatar{width:34px;height:34px;border-radius:50%;background:#0d9488;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:white;flex-shrink:0}
+.user-info-text .user-name{font-size:13px;font-weight:700;color:#f8fafc}
+.user-info-text .user-role{font-size:11px;color:rgba(255,255,255,.45);margin-top:1px}
+.btn-logout{width:100%;padding:8px 12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.6);border-radius:6px;font-size:12px;font-weight:600;transition:all .15s}
+.btn-logout:hover{background:rgba(220,38,38,.25);border-color:rgba(220,38,38,.5);color:#fca5a5}
+
+/* MAIN */
+.main-area{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.topbar{background:white;height:58px;padding:0 20px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e5e7eb;box-shadow:0 1px 4px rgba(0,0,0,.05);gap:12px}
+.topbar-left{display:flex;align-items:center;gap:12px;min-width:0}
+.topbar-left h1{font-size:17px;font-weight:800;color:#111827;white-space:nowrap}
+.topbar-left p{font-size:12px;color:#9ca3af;margin-top:1px}
+.topbar-left-text{min-width:0}
+.topbar-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.btn-hamburger{display:none;align-items:center;justify-content:center;width:40px;height:40px;border-radius:8px;background:#f3f4f6;border:1.5px solid #e5e7eb;font-size:18px;color:#374151;flex-shrink:0}
+.btn-hamburger:hover{background:#e5e7eb}
+.clock-display{font-size:14px;font-weight:700;color:#374151;background:#f9fafb;padding:6px 10px;border-radius:6px;border:1px solid #e5e7eb;white-space:nowrap}
+
+/* CONTENT */
+.content-area{flex:1;overflow-y:auto;padding:20px 24px 40px}
+
+/* PANEL */
+.panel{background:white;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden;margin-bottom:14px}
+.panel:last-child{margin-bottom:0}
+.panel-head{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:1px solid #f3f4f6;gap:8px;flex-wrap:wrap}
+.panel-title{font-size:14px;font-weight:800;color:#111827}
+.panel-body{padding:16px}
+.panel-hint{font-size:12px;color:#6b7280;margin-top:2px}
+.panel-actions{display:flex;gap:8px;flex-wrap:wrap}
+
+.form-row{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
+.form-row .form-group{flex:1;margin-bottom:0;min-width:220px}
+.hint{font-size:11px;color:#9ca3af;margin-top:6px}
+.empty{text-align:center;padding:28px 16px;color:#9ca3af;font-size:13px}
+
+/* INFO BANNER */
+.info-banner{display:flex;gap:10px;align-items:flex-start;background:#f0fdfa;border:1.5px solid #99f6e4;border-radius:10px;padding:12px 14px;margin:0 16px 16px;font-size:12.5px;color:#0f766e;line-height:1.5}
+.info-banner.warn{background:#fffbeb;border-color:#fde68a;color:#92400e}
+.info-banner .ic{font-size:18px;flex-shrink:0}
+.info-banner b{color:#065f46}
+.info-banner.warn b{color:#78350f}
+
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:10px 16px;border-radius:6px;border:none;font-size:13px;font-weight:700;transition:all .15s;min-height:44px;touch-action:manipulation;white-space:nowrap}
+.btn-primary{background:#0d9488;color:white}
+.btn-primary:hover{background:#0f766e}
+.btn-ghost{background:#f3f4f6;color:#374151}
+.btn-ghost:hover{background:#e5e7eb}
+.btn-danger{background:#dc2626;color:white}
+.btn-danger:hover{background:#b91c1c}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-sm{min-height:30px;padding:6px 11px;font-size:11.5px;border-radius:6px}
+.btn-edit{background:#eff6ff;color:#1d4ed8;border:1.5px solid #93c5fd}
+.btn-edit:hover{background:#dbeafe}
+.btn-approve{background:#f0fdf4;color:#15803d;border:1.5px solid #86efac}
+.btn-approve:hover{background:#dcfce7}
+.btn-reject{background:#fef2f2;color:#b91c1c;border:1.5px solid #fca5a5}
+.btn-reject:hover{background:#fee2e2}
+
+/* BADGES */
+.badge{display:inline-flex;align-items:center;padding:3px 9px;border-radius:12px;font-size:11px;font-weight:700;white-space:nowrap}
+.b-aktif{background:#d1fae5;color:#065f46}
+.b-nonaktif{background:#f3f4f6;color:#6b7280}
+.b-pending{background:#fef3c7;color:#92400e}
+
+/* TABLE */
+.tbl-wrap{overflow-x:auto}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl thead th{text-align:left;padding:9px 12px;background:#f9fafb;font-size:10.5px;font-weight:800;color:#6b7280;text-transform:uppercase;letter-spacing:.3px;border-bottom:1.5px solid #e5e7eb;white-space:nowrap}
+.tbl tbody td{padding:9px 12px;border-bottom:1px solid #f3f4f6;vertical-align:middle}
+.tbl tbody tr:hover{background:#fafafa}
+.tbl tbody tr.row-nonaktif{opacity:.55}
+.aksi-cell{display:flex;gap:6px;flex-wrap:nowrap}
+.result-info{font-size:12px;color:#6b7280;padding:0 16px 10px}
+.diff-line{display:block;font-size:12px;line-height:1.6}
+.diff-line .lbl{color:#9ca3af;font-weight:700;margin-right:4px}
+.diff-old{color:#b91c1c;text-decoration:line-through;opacity:.7}
+.diff-new{color:#065f46;font-weight:700}
+.diff-arrow{color:#9ca3af;margin:0 3px}
+.meta-line{font-size:11px;color:#9ca3af;margin-top:2px}
+
+/* MODAL */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;align-items:flex-start;justify-content:center;padding:32px 16px;overflow-y:auto}
+.modal-overlay.open{display:flex}
+.modal-box{background:white;border-radius:14px;padding:28px;width:480px;max-width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);animation:modal-in .2s ease;margin:auto}
+.modal-box.modal-sm{width:400px}
+@keyframes modal-in{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
+.modal-title{font-size:16px;font-weight:800;margin-bottom:4px;color:#111827}
+.modal-desc{font-size:13px;color:#6b7280;margin-bottom:20px}
+.modal-footer{display:flex;justify-content:flex-end;gap:10px;margin-top:22px;padding-top:18px;border-top:1px solid #f0f2f5;flex-wrap:wrap}
+.pin-input{width:100%;padding:14px;border:2px solid #d1d5db;border-radius:8px;font-size:22px;font-weight:800;letter-spacing:6px;text-align:center;color:#111827;font-family:monospace;transition:border-color .2s}
+.pin-input:focus{outline:none;border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.15)}
+.pin-error{color:#dc2626;font-size:12px;font-weight:700;margin-top:6px;display:none}
+.chk-row{display:flex;align-items:flex-start;gap:9px;background:#f9fafb;border:1px solid #f0f2f5;border-radius:8px;padding:11px 12px;margin-bottom:18px}
+.chk-row input{margin-top:2px;flex-shrink:0;cursor:pointer}
+.chk-row label{font-size:12.5px;color:#374151;line-height:1.5;cursor:pointer}
+.review-target-list{background:#f9fafb;border:1.5px solid #e5e7eb;border-radius:8px;padding:10px 14px;margin-bottom:18px;max-height:160px;overflow-y:auto;font-size:12.5px;color:#374151;line-height:1.7}
+
+/* TOAST */
+#toast{position:fixed;bottom:28px;right:28px;padding:13px 20px;border-radius:10px;font-size:13px;font-weight:700;box-shadow:0 8px 24px rgba(0,0,0,.2);display:none;z-index:999;animation:toast-in .25s ease;max-width:380px}
+#toast.show{display:block}
+#toast.success{background:#065f46;color:white}
+#toast.error{background:#991b1b;color:white}
+#toast.warning{background:#92400e;color:white}
+@keyframes toast-in{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+
+@media (max-width:900px){
+  .btn-hamburger{display:flex}
+  .sidebar{position:fixed;top:0;bottom:0;left:0;transform:translateX(-100%)}
+  .sidebar.open{transform:translateX(0)}
+  .form-row{flex-direction:column;align-items:stretch}
+  .form-row .btn{width:100%;justify-content:center}
+  .aksi-cell{flex-wrap:wrap}
+}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <span class="icon">📇</span>
+      <h1>RPA Management System</h1>
+      <p>Kelola Pelanggan — Login</p>
+    </div>
+    <div class="login-error" id="login-error"></div>
+    <div class="form-group">
+      <label>Username</label>
+      <input type="text" id="inp-username" placeholder="Masukkan username" autocomplete="username"
+             onkeydown="if(event.key==='Enter')document.getElementById('inp-password').focus()">
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input type="password" id="inp-password" placeholder="Masukkan password" autocomplete="current-password"
+             onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button class="btn-login" id="btn-login" onclick="doLogin()">Masuk →</button>
+    <p class="login-version">v1.0 — RPA System</p>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app-screen">
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+<div class="app-layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <img src="logo.png" style="height:36px;width:auto;object-fit:contain;">
+        <span style="font-size:15px;font-weight:800;color:#f8fafc;">Kurnia's Food</span>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section-label">Utama</div>
+      <div class="nav-item" onclick="navTo('Dashboard.html')">
+        <span class="nav-icon">🏠</span><span class="nav-label-text">Dashboard</span>
+      </div>
+      <div class="nav-section-label">Produksi</div>
+      <div class="nav-item" onclick="navTo('BatchAyamHidup.html')">
+        <span class="nav-icon">🐔</span><span class="nav-label-text">Batch Ayam Hidup</span>
+      </div>
+      <div class="nav-item" onclick="navTo('ProduksiKarkas.html')">
+        <span class="nav-icon">⚙️</span><span class="nav-label-text">Produksi Karkas</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Thawing.html')">
+        <span class="nav-icon">🌡️</span><span class="nav-label-text">Thawing</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Chiller.html')">
+        <span class="nav-icon">❄️</span><span class="nav-label-text">Chiller</span>
+      </div>
+      <div class="nav-item" onclick="navTo('WorkOrder.html')">
+        <span class="nav-icon">📋</span><span class="nav-label-text">Work Order</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Parting.html')">
+        <span class="nav-icon">✂️</span><span class="nav-label-text">Parting</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Boneless.html')">
+        <span class="nav-icon">🥩</span><span class="nav-label-text">Boneless</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Marinasi.html')">
+        <span class="nav-icon">🌶️</span><span class="nav-label-text">Marinasi</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Blasting.html')">
+        <span class="nav-icon">🧊</span><span class="nav-label-text">Blasting</span>
+      </div>
+      <div class="nav-item" onclick="navTo('ByProductKarkas.html')">
+        <span class="nav-icon">📦</span><span class="nav-label-text">By-product Karkas</span>
+      </div>
+      <div class="nav-section-label">Penjualan</div>
+      <div class="nav-item" onclick="navTo('Penjualan.html')"><span class="nav-icon">🛒</span><span class="nav-label-text">Penjualan</span></div>
+      <div class="nav-item" id="nav-cs" style="display:none" onclick="navTo('CS.html')"><span class="nav-icon">🏬</span><span class="nav-label-text">CS (Cold Storage)</span></div>
+      <div class="nav-item active">
+        <span class="nav-icon">📇</span><span class="nav-label-text">Kelola Pelanggan</span>
+        <span class="nav-tag">Aktif</span>
+      </div>
+      <div class="nav-section-label">Manajemen</div>
+      <div class="nav-item" onclick="navTo('Koreksi.html')">
+        <span class="nav-icon">✅</span><span class="nav-label-text">Koreksi &amp; Approval</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Laporan.html')">
+        <span class="nav-icon">📊</span><span class="nav-label-text">Laporan</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Tracing.html')">
+        <span class="nav-icon">🔍</span><span class="nav-label-text">Tracing Produk</span>
+      </div>
+      <div class="nav-item" id="nav-saldo-awal" style="display:none" onclick="navTo('SaldoAwal.html')">
+        <span class="nav-icon">📋</span><span class="nav-label-text">Saldo Awal Barang</span>
+      </div>
+      <div class="nav-item" onclick="navTo('MasterData.html')">
+        <span class="nav-icon">🗂️</span><span class="nav-label-text">Master Data</span>
+      </div>
+      <div class="nav-item" id="nav-revisi-batch" style="display:none" onclick="navTo('RevisiBatch.html')">
+        <span class="nav-icon">🔀</span><span class="nav-label-text">Revisi Batch Keranjang</span>
+      </div>
+      <div class="nav-item" id="nav-void-keranjang" style="display:none" onclick="navTo('VoidKeranjang.html')">
+        <span class="nav-icon">🗑️</span><span class="nav-label-text">Void Keranjang</span>
+      </div>
+      <div class="nav-item" id="nav-reprint-label" style="display:none" onclick="navTo('ReprintLabel.html')">
+        <span class="nav-icon">🖨️</span><span class="nav-label-text">Reprint Label</span>
+      </div>
+      <div class="nav-item" id="nav-user-mgmt" style="display:none" onclick="navTo('UserManagement.html')">
+        <span class="nav-icon">👥</span><span class="nav-label-text">Manajemen User</span>
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-card">
+        <div class="user-avatar" id="user-avatar">?</div>
+        <div class="user-info-text">
+          <div class="user-name" id="sidebar-name">—</div>
+          <div class="user-role" id="sidebar-role">—</div>
+        </div>
+      </div>
+      <button class="btn-logout" onclick="doLogout()">⬅ Keluar</button>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="main-area">
+    <div class="topbar">
+      <div class="topbar-left">
+        <button class="btn-hamburger" onclick="toggleSidebar()">☰</button>
+        <div class="topbar-left-text">
+          <h1>Kelola Pelanggan</h1>
+          <p id="topbar-date">—</p>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <div class="clock-display" id="clock">—</div>
+      </div>
+    </div>
+
+    <div class="content-area">
+
+      <!-- PANEL: MENUNGGU REVIEW -->
+      <div class="panel" id="panel-review" style="display:none">
+        <div class="panel-head">
+          <div>
+            <span class="panel-title">⏳ Menunggu Review <span id="review-count-badge"></span></span>
+            <div class="panel-hint">Perubahan yang diajukan belum berlaku sampai disetujui Supervisor (PIN wajib).</div>
+          </div>
+          <div class="panel-actions" id="review-approver-actions" style="display:none">
+            <button class="btn btn-sm btn-reject" id="btn-reject-selected" onclick="openReviewAction('reject')" disabled>❌ Tolak Terpilih (<span id="cnt-selected-reject">0</span>)</button>
+            <button class="btn btn-sm btn-approve" id="btn-approve-selected" onclick="openReviewAction('approve')" disabled>✅ Approve Terpilih (<span id="cnt-selected-approve">0</span>)</button>
+            <button class="btn btn-sm btn-primary" onclick="openReviewAction('approve', true)">✅ Approve Semua</button>
+          </div>
+        </div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th style="width:28px"><input type="checkbox" id="chk-select-all" onchange="onSelectAllReview()" style="width:15px;height:15px;cursor:pointer"></th>
+                <th>Pelanggan</th>
+                <th>Perubahan Diajukan</th>
+                <th>Diajukan</th>
+                <th>Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-review"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- PANEL: DAFTAR PELANGGAN -->
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <span class="panel-title">📇 Daftar Pelanggan</span>
+            <div class="panel-hint">Rapikan data pelanggan yang salah/berantakan di sini — halaman ini terpisah dari Master Data.</div>
+          </div>
+          <button class="btn btn-primary" onclick="openTambahModal()">➕ Tambah Pelanggan</button>
+        </div>
+
+        <div class="info-banner">
+          <span class="ic">ℹ️</span>
+          <div><b>Edit</b>, jangan hapus. Nama pelanggan yang sudah pernah dipakai transaksi tidak bisa dihapus (akan gagal), dan menghapusnya akan menghilangkan riwayat. Klik <b>✏️ Edit</b> untuk mengajukan perubahan (nama/telp/keterangan/status) — perubahan baru berlaku setelah disetujui Supervisor lewat panel "Menunggu Review" di atas.</div>
+        </div>
+
+        <div class="panel-body" style="padding-top:0">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Cari Nama / No. Telp</label>
+              <input type="text" id="search-box" placeholder="Ketik untuk mencari…" oninput="renderPelangganTable()">
+            </div>
+            <div class="form-group" style="flex:0;min-width:0">
+              <label style="visibility:hidden">.</label>
+              <label style="display:flex;align-items:center;gap:8px;text-transform:none;font-weight:600;color:#374151;cursor:pointer;font-size:13px;padding:11px 0">
+                <input type="checkbox" id="chk-show-nonaktif" onchange="renderPelangganTable()" style="width:16px;height:16px;cursor:pointer">
+                Tampilkan yang nonaktif juga
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="result-info" id="result-info"></div>
+        <div class="tbl-wrap" id="result-wrap" style="display:none">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>Nama Pelanggan</th>
+                <th>No. Telp</th>
+                <th>Keterangan</th>
+                <th>Status</th>
+                <th>Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-result"></tbody>
+          </table>
+        </div>
+        <div id="empty-area"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ===== MODAL: TAMBAH PELANGGAN ===== -->
+<div class="modal-overlay" id="modal-tambah">
+  <div class="modal-box modal-sm">
+    <div class="modal-title">➕ Tambah Pelanggan</div>
+    <div class="modal-desc">Pelanggan baru langsung tersedia di daftar pilihan customer (Penjualan) — tidak perlu approval.</div>
+    <div class="form-group">
+      <label>Nama Pelanggan <span style="color:#dc2626">*</span></label>
+      <input type="text" id="tb-nama" placeholder="Nama customer…">
+    </div>
+    <div class="form-group">
+      <label>No. Telp (opsional)</label>
+      <input type="text" id="tb-telp" placeholder="No. telp…">
+    </div>
+    <div class="form-group" style="margin-bottom:0">
+      <label>Keterangan (opsional)</label>
+      <input type="text" id="tb-ket" placeholder="Catatan tambahan…">
+    </div>
+    <div id="tb-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-top:10px;display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-tambah')">Batal</button>
+      <button class="btn btn-primary" id="tb-btn-ok" onclick="doTambah()">Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: EDIT PELANGGAN (ajukan perubahan, tanpa PIN) ===== -->
+<div class="modal-overlay" id="modal-edit">
+  <div class="modal-box">
+    <div class="modal-title">✏️ Edit Pelanggan</div>
+    <div class="modal-desc">Perubahan ini akan masuk status <b>Menunggu Review</b> — baru berlaku setelah disetujui Supervisor.</div>
+    <div class="form-group">
+      <label>Nama Pelanggan <span style="color:#dc2626">*</span></label>
+      <input type="text" id="ed-nama">
+    </div>
+    <div class="form-group">
+      <label>No. Telp</label>
+      <input type="text" id="ed-telp" placeholder="No. telp…">
+    </div>
+    <div class="form-group">
+      <label>Keterangan</label>
+      <input type="text" id="ed-ket" placeholder="Catatan tambahan…">
+    </div>
+    <div class="form-group">
+      <label>Status</label>
+      <select id="ed-status">
+        <option value="true">Aktif</option>
+        <option value="false">Nonaktif</option>
+      </select>
+    </div>
+    <div class="chk-row">
+      <input type="checkbox" id="ed-propagate" checked>
+      <label for="ed-propagate">Kalau <b>Nama</b> diubah, terapkan juga ke riwayat transaksi lama (Picking Slip &amp; Retur yang sudah tercetak) — disarankan, supaya nama yang salah tidak terus muncul di laporan/cetak ulang lama.</label>
+    </div>
+    <div class="form-group" style="margin-bottom:0">
+      <label>Alasan (opsional)</label>
+      <input type="text" id="ed-alasan" placeholder="Mis. salah ketik, ganti no telp, dsb…">
+    </div>
+    <div id="ed-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-top:10px;display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-edit')">Batal</button>
+      <button class="btn btn-primary" id="ed-btn-ok" onclick="doAjukanEdit()">📤 Ajukan Perubahan</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: REVIEW (Approve/Tolak — PIN Supervisor) ===== -->
+<div class="modal-overlay" id="modal-review">
+  <div class="modal-box">
+    <div class="modal-title" id="rv-title">🔑 Konfirmasi Supervisor</div>
+    <div class="modal-desc" id="rv-desc">Masukkan PIN Supervisor untuk melanjutkan.</div>
+    <div class="review-target-list" id="rv-target-list"></div>
+    <div class="form-group" id="rv-catatan-wrap" style="display:none">
+      <label>Catatan Penolakan (opsional)</label>
+      <input type="text" id="rv-catatan" placeholder="Alasan ditolak…">
+    </div>
+    <div class="form-group" style="margin-bottom:0">
+      <label>PIN Supervisor <span style="color:#dc2626">*</span></label>
+      <input type="password" class="pin-input" id="rv-pin" placeholder="••••••" maxlength="6"
+             onkeydown="if(event.key==='Enter')doReviewSubmit()">
+      <div class="pin-error" id="rv-pin-err">PIN salah atau bukan Supervisor.</div>
+    </div>
+    <div id="rv-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-top:10px;display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-review')">Batal</button>
+      <button class="btn btn-primary" id="rv-btn-ok" onclick="doReviewSubmit()">✅ Konfirmasi</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<script>
+const SUPABASE_URL = 'https://dxixqyokuqrdprupsvic.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR4aXhxeW9rdXFyZHBydXBzdmljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5NjM3ODcsImV4cCI6MjA5MjUzOTc4N30.D_yaPwNbe4FFg_hmDeJ9cuxzbNvXZT8l1_TyZuq1t1M';
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ── STATE ──
+let currentUser      = null;
+let canApproveHere    = false;   // moduleRole admin/supervisor untuk modul 'pelanggan'
+let allPelanggan      = [];      // master_pelanggan rows
+let pendingRequests   = [];      // pelanggan_edit_requests status=PENDING (+ join master_pelanggan utk fallback nama)
+let pendingByPelangganId = {};   // pelanggan_id -> request (hanya 1 aktif per pelanggan, dijaga unique index)
+let editingId         = null;    // pelanggan.id yang lagi diajukan editnya
+let selectedReviewIds = new Set();
+let reviewAction       = null;   // 'approve' | 'reject'
+let reviewTargetIds    = [];     // request id(s) yang lagi diproses di modal-review
+
+// ── UTILS ──
+async function sha256(str){
+  const buf=new TextEncoder().encode(str);
+  const hash=await crypto.subtle.digest('SHA-256',buf);
+  return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+function esc(s){return (s==null?'':String(s)).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function showToast(msg,type='success'){const t=document.getElementById('toast');t.textContent=msg;t.className=`show ${type}`;setTimeout(()=>{t.className=''},4200)}
+function navTo(url){closeSidebar();if(currentUser){localStorage.setItem('rpa_user',JSON.stringify(currentUser));sessionStorage.setItem('rpa_user',JSON.stringify(currentUser))}window.location.href=url}
+function openModal(id){document.getElementById(id).classList.add('open')}
+function closeModal(id){document.getElementById(id).classList.remove('open')}
+function fmtDateTime(s){if(!s)return'—';return new Date(s).toLocaleString('id-ID',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}
+
+// ── SIDEBAR ──
+function toggleSidebar(){const s=document.getElementById('sidebar'),o=document.getElementById('sidebar-overlay');s.classList.toggle('open');o.classList.toggle('visible')}
+function closeSidebar(){document.getElementById('sidebar')?.classList.remove('open');document.getElementById('sidebar-overlay')?.classList.remove('visible')}
+
+// ── AUTH ──
+async function doLogin(){
+  const username=document.getElementById('inp-username').value.trim();
+  const password=document.getElementById('inp-password').value;
+  const errEl=document.getElementById('login-error');
+  errEl.style.display='none';
+  if(!username||!password){errEl.textContent='Username dan password wajib diisi.';errEl.style.display='block';return}
+  const btn=document.getElementById('btn-login');
+  btn.disabled=true;btn.textContent='Memproses…';
+  try{
+    const hash=await sha256(password);
+    const{data,error}=await db.from('users').select('id,nama,username,role,aktif,pin,is_system_admin').eq('username',username).eq('password_hash',hash).eq('aktif',true).maybeSingle();
+    if(error)throw error;
+    if(!data){errEl.textContent='Username atau password salah.';errEl.style.display='block';return}
+    data.permissions=await RPA_PERM.fetchPermissions(db,data.id);
+    currentUser=data;localStorage.setItem('rpa_user',JSON.stringify(data));startApp();
+  }catch(e){errEl.textContent='Gagal terhubung ke server.';errEl.style.display='block';}
+  finally{btn.disabled=false;btn.textContent='Masuk →'}
+}
+function doLogout(){localStorage.removeItem('rpa_user');sessionStorage.removeItem('rpa_user');currentUser=null;document.getElementById('app-screen').style.display='none';document.getElementById('login-screen').style.display='flex'}
+
+function startApp(){
+  const moduleRole=RPA_PERM.enforceModuleAccess(currentUser,'pelanggan');
+  if(!moduleRole)return;
+  currentUser.moduleRole=moduleRole;
+  canApproveHere = RPA_PERM.canApprove(moduleRole);
+
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('app-screen').style.display='block';
+  const av=document.getElementById('user-avatar');
+  if(av)av.textContent=(currentUser.nama||'?')[0].toUpperCase();
+  document.getElementById('sidebar-name').textContent=currentUser.nama;
+  document.getElementById('sidebar-role').textContent=currentUser.role+(currentUser.is_system_admin?' (Admin)':'');
+  if(currentUser.is_system_admin){const el=document.getElementById('nav-user-mgmt');if(el)el.style.display='flex'}
+  if(RPA_PERM.getModuleRole(currentUser,'saldo_awal')!==null){const el=document.getElementById('nav-saldo-awal');if(el)el.style.display='flex'}
+  if(RPA_PERM.getModuleRole(currentUser,'revisi_batch')!==null){const el=document.getElementById('nav-revisi-batch');if(el)el.style.display='flex'}
+  if(RPA_PERM.getModuleRole(currentUser,'void_keranjang')!==null){const el=document.getElementById('nav-void-keranjang');if(el)el.style.display='flex'}
+  if(RPA_PERM.getModuleRole(currentUser,'reprint_label')!==null){const el=document.getElementById('nav-reprint-label');if(el)el.style.display='flex'}
+  if(RPA_PERM.getModuleRole(currentUser,'cs')!==null){const el=document.getElementById('nav-cs');if(el)el.style.display='flex'}
+
+  document.getElementById('review-approver-actions').style.display = canApproveHere ? 'flex' : 'none';
+
+  startClock();
+  loadAll();
+}
+
+function startClock(){
+  function tick(){
+    const now=new Date();
+    document.getElementById('clock').textContent=now.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    document.getElementById('topbar-date').textContent=now.toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  }
+  tick();setInterval(tick,1000);
+}
+
+// ── AUTO LOGIN ──
+window.addEventListener('DOMContentLoaded',async ()=>{
+  const saved=localStorage.getItem('rpa_user')||sessionStorage.getItem('rpa_user');
+  if(saved){try{currentUser=await RPA_PERM.restoreSession(db);if(currentUser)startApp();}catch{}}
+});
+
+// ============================================================
+// LOAD DATA
+// ============================================================
+async function loadAll(){
+  await Promise.all([loadPelanggan(), loadPendingRequests()]);
+  renderPelangganTable();
+  renderReviewTable();
+}
+
+async function loadPelanggan(){
+  const{data,error}=await db.from('master_pelanggan')
+    .select('id,nama,no_telp,keterangan,aktif,created_at')
+    .order('nama');
+  if(error){console.error(error);showToast('Gagal memuat daftar pelanggan.','error');return}
+  allPelanggan = data||[];
+}
+
+async function loadPendingRequests(){
+  const{data,error}=await db.from('pelanggan_edit_requests')
+    .select('*, users:diajukan_oleh(nama)')
+    .eq('status','PENDING')
+    .order('diajukan_at',{ascending:true});
+  if(error){console.error(error);pendingRequests=[];pendingByPelangganId={};return}
+  pendingRequests = data||[];
+  pendingByPelangganId = {};
+  pendingRequests.forEach(r=>{ pendingByPelangganId[r.pelanggan_id] = r; });
+  // buang seleksi yang request-nya sudah tidak PENDING lagi
+  const stillPending = new Set(pendingRequests.map(r=>r.id));
+  selectedReviewIds.forEach(id=>{ if(!stillPending.has(id)) selectedReviewIds.delete(id); });
+}
+
+// ============================================================
+// PANEL — DAFTAR PELANGGAN
+// ============================================================
+function renderPelangganTable(){
+  const q = (document.getElementById('search-box').value||'').trim().toLowerCase();
+  const showNonaktif = document.getElementById('chk-show-nonaktif').checked;
+  let rows = allPelanggan.filter(p=>{
+    if(!showNonaktif && !p.aktif) return false;
+    if(!q) return true;
+    return (p.nama||'').toLowerCase().includes(q) || (p.no_telp||'').toLowerCase().includes(q);
+  });
+
+  const wrap = document.getElementById('result-wrap');
+  const info = document.getElementById('result-info');
+  const emptyArea = document.getElementById('empty-area');
+  const tbody = document.getElementById('tbody-result');
+
+  if(rows.length===0){
+    wrap.style.display='none';
+    info.textContent='';
+    emptyArea.innerHTML = `<div class="empty">Tidak ada pelanggan yang cocok.</div>`;
+    return;
+  }
+  emptyArea.innerHTML='';
+  wrap.style.display='';
+  info.textContent = `Menampilkan ${rows.length} dari ${allPelanggan.length} pelanggan.`;
+
+  tbody.innerHTML = rows.map(p=>{
+    const pending = pendingByPelangganId[p.id];
+    const aksiHtml = pending
+      ? `<span class="badge b-pending">⏳ Menunggu Review</span>`
+      : `<button class="btn btn-sm btn-edit" onclick="openEditModal('${p.id}')">✏️ Edit</button>`;
+    return `
+    <tr class="${p.aktif?'':'row-nonaktif'}">
+      <td style="font-weight:700">${esc(p.nama)}</td>
+      <td>${esc(p.no_telp)||'—'}</td>
+      <td>${esc(p.keterangan)||'—'}</td>
+      <td><span class="badge ${p.aktif?'b-aktif':'b-nonaktif'}">${p.aktif?'Aktif':'Nonaktif'}</span></td>
+      <td><div class="aksi-cell">${aksiHtml}</div></td>
+    </tr>`;
+  }).join('');
+}
+
+// ============================================================
+// TAMBAH PELANGGAN — tanpa PIN/approval, sama seperti form inline di Penjualan.html
+// ============================================================
+function openTambahModal(){
+  document.getElementById('tb-nama').value='';
+  document.getElementById('tb-telp').value='';
+  document.getElementById('tb-ket').value='';
+  document.getElementById('tb-err').style.display='none';
+  openModal('modal-tambah');
+  setTimeout(()=>document.getElementById('tb-nama').focus(),150);
+}
+async function doTambah(){
+  const nama = document.getElementById('tb-nama').value.trim();
+  const telp = document.getElementById('tb-telp').value.trim();
+  const ket  = document.getElementById('tb-ket').value.trim();
+  const errEl = document.getElementById('tb-err');
+  errEl.style.display='none';
+  if(!nama){errEl.textContent='Nama pelanggan wajib diisi.';errEl.style.display='block';return}
+  if(allPelanggan.some(p=>p.nama.trim().toLowerCase()===nama.toLowerCase())){
+    errEl.textContent='Nama pelanggan ini sudah ada di daftar.';errEl.style.display='block';return;
+  }
+  const btn=document.getElementById('tb-btn-ok');
+  btn.disabled=true;btn.textContent='Menyimpan…';
+  try{
+    const{error}=await db.from('master_pelanggan').insert({
+      nama, no_telp: telp||null, keterangan: ket||null, aktif: true
+    });
+    if(error){
+      if(error.code==='23505'){errEl.textContent='Nama pelanggan ini sudah ada di daftar.';errEl.style.display='block';return}
+      throw error;
+    }
+    closeModal('modal-tambah');
+    showToast(`Pelanggan "${nama}" berhasil ditambahkan.`,'success');
+    await loadAll();
+  }catch(e){
+    console.error(e);
+    errEl.textContent='Gagal menyimpan: '+(e.message||'');
+    errEl.style.display='block';
+  }finally{
+    btn.disabled=false;btn.textContent='Simpan';
+  }
+}
+
+// ============================================================
+// EDIT PELANGGAN — ajukan perubahan (nama/telp/keterangan/status), tanpa PIN.
+// Baru berlaku setelah disetujui Supervisor di panel Menunggu Review.
+// ============================================================
+function openEditModal(id){
+  const p = allPelanggan.find(x=>x.id===id);
+  if(!p) return;
+  if(pendingByPelangganId[id]){
+    showToast('Pelanggan ini sudah punya pengajuan yang masih menunggu review.','warning');
+    return;
+  }
+  editingId = id;
+  document.getElementById('ed-nama').value = p.nama;
+  document.getElementById('ed-telp').value = p.no_telp||'';
+  document.getElementById('ed-ket').value = p.keterangan||'';
+  document.getElementById('ed-status').value = p.aktif ? 'true' : 'false';
+  document.getElementById('ed-propagate').checked = true;
+  document.getElementById('ed-alasan').value = '';
+  document.getElementById('ed-err').style.display='none';
+  openModal('modal-edit');
+  setTimeout(()=>{
+    const el=document.getElementById('ed-nama');
+    el.focus(); el.select();
+  },150);
+}
+
+async function doAjukanEdit(){
+  const p = allPelanggan.find(x=>x.id===editingId);
+  if(!p) return;
+  const namaBaru  = document.getElementById('ed-nama').value.trim();
+  const telpBaru  = document.getElementById('ed-telp').value.trim();
+  const ketBaru   = document.getElementById('ed-ket').value.trim();
+  const aktifBaru = document.getElementById('ed-status').value === 'true';
+  const propagate = document.getElementById('ed-propagate').checked;
+  const alasan    = document.getElementById('ed-alasan').value.trim();
+  const errEl     = document.getElementById('ed-err');
+  errEl.style.display='none';
+
+  if(!namaBaru){errEl.textContent='Nama pelanggan wajib diisi.';errEl.style.display='block';return}
+  if(allPelanggan.some(x=>x.id!==p.id && x.nama.trim().toLowerCase()===namaBaru.toLowerCase())){
+    errEl.textContent='Nama ini sudah dipakai pelanggan lain — pertimbangkan Nonaktifkan salah satunya alih-alih menyamakan nama.';
+    errEl.style.display='block';return;
+  }
+  const tidakAdaPerubahan =
+    namaBaru === p.nama &&
+    telpBaru === (p.no_telp||'') &&
+    ketBaru  === (p.keterangan||'') &&
+    aktifBaru === p.aktif;
+  if(tidakAdaPerubahan){errEl.textContent='Tidak ada perubahan untuk diajukan.';errEl.style.display='block';return}
+
+  const btn=document.getElementById('ed-btn-ok');
+  btn.disabled=true;btn.textContent='Mengirim…';
+  try{
+    const{error:insErr}=await db.from('pelanggan_edit_requests').insert({
+      pelanggan_id: p.id,
+      nama_lama: p.nama, no_telp_lama: p.no_telp||null, keterangan_lama: p.keterangan||null, aktif_lama: p.aktif,
+      nama_baru: namaBaru, no_telp_baru: telpBaru||null, keterangan_baru: ketBaru||null, aktif_baru: aktifBaru,
+      propagate_riwayat: propagate,
+      alasan: alasan||null,
+      status: 'PENDING',
+      diajukan_oleh: currentUser.id
+    });
+    if(insErr){
+      if(insErr.code==='23505'){errEl.textContent='Pelanggan ini sudah punya pengajuan yang masih menunggu review.';errEl.style.display='block';return}
+      throw insErr;
+    }
+
+    await db.from('audit_log').insert({
+      user_id: currentUser.id,
+      aksi: 'PELANGGAN_EDIT_REQUEST',
+      tabel_terkait: 'master_pelanggan',
+      record_id: p.id,
+      data_sebelum: { nama:p.nama, no_telp:p.no_telp, keterangan:p.keterangan, aktif:p.aktif },
+      data_sesudah: { nama:namaBaru, no_telp:telpBaru, keterangan:ketBaru, aktif:aktifBaru, alasan: alasan||null, status:'PENDING' }
+    });
+
+    closeModal('modal-edit');
+    showToast(`Perubahan untuk "${p.nama}" diajukan — menunggu review Supervisor.`,'success');
+    await loadAll();
+  }catch(e){
+    console.error(e);
+    errEl.textContent='Gagal mengajukan: '+(e.message||'');
+    errEl.style.display='block';
+  }finally{
+    btn.disabled=false;btn.textContent='📤 Ajukan Perubahan';
+  }
+}
+
+// ============================================================
+// PANEL — MENUNGGU REVIEW
+// ============================================================
+function fieldDiffLines(r){
+  const lines = [];
+  if(r.nama_baru !== r.nama_lama)
+    lines.push(`<span class="diff-line"><span class="lbl">Nama</span><span class="diff-old">${esc(r.nama_lama)}</span><span class="diff-arrow">→</span><span class="diff-new">${esc(r.nama_baru)}</span></span>`);
+  if((r.no_telp_baru||'') !== (r.no_telp_lama||''))
+    lines.push(`<span class="diff-line"><span class="lbl">Telp</span><span class="diff-old">${esc(r.no_telp_lama)||'—'}</span><span class="diff-arrow">→</span><span class="diff-new">${esc(r.no_telp_baru)||'—'}</span></span>`);
+  if((r.keterangan_baru||'') !== (r.keterangan_lama||''))
+    lines.push(`<span class="diff-line"><span class="lbl">Ket.</span><span class="diff-old">${esc(r.keterangan_lama)||'—'}</span><span class="diff-arrow">→</span><span class="diff-new">${esc(r.keterangan_baru)||'—'}</span></span>`);
+  if(r.aktif_baru !== r.aktif_lama)
+    lines.push(`<span class="diff-line"><span class="lbl">Status</span><span class="diff-old">${r.aktif_lama?'Aktif':'Nonaktif'}</span><span class="diff-arrow">→</span><span class="diff-new">${r.aktif_baru?'Aktif':'Nonaktif'}</span></span>`);
+  return lines.join('') || '<span class="diff-line" style="color:#9ca3af">(tidak ada perubahan terdeteksi)</span>';
+}
+
+function renderReviewTable(){
+  const panel = document.getElementById('panel-review');
+  const tbody = document.getElementById('tbody-review');
+  const badge = document.getElementById('review-count-badge');
+
+  if(pendingRequests.length===0){
+    panel.style.display='none';
+    tbody.innerHTML='';
+    return;
+  }
+  panel.style.display='';
+  badge.innerHTML = `<span class="badge b-pending">${pendingRequests.length}</span>`;
+
+  tbody.innerHTML = pendingRequests.map(r=>{
+    const checked = selectedReviewIds.has(r.id) ? 'checked' : '';
+    const chkCell = canApproveHere
+      ? `<input type="checkbox" class="chk-review-row" data-id="${r.id}" ${checked} onchange="onReviewRowCheck('${r.id}',this.checked)" style="width:15px;height:15px;cursor:pointer">`
+      : '';
+    const aksiHtml = canApproveHere
+      ? `<div class="aksi-cell">
+          <button class="btn btn-sm btn-approve" onclick="openReviewAction('approve', false, ['${r.id}'])">✅ Approve</button>
+          <button class="btn btn-sm btn-reject" onclick="openReviewAction('reject', false, ['${r.id}'])">❌ Tolak</button>
+         </div>`
+      : `<span style="color:#9ca3af;font-size:12px">Menunggu Supervisor</span>`;
+    return `
+    <tr>
+      <td>${chkCell}</td>
+      <td style="font-weight:700">${esc(r.nama_lama)}</td>
+      <td>${fieldDiffLines(r)}${r.alasan?`<div class="meta-line">Alasan: ${esc(r.alasan)}</div>`:''}</td>
+      <td><div class="meta-line" style="font-size:12px;color:#374151">${esc(r.users?.nama)||'—'}</div><div class="meta-line">${fmtDateTime(r.diajukan_at)}</div></td>
+      <td>${aksiHtml}</td>
+    </tr>`;
+  }).join('');
+
+  updateReviewActionCounts();
+}
+
+function onSelectAllReview(){
+  const all = document.getElementById('chk-select-all').checked;
+  selectedReviewIds = new Set(all ? pendingRequests.map(r=>r.id) : []);
+  renderReviewTable();
+}
+function onReviewRowCheck(id, checked){
+  if(checked) selectedReviewIds.add(id); else selectedReviewIds.delete(id);
+  updateReviewActionCounts();
+}
+function updateReviewActionCounts(){
+  const n = selectedReviewIds.size;
+  document.getElementById('cnt-selected-approve').textContent = n;
+  document.getElementById('cnt-selected-reject').textContent = n;
+  document.getElementById('btn-approve-selected').disabled = n===0;
+  document.getElementById('btn-reject-selected').disabled = n===0;
+}
+
+// ============================================================
+// REVIEW MODAL — Approve (single/selected/all) & Tolak, PIN Supervisor wajib
+// ============================================================
+function openReviewAction(action, allFlag=false, explicitIds=null){
+  let ids;
+  if(explicitIds) ids = explicitIds;
+  else if(allFlag) ids = pendingRequests.map(r=>r.id);
+  else ids = Array.from(selectedReviewIds);
+
+  if(ids.length===0){ showToast('Tidak ada pengajuan yang dipilih.','warning'); return; }
+
+  reviewAction = action;
+  reviewTargetIds = ids;
+
+  const targets = pendingRequests.filter(r=>ids.includes(r.id));
+  const title = action==='approve'
+    ? `✅ Approve ${ids.length} Pengajuan`
+    : `❌ Tolak ${ids.length} Pengajuan`;
+  const desc = action==='approve'
+    ? 'Perubahan akan langsung berlaku ke data pelanggan begitu PIN dikonfirmasi.'
+    : 'Pengajuan akan ditandai ditolak — data pelanggan TIDAK berubah.';
+
+  document.getElementById('rv-title').textContent = title;
+  document.getElementById('rv-desc').textContent = desc;
+  document.getElementById('rv-target-list').innerHTML = targets.map(r=>
+    `<div>• <b>${esc(r.nama_lama)}</b>${r.nama_baru!==r.nama_lama?` → ${esc(r.nama_baru)}`:''}</div>`
+  ).join('');
+  document.getElementById('rv-catatan-wrap').style.display = action==='reject' ? '' : 'none';
+  document.getElementById('rv-catatan').value = '';
+  document.getElementById('rv-pin').value = '';
+  document.getElementById('rv-pin-err').style.display='none';
+  document.getElementById('rv-err').style.display='none';
+  document.getElementById('rv-btn-ok').textContent = action==='approve' ? '✅ Konfirmasi Approve' : '❌ Konfirmasi Tolak';
+
+  openModal('modal-review');
+  setTimeout(()=>document.getElementById('rv-pin').focus(),150);
+}
+
+async function verifySupervisorPin(pin){
+  if(!pin) return null;
+  const{data:sup}=await db.from('users')
+    .select('id,nama').eq('pin',pin).eq('aktif',true)
+    .or('role.eq.SUPERVISOR,is_system_admin.eq.true').maybeSingle();
+  return sup||null;
+}
+
+async function doReviewSubmit(){
+  const pin = document.getElementById('rv-pin').value.trim();
+  const catatan = document.getElementById('rv-catatan').value.trim();
+  const pinErrEl = document.getElementById('rv-pin-err');
+  const errEl = document.getElementById('rv-err');
+  pinErrEl.style.display='none';
+  errEl.style.display='none';
+  if(!pin){errEl.textContent='PIN wajib diisi.';errEl.style.display='block';return}
+
+  const btn=document.getElementById('rv-btn-ok');
+  btn.disabled=true;btn.textContent='Memproses…';
+  try{
+    const sup = await verifySupervisorPin(pin);
+    if(!sup){pinErrEl.style.display='block';return}
+
+    let ok=0, fail=0;
+    for(const id of reviewTargetIds){
+      const r = pendingRequests.find(x=>x.id===id);
+      if(!r) continue;
+      try{
+        if(reviewAction==='approve') await approveOne(r, sup);
+        else await rejectOne(r, sup, catatan);
+        ok++;
+      }catch(e){
+        console.error('[KelolaPelanggan] gagal proses request', id, e);
+        fail++;
+      }
+    }
+
+    closeModal('modal-review');
+    selectedReviewIds.clear();
+    const verb = reviewAction==='approve' ? 'disetujui' : 'ditolak';
+    if(fail===0) showToast(`${ok} pengajuan berhasil ${verb}.`,'success');
+    else showToast(`${ok} ${verb}, ${fail} gagal diproses — lihat console untuk detail.`,'warning');
+    await loadAll();
+  }catch(e){
+    console.error(e);
+    errEl.textContent='Gagal memproses: '+(e.message||'');
+    errEl.style.display='block';
+  }finally{
+    btn.disabled=false;btn.textContent = reviewAction==='approve' ? '✅ Konfirmasi Approve' : '❌ Konfirmasi Tolak';
+  }
+}
+
+async function approveOne(r, sup){
+  const{error:updErr}=await db.from('master_pelanggan').update({
+    nama: r.nama_baru, no_telp: r.no_telp_baru, keterangan: r.keterangan_baru, aktif: r.aktif_baru
+  }).eq('id', r.pelanggan_id);
+  if(updErr) throw updErr;
+
+  let riwayatCount = 0;
+  if(r.propagate_riwayat && r.nama_baru !== r.nama_lama){
+    const{data:psRows,error:psErr}=await db.from('picking_slips')
+      .update({nama_pelanggan:r.nama_baru}).eq('pelanggan_id', r.pelanggan_id).select('id');
+    if(psErr) console.error('[KelolaPelanggan] gagal update picking_slips:', psErr);
+    const psIds = (psRows||[]).map(x=>x.id);
+    riwayatCount += psIds.length;
+    if(psIds.length){
+      const{data:rtRows,error:rtErr}=await db.from('retur_penjualan')
+        .update({nama_pelanggan:r.nama_baru}).in('ps_id', psIds).select('id');
+      if(rtErr) console.error('[KelolaPelanggan] gagal update retur_penjualan:', rtErr);
+      riwayatCount += (rtRows||[]).length;
+    }
+  }
+
+  await db.from('pelanggan_edit_requests').update({
+    status:'APPROVED', direview_oleh: sup.id, direview_at: new Date().toISOString()
+  }).eq('id', r.id);
+
+  await db.from('audit_log').insert({
+    user_id: currentUser.id,
+    aksi: 'PELANGGAN_EDIT_APPROVED',
+    tabel_terkait: 'master_pelanggan',
+    record_id: r.pelanggan_id,
+    data_sebelum: { nama:r.nama_lama, no_telp:r.no_telp_lama, keterangan:r.keterangan_lama, aktif:r.aktif_lama },
+    data_sesudah: { nama:r.nama_baru, no_telp:r.no_telp_baru, keterangan:r.keterangan_baru, aktif:r.aktif_baru,
+                     oleh_pin: sup.nama, propagate_riwayat: r.propagate_riwayat, riwayat_terupdate: riwayatCount }
+  });
+}
+
+async function rejectOne(r, sup, catatan){
+  await db.from('pelanggan_edit_requests').update({
+    status:'REJECTED', direview_oleh: sup.id, direview_at: new Date().toISOString(),
+    catatan_review: catatan||null
+  }).eq('id', r.id);
+
+  await db.from('audit_log').insert({
+    user_id: currentUser.id,
+    aksi: 'PELANGGAN_EDIT_REJECTED',
+    tabel_terkait: 'master_pelanggan',
+    record_id: r.pelanggan_id,
+    data_sebelum: { nama:r.nama_lama, no_telp:r.no_telp_lama, keterangan:r.keterangan_lama, aktif:r.aktif_lama },
+    data_sesudah: { nama_diajukan:r.nama_baru, oleh_pin: sup.nama, catatan_review: catatan||null }
+  });
+}
+</script>
+</body>
+</html>

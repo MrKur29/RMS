@@ -543,6 +543,7 @@ a { text-decoration: none; }
             </div>
 
             <div class="nav-item" id="nav-cs" style="display:none" onclick="navTo('CS.html')"><span class="nav-icon">🏬</span><span class="nav-label-text">CS (Cold Storage)</span></div>
+            <div class="nav-item" id="nav-pelanggan" style="display:none" onclick="navTo('KelolaPelanggan.html')"><span class="nav-icon">📇</span><span class="nav-label-text">Kelola Pelanggan</span></div>
             <div class="nav-section-label">Manajemen</div>
             <div class="nav-item" id="nav-koreksi" onclick="navTo('Koreksi.html')">
                 <span class="nav-icon">✅</span>
@@ -1071,6 +1072,7 @@ function startApp() {
     if (RPA_PERM.getModuleRole(currentUser, 'reprint_label') !== null) { const rlEl = document.getElementById('nav-reprint-label'); if (rlEl) rlEl.style.display = 'flex'; }
 
     if (RPA_PERM.getModuleRole(currentUser, 'cs') !== null) { const csEl = document.getElementById('nav-cs'); if (csEl) csEl.style.display = 'flex'; }
+    if(RPA_PERM.getModuleRole(currentUser,'pelanggan')!==null){const el=document.getElementById('nav-pelanggan');if(el)el.style.display='flex'}
     // Tampilkan nav Saldo Awal Barang hanya untuk user yang di-assign modul
     // 'saldo_awal' (lihat migration 49) — modul ini sengaja dibatasi, tidak
     // untuk operator harian.
