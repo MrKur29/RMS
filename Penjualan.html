@@ -526,6 +526,7 @@ a{text-decoration:none}
               <thead>
                 <tr>
                   <th>Kode Retur</th>
+                  <th>Tanggal</th>
                   <th>PS / Customer</th>
                   <th>Item Asal</th>
                   <th>Jenis</th>
@@ -536,7 +537,7 @@ a{text-decoration:none}
                 </tr>
               </thead>
               <tbody id="retur-tbody">
-                <tr><td colspan="8"><div class="empty-state"><div class="es-icon">↩️</div><p>Belum ada retur</p></div></td></tr>
+                <tr><td colspan="9"><div class="empty-state"><div class="es-icon">↩️</div><p>Belum ada retur</p></div></td></tr>
               </tbody>
             </table>
           </div>
@@ -557,6 +558,12 @@ a{text-decoration:none}
       <button class="modal-close" onclick="closeModalRetur()">✕</button>
     </div>
     <div class="modal-body">
+      <div class="form-field" style="margin-bottom:14px;max-width:220px">
+        <label>Tanggal Retur *</label>
+        <input type="date" id="retur-tanggal" style="width:100%">
+        <div style="font-size:10.5px;color:#9ca3af;margin-top:2px">Tanggal barang retur ini benar-benar diterima kembali dari pelanggan — berlaku untuk semua item di sesi ini.</div>
+      </div>
+
       <div style="margin-bottom:8px;font-size:12px;font-weight:700;color:#374151">PILIH ITEM YANG DIRETUR — bisa lebih dari 1 produk, akan dicetak jadi 1 Retur Slip:</div>
       <div id="retur-item-picker" style="max-height:160px;overflow-y:auto;border:1.5px solid #e5e7eb;border-radius:8px;margin-bottom:14px">
         <div style="padding:16px;text-align:center;color:#9ca3af;font-size:12px">Memuat item…</div>
@@ -1858,6 +1865,11 @@ async function openRetur(psId){
   returPsId = psId;
   returSelectedItems = [];
 
+  const todayStr = new Date().toISOString().slice(0,10);
+  const tglInput = document.getElementById('retur-tanggal');
+  tglInput.value = todayStr;
+  tglInput.max = todayStr;
+
   const picker = document.getElementById('retur-item-picker');
   picker.innerHTML = '<div style="padding:16px;text-align:center;color:#9ca3af;font-size:12px">Memuat item…</div>';
   renderReturSelectedItems();
@@ -1966,6 +1978,10 @@ function renderReturSelectedItems(){
 }
 async function submitBuatRetur(){
   if(!returSelectedItems.length){ toast('Pilih minimal 1 item yang diretur', 'error'); return; }
+  const tanggalRetur = document.getElementById('retur-tanggal').value;
+  if(!tanggalRetur){ toast('Isi tanggal retur dulu', 'error'); return; }
+  const todayStr = new Date().toISOString().slice(0,10);
+  if(tanggalRetur > todayStr){ toast('Tanggal retur tidak boleh tanggal masa depan', 'error'); return; }
   for(const item of returSelectedItems){
     if(!item.jenis_retur){ toast(`Keranjang ${item.basket_code}: pilih jenis retur dulu`, 'error'); return; }
     if(item.ekor <= 0 || item.kg <= 0){ toast(`Keranjang ${item.basket_code}: Ekor dan Kg harus lebih dari 0`, 'error'); return; }
@@ -1979,14 +1995,14 @@ async function submitBuatRetur(){
       ekor: item.ekor, kg: item.kg, keterangan: item.keterangan || null
     }));
     const { data, error } = await db.rpc('buat_retur_penjualan_batch', {
-      p_items, p_user_id: currentUser?.id || null,
+      p_items, p_user_id: currentUser?.id || null, p_tanggal_retur: tanggalRetur,
     });
     if(error) throw error;
     if(!data?.ok){ toast('Gagal: ' + data?.msg, 'error', 6000); return; }
 
     toast(`✅ ${data.items.length} item retur tersimpan — siap dicetak & dikirim ke Chiller`, 'success', 5000);
     closeModalRetur();
-    openReturSlipPrint({ ps_code: data.ps_code, nama_pelanggan: data.nama_pelanggan }, data.items);
+    openReturSlipPrint({ ps_code: data.ps_code, nama_pelanggan: data.nama_pelanggan, tanggal_retur: data.tanggal_retur }, data.items);
     await loadReturList();
   } catch(e){
     toast('Gagal simpan: ' + e.message, 'error');
@@ -1996,8 +2012,16 @@ async function submitBuatRetur(){
 }
 
 /* ---------- PRINT RETUR SLIP (reuse #modal-detail) — 1 slip, bisa banyak item ---------- */
+function formatTglRetur(tanggalStr){
+  // tanggalStr = 'YYYY-MM-DD' dari kolom tanggal_retur. Parse manual (bukan
+  // new Date(str) langsung) supaya tidak kena pergeseran hari akibat parsing
+  // sebagai UTC midnight lalu dikonversi ke timezone browser.
+  if(!tanggalStr) return new Date().toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'});
+  const [y,m,d] = tanggalStr.split('-').map(Number);
+  return new Date(y, m-1, d).toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'});
+}
 function openReturSlipPrint(header, items){
-  const tglFmt = new Date().toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'});
+  const tglFmt = formatTglRetur(header.tanggal_retur);
   const kodeGabungan = items.map(i => i.retur_code).join(', ');
   const totalEkor = items.reduce((s,i) => s + (+i.ekor||0), 0);
   const totalKg   = items.reduce((s,i) => s + (+i.kg||0), 0);
@@ -2066,7 +2090,7 @@ async function loadReturList(){
   const { data, error } = await db
     .from('retur_penjualan')
     .select(`
-      id, retur_code, batch_id, jenis_retur, ekor_dicatat, kg_dicatat, ekor_diterima, kg_diterima,
+      id, retur_code, batch_id, tanggal_retur, jenis_retur, ekor_dicatat, kg_dicatat, ekor_diterima, kg_diterima,
       basket_asal_code, nama_produk, nama_pelanggan, keterangan, status, resolusi_final, catatan_review,
       picking_slips(ps_code),
       baskets!retur_penjualan_basket_final_id_fkey(basket_code)
@@ -2086,7 +2110,7 @@ async function loadReturList(){
   if(menunggu) pill.textContent = `${menunggu} menunggu approval / ${rows.length} total`;
 
   if(!rows.length){
-    tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state"><div class="es-icon">↩️</div><p>Belum ada retur</p></div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state"><div class="es-icon">↩️</div><p>Belum ada retur</p></div></td></tr>';
     return;
   }
 
@@ -2111,6 +2135,7 @@ async function loadReturList(){
     return `
       <tr>
         <td><strong style="font-family:monospace;color:#2563eb">${r.retur_code}</strong></td>
+        <td style="white-space:nowrap">${formatTglRetur(r.tanggal_retur)}</td>
         <td>${r.picking_slips?.ps_code || '—'}<br><span style="font-size:11px;color:#6b7280">${r.nama_pelanggan}</span></td>
         <td>${r.basket_asal_code}<br><span style="font-size:11px;color:#6b7280">${r.nama_produk}</span></td>
         <td>${JENIS_RETUR_LABEL[r.jenis_retur] || r.jenis_retur}</td>
@@ -2144,6 +2169,7 @@ function reprintReturSlip(returId){
   openReturSlipPrint({
     ps_code: r.picking_slips?.ps_code || '—',
     nama_pelanggan: r.nama_pelanggan,
+    tanggal_retur: r.tanggal_retur,
   }, items);
 }
 
