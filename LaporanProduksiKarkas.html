@@ -672,9 +672,24 @@ async function renderReport(batch){
     // Keranjang yang sudah di-VOID (dihapus) tidak boleh ikut dihitung — kalau tidak, laporan
     // akan lebih besar dari yang seharusnya (beda dari Dashboard yang pakai counter tersimpan).
     const cbaskets = (basketsRes.data||[]).filter(r=>r.product && r.basket?.status!=='VOID'); // guard against orphaned rows
-    const allBaskets = (transferRes.data||[]).filter(r=>r.product && r.product.kategori==='KARKAS');
     const corrections = correctionsRes.data||[];
     const rincianRows = rincianRes.data||[];
+
+    // "Produk Transfer" harus hanya menghitung keranjang karkas ASLI (yang benar-benar
+    // ditimbang di lantai karkas — punya baris di carcass_baskets), BUKAN semua baris di
+    // tabel `baskets` dengan batch_id ini. Saat sebagian isi sebuah keranjang dipakai sebagai
+    // input WO Parting/Boneless, sistem membuat baris basket BARU untuk porsi itu (kode
+    // mis. "BK-xxxx-1") yang mewarisi batch_id yang sama tapi TIDAK PERNAH punya baris
+    // basket_movements dari_lokasi='LANTAI' sendiri (ia "lahir" di Parting, bukan dipindah
+    // dari lantai) dan TIDAK punya baris carcass_baskets sendiri. Kalau baris pecahan ini ikut
+    // dihitung: (a) qty-nya dobel-hitung di atas qty_awal keranjang asalnya yang sudah utuh
+    // menghitungnya, dan (b) karena tidak ada tujuan_awal, ia salah nyasar ke kolom
+    // "Belum Dialokasi" — padahal sebenarnya sudah teralokasi (lewat keranjang asalnya).
+    // "Rincian Keranjang" tidak kena masalah ini karena sumbernya carcass_baskets, yang
+    // memang cuma berisi keranjang asli. Makanya dibatasi ke basket_id yang juga muncul di
+    // rincianRows (carcass_baskets) di sini.
+    const originalBasketIds = new Set(rincianRows.map(r=>r.basket?.id).filter(Boolean));
+    const allBaskets = (transferRes.data||[]).filter(r=>r.product && r.product.kategori==='KARKAS' && originalBasketIds.has(r.id));
 
     document.getElementById('report-session-count').textContent =
       sessions.length ? `${sessions.length} sesi timbang karkas` : 'Belum ada sesi timbang karkas untuk batch ini';
