@@ -208,7 +208,6 @@ a{text-decoration:none}
       <div class="nav-section-label">Penjualan</div>
       <div class="nav-item" onclick="navTo('Penjualan.html')"><span class="nav-icon">🛒</span><span class="nav-label-text">Penjualan</span></div>
       <div class="nav-item" id="nav-cs" style="display:none" onclick="navTo('CS.html')"><span class="nav-icon">🏬</span><span class="nav-label-text">CS (Cold Storage)</span></div>
-      <div class="nav-item" id="nav-pelanggan" style="display:none" onclick="navTo('KelolaPelanggan.html')"><span class="nav-icon">📇</span><span class="nav-label-text">Kelola Pelanggan</span></div>
       <div class="nav-section-label">Manajemen</div>
       <div class="nav-item" onclick="navTo('Koreksi.html')">
         <span class="nav-icon">✅</span><span class="nav-label-text">Koreksi & Approval</span>
@@ -221,6 +220,7 @@ a{text-decoration:none}
       <div class="nav-item" onclick="navTo('MasterData.html')">
         <span class="nav-icon">🗂️</span><span class="nav-label-text">Master Data</span>
       </div>
+      <div class="nav-item" id="nav-pelanggan" style="display:none" onclick="navTo('KelolaPelanggan.html')"><span class="nav-icon">📇</span><span class="nav-label-text">Kelola Pelanggan</span></div>
 <div class="nav-item" id="nav-revisi-batch" style="display:none" onclick="navTo('RevisiBatch.html')">
           <span class="nav-icon">🔀</span><span class="nav-label-text">Revisi Batch Keranjang</span>
       </div>
@@ -515,6 +515,31 @@ async function tampilkanStokBarang(){
   }
 }
 
+// 2026-08-13 FIX: query di bawah ini (Section B/C terutama) TIDAK difilter per produk —
+// dijalankan sekali untuk SEMUA produk di suatu lokasi lalu dikelompokkan per product_id di JS.
+// Tanpa .range(), PostgREST diam-diam memotong hasil di 1000 baris begitu total baris yang
+// cocok (lintas SEMUA produk) melewati 1000 — untuk lokasi yang ramai (mis. CHILLER: 1672 baris
+// basket_movements masuk + 1619 baris keluar per Agustus 2026) ini membuat Saldo Qty/Kg di
+// laporan ini UNDERSTATED dan berbeda dari Laporan Kartu Stok (yang query-nya difilter per
+// SATU produk, sehingga hampir selalu di bawah 1000 baris dan tetap akurat) — persis pola bug
+// yang sama seperti RekapanMutasiBarang.html 2026-08-05 (lihat feedback_supabase_1000_row_cap).
+// Fix: fetch bertahap per 1000 baris, diurutkan pakai id, sampai batch terakhir lebih pendek
+// dari PAGE_SIZE. buildQuery harus function yg mengembalikan query BARU tiap dipanggil (builder
+// Supabase sekali pakai, tidak bisa dipanggil ulang setelah di-await).
+const STOK_PAGE_SIZE = 1000;
+async function fetchAllRows(buildQuery){
+  let all = [];
+  let from = 0;
+  while(true){
+    const { data, error } = await buildQuery().order('id',{ascending:true}).range(from, from+STOK_PAGE_SIZE-1);
+    if(error){ console.error('fetchAllRows', error); return all; }
+    all = all.concat(data||[]);
+    if(!data || data.length < STOK_PAGE_SIZE) break;
+    from += STOK_PAGE_SIZE;
+  }
+  return all;
+}
+
 // Hitung agregat masuk/keluar per product_id di suatu lokasi, sampai dengan asOfDate (inklusif),
 // menggunakan model transaksi yang sama dengan Laporan Kartu Stok — namun tanpa filter produk,
 // lalu dikelompokkan per product_id.
@@ -532,35 +557,33 @@ async function buildStokAggregate(lokasi, asOfDate){
   // A) Produksi karkas awal (basket lahir di LANTAI) — hanya relevan utk lokasi LANTAI
   if(lokasi==='LANTAI'){
     tasks.push(
-      db.from('baskets')
-        .select('product_id,qty_awal,kg_awal,created_at,carcass_baskets!inner(id)')
+      fetchAllRows(()=>db.from('baskets')
+        .select('id,product_id,qty_awal,kg_awal,created_at,carcass_baskets!inner(id)')
         .neq('status','VOID')
         .lte('created_at',toBound)
-        .then(({data,error})=>{
-          if(error){console.error('buildStokAggregate A',error);return}
-          (data||[]).forEach(b=>{
-            add(b.product_id,'masuk_qty',Number(b.qty_awal)||0);
-            add(b.product_id,'masuk_kg', Number(b.kg_awal)||0);
-          });
-        })
+      ).then(data=>{
+        (data||[]).forEach(b=>{
+          add(b.product_id,'masuk_qty',Number(b.qty_awal)||0);
+          add(b.product_id,'masuk_kg', Number(b.kg_awal)||0);
+        });
+      })
     );
   }
 
   // B) Transfer masuk ke lokasi (basket_movements CONFIRMED, ke_lokasi = lokasi)
   tasks.push(
-    db.from('basket_movements')
-      .select('qty_pindah,kg_pindah,confirmed_at,status,baskets!inner(product_id)')
+    fetchAllRows(()=>db.from('basket_movements')
+      .select('id,qty_pindah,kg_pindah,confirmed_at,status,baskets!inner(product_id)')
       .eq('ke_lokasi',lokasi)
       .eq('status','CONFIRMED')
       .lte('confirmed_at',toBound)
-      .then(({data,error})=>{
-        if(error){console.error('buildStokAggregate B',error);return}
-        (data||[]).forEach(m=>{
-          const pid = m.baskets?.product_id;
-          add(pid,'masuk_qty',Number(m.qty_pindah)||0);
-          add(pid,'masuk_kg', Number(m.kg_pindah)||0);
-        });
-      })
+    ).then(data=>{
+      (data||[]).forEach(m=>{
+        const pid = m.baskets?.product_id;
+        add(pid,'masuk_qty',Number(m.qty_pindah)||0);
+        add(pid,'masuk_kg', Number(m.kg_pindah)||0);
+      });
+    })
   );
 
   // C) Transfer keluar dari lokasi (basket_movements CONFIRMED — hanya yang benar-benar
@@ -568,73 +591,68 @@ async function buildStokAggregate(lokasi, asOfDate){
   //    pakai confirmed_at supaya konsisten dengan LaporanKartuStok.html /
   //    LaporanRincianTransaksiChiller.html — 2026-08-05)
   tasks.push(
-    db.from('basket_movements')
-      .select('qty_pindah,kg_pindah,confirmed_at,baskets!inner(product_id)')
+    fetchAllRows(()=>db.from('basket_movements')
+      .select('id,qty_pindah,kg_pindah,confirmed_at,baskets!inner(product_id)')
       .eq('dari_lokasi',lokasi)
       .eq('status','CONFIRMED')
       .lte('confirmed_at',toBound)
-      .then(({data,error})=>{
-        if(error){console.error('buildStokAggregate C',error);return}
-        (data||[]).forEach(m=>{
-          const pid = m.baskets?.product_id;
-          add(pid,'keluar_qty',Number(m.qty_pindah)||0);
-          add(pid,'keluar_kg', Number(m.kg_pindah)||0);
-        });
-      })
+    ).then(data=>{
+      (data||[]).forEach(m=>{
+        const pid = m.baskets?.product_id;
+        add(pid,'keluar_qty',Number(m.qty_pindah)||0);
+        add(pid,'keluar_kg', Number(m.kg_pindah)||0);
+      });
+    })
   );
 
   // D) Konsumsi ke Work Order (processing_inputs) — keluar, lokasi = processing_orders.tipe
   tasks.push(
-    db.from('processing_inputs')
-      .select('product_id,qty_input,kg_input,created_at,processing_orders!inner(tipe)')
+    fetchAllRows(()=>db.from('processing_inputs')
+      .select('id,product_id,qty_input,kg_input,created_at,processing_orders!inner(tipe)')
       .eq('processing_orders.tipe',lokasi)
       .lte('created_at',toBound)
-      .then(({data,error})=>{
-        if(error){console.error('buildStokAggregate D',error);return}
-        (data||[]).forEach(pi=>{
-          add(pi.product_id,'keluar_qty',Number(pi.qty_input)||0);
-          add(pi.product_id,'keluar_kg', Number(pi.kg_input)||0);
-        });
-      })
+    ).then(data=>{
+      (data||[]).forEach(pi=>{
+        add(pi.product_id,'keluar_qty',Number(pi.qty_input)||0);
+        add(pi.product_id,'keluar_kg', Number(pi.kg_input)||0);
+      });
+    })
   );
 
   // E) Hasil produksi (processing_outputs) — masuk, tujuan_lokasi = lokasi
   tasks.push(
-    db.from('processing_outputs')
-      .select('product_id,qty_output,kg_output,created_at')
+    fetchAllRows(()=>db.from('processing_outputs')
+      .select('id,product_id,qty_output,kg_output,created_at')
       .eq('tujuan_lokasi',lokasi)
       .lte('created_at',toBound)
-      .then(({data,error})=>{
-        if(error){console.error('buildStokAggregate E',error);return}
-        (data||[]).forEach(po=>{
-          add(po.product_id,'masuk_qty',Number(po.qty_output)||0);
-          add(po.product_id,'masuk_kg', Number(po.kg_output)||0);
-        });
-      })
+    ).then(data=>{
+      (data||[]).forEach(po=>{
+        add(po.product_id,'masuk_qty',Number(po.qty_output)||0);
+        add(po.product_id,'masuk_kg', Number(po.kg_output)||0);
+      });
+    })
   );
 
   // F) Koreksi disetujui pada basket yang SAAT INI berada di lokasi ini
   //    (record_id di corrections bersifat polimorfik / tanpa FK, jadi diselesaikan 2 langkah)
   tasks.push(
     (async()=>{
-      const { data: baskets, error: bErr } = await db.from('baskets')
+      const baskets = await fetchAllRows(()=>db.from('baskets')
         .select('id,product_id')
         .eq('lokasi',lokasi)
-        .neq('status','VOID');
-      if(bErr){console.error('buildStokAggregate F (baskets)',bErr);return}
-      const basketIds = (baskets||[]).map(b=>b.id);
+        .neq('status','VOID'));
+      const basketIds = baskets.map(b=>b.id);
       if(!basketIds.length) return;
       const productByBasket = {};
-      (baskets||[]).forEach(b=>{productByBasket[b.id]=b.product_id});
+      baskets.forEach(b=>{productByBasket[b.id]=b.product_id});
 
-      const { data, error } = await db.from('corrections')
-        .select('record_id,field_salah,nilai_lama,nilai_baru,reviewed_at')
+      const data = await fetchAllRows(()=>db.from('corrections')
+        .select('id,record_id,field_salah,nilai_lama,nilai_baru,reviewed_at')
         .eq('tabel_terkait','baskets')
         .eq('status','APPROVED')
         .in('record_id',basketIds)
         .in('field_salah',['qty_sisa','kg_sisa','qty_awal','kg_awal'])
-        .lte('reviewed_at',toBound);
-      if(error){console.error('buildStokAggregate F (corrections)',error);return}
+        .lte('reviewed_at',toBound));
       (data||[]).forEach(c=>{
         const pid = productByBasket[c.record_id];
         const lama=parseFloat(c.nilai_lama); const baru=parseFloat(c.nilai_baru);
@@ -670,20 +688,19 @@ async function buildStokAggregate(lokasi, asOfDate){
   //    RekapanMutasiBarang.html sudah benar dari awal (2026-08-06), Laporan ini
   //    dan LaporanKartuStok/LaporanRincianTransaksiChiller belum — disamakan.
   tasks.push(
-    db.from('baskets')
-      .select('basket_code,product_id,qty_awal,kg_awal,created_at,saldo_awal_sessions!inner(tanggal_opname)')
+    fetchAllRows(()=>db.from('baskets')
+      .select('id,basket_code,product_id,qty_awal,kg_awal,created_at,saldo_awal_sessions!inner(tanggal_opname)')
       .eq('basket_type','SALDO_AWAL')
       .eq('lokasi_opname',lokasi)
       .neq('status','VOID')
       .lte('saldo_awal_sessions.tanggal_opname',asOfDate)
-      .then(({data,error})=>{
-        if(error){console.error('buildStokAggregate G',error);return}
-        (data||[]).forEach(b=>{
-          if(!/^SA-[0-9]{6}-[0-9]{4}$/.test(b.basket_code)) return;  // lewati hasil split
-          add(b.product_id,'masuk_qty',Number(b.qty_awal)||0);
-          add(b.product_id,'masuk_kg', Number(b.kg_awal)||0);
-        });
-      })
+    ).then(data=>{
+      (data||[]).forEach(b=>{
+        if(!/^SA-[0-9]{6}-[0-9]{4}$/.test(b.basket_code)) return;  // lewati hasil split
+        add(b.product_id,'masuk_qty',Number(b.qty_awal)||0);
+        add(b.product_id,'masuk_kg', Number(b.kg_awal)||0);
+      });
+    })
   );
 
   await Promise.all(tasks);
