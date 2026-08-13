@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lapor Kehilangan — Kurnia's Food</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="permissions.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f2f5;color:#111827;font-size:14px}
+button{cursor:pointer;font-family:inherit}
+a{text-decoration:none}
+
+/* LOGIN */
+#login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(135deg,#0f172a 0%,#134e4a 60%,#0d9488 100%)}
+.login-card{background:white;border-radius:16px;padding:44px 40px;width:400px;box-shadow:0 25px 60px rgba(0,0,0,.4)}
+.login-logo{text-align:center;margin-bottom:36px}
+.login-logo .icon{font-size:48px;display:block;margin-bottom:12px}
+.login-logo h1{font-size:22px;font-weight:800;color:#111827}
+.login-logo p{font-size:13px;color:#6b7280;margin-top:4px}
+.form-group{margin-bottom:20px}
+.form-group label{display:block;font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
+.form-group input,.form-group select,.form-group textarea{width:100%;padding:11px 14px;border:1.5px solid #d1d5db;border-radius:8px;font-size:15px;transition:border-color .2s,box-shadow .2s;color:#111827;background:white;font-family:inherit}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{outline:none;border-color:#0d9488;box-shadow:0 0 0 3px rgba(13,148,136,.12)}
+.form-group input:disabled{background:#f3f4f6;color:#9ca3af}
+.btn-login{width:100%;padding:13px;background:#0d9488;color:white;border:none;border-radius:8px;font-size:15px;font-weight:700;transition:background .2s}
+.btn-login:hover{background:#0f766e}
+.btn-login:disabled{background:#5eead4;cursor:not-allowed}
+.login-error{background:#fee2e2;color:#dc2626;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:18px;border:1px solid #fecaca;display:none}
+.login-version{text-align:center;margin-top:20px;font-size:11px;color:#9ca3af}
+
+/* APP LAYOUT */
+#app-screen{display:none;height:100vh;overflow:hidden}
+.app-layout{display:flex;height:100%}
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:90}
+.sidebar-overlay.visible{display:block}
+
+/* SIDEBAR */
+.sidebar{width:230px;flex-shrink:0;background:#0f172a;color:white;display:flex;flex-direction:column;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.1) transparent;transition:transform .28s cubic-bezier(.4,0,.2,1);z-index:100}
+.sidebar-brand{padding:20px 18px 16px;border-bottom:1px solid rgba(255,255,255,.08)}
+.sidebar-nav{flex:1;padding:10px 0}
+.nav-section-label{font-size:10px;font-weight:700;color:rgba(255,255,255,.3);text-transform:uppercase;letter-spacing:1px;padding:12px 18px 4px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 18px;font-size:13px;color:rgba(255,255,255,.65);cursor:pointer;transition:all .15s;border-left:3px solid transparent}
+.nav-item:hover:not(.disabled){background:rgba(255,255,255,.07);color:white}
+.nav-item.active{background:rgba(13,148,136,.2);color:#5eead4;border-left-color:#0d9488}
+.nav-item.disabled{opacity:.3;cursor:not-allowed}
+.nav-icon{font-size:15px;width:22px;text-align:center;flex-shrink:0}
+.nav-label-text{flex:1}
+.nav-tag{font-size:9px;font-weight:700;padding:2px 5px;border-radius:4px;background:rgba(13,148,136,.3);color:#5eead4}
+.sidebar-footer{padding:14px 18px;border-top:1px solid rgba(255,255,255,.08)}
+.user-card{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.user-avatar{width:34px;height:34px;border-radius:50%;background:#0d9488;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:white;flex-shrink:0}
+.user-info-text .user-name{font-size:13px;font-weight:700;color:#f8fafc}
+.user-info-text .user-role{font-size:11px;color:rgba(255,255,255,.45);margin-top:1px}
+.btn-logout{width:100%;padding:8px 12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.6);border-radius:6px;font-size:12px;font-weight:600;transition:all .15s}
+.btn-logout:hover{background:rgba(220,38,38,.25);border-color:rgba(220,38,38,.5);color:#fca5a5}
+
+/* MAIN */
+.main-area{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.topbar{background:white;height:58px;padding:0 20px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e5e7eb;box-shadow:0 1px 4px rgba(0,0,0,.05);gap:12px}
+.topbar-left{display:flex;align-items:center;gap:12px;min-width:0}
+.topbar-left h1{font-size:17px;font-weight:800;color:#111827;white-space:nowrap}
+.topbar-left p{font-size:12px;color:#9ca3af;margin-top:1px}
+.topbar-left-text{min-width:0}
+.topbar-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.btn-hamburger{display:none;align-items:center;justify-content:center;width:40px;height:40px;border-radius:8px;background:#f3f4f6;border:1.5px solid #e5e7eb;font-size:18px;color:#374151;flex-shrink:0}
+.btn-hamburger:hover{background:#e5e7eb}
+.clock-display{font-size:14px;font-weight:700;color:#374151;background:#f9fafb;padding:6px 10px;border-radius:6px;border:1px solid #e5e7eb;white-space:nowrap}
+
+/* CONTENT */
+.content-area{flex:1;overflow-y:auto;padding:20px 24px 40px}
+
+/* PANEL */
+.panel{background:white;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden;margin-bottom:14px}
+.panel:last-child{margin-bottom:0}
+.panel-head{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:1px solid #f3f4f6;gap:8px;flex-wrap:wrap}
+.panel-title{font-size:14px;font-weight:800;color:#111827}
+.panel-body{padding:18px}
+.panel-hint{font-size:12px;color:#6b7280;margin-top:2px}
+
+/* FORM ROW */
+.form-row{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end}
+.form-row .form-group{flex:1;min-width:220px;margin-bottom:0}
+
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:10px 16px;border-radius:6px;border:none;font-size:13px;font-weight:700;transition:all .15s;min-height:44px;touch-action:manipulation;white-space:nowrap}
+.btn-primary{background:#0d9488;color:white}
+.btn-primary:hover{background:#0f766e}
+.btn-ghost{background:#f3f4f6;color:#374151}
+.btn-ghost:hover{background:#e5e7eb}
+.btn-danger{background:#dc2626;color:white}
+.btn-danger:hover{background:#b91c1c}
+.btn-warn{background:#d97706;color:white}
+.btn-warn:hover{background:#b45309}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-sm{padding:6px 10px;font-size:12px;min-height:32px;border-radius:6px;border:1px solid #d1d5db;background:white}
+.btn-sm:hover{background:#f3f4f6}
+
+/* BADGES */
+.badge{display:inline-flex;align-items:center;padding:3px 9px;border-radius:12px;font-size:11px;font-weight:700;white-space:nowrap}
+.b-aktif{background:#d1fae5;color:#065f46}
+.b-habis{background:#f3f4f6;color:#6b7280}
+.b-void{background:#fee2e2;color:#dc2626}
+.b-lokasi{background:#f3f4f6;color:#374151}
+
+/* RISK BOX */
+.risk-box{border-radius:10px;padding:14px 16px;margin-top:14px;font-size:13px}
+.risk-ok{background:#f0fdf4;border:1px solid #bbf7d0;color:#166534}
+.risk-warn{background:#fffbeb;border:1px solid #fde68a;color:#92400e}
+.risk-danger{background:#fef2f2;border:1px solid #fecaca;color:#991b1b}
+.risk-box .risk-title{font-weight:800;margin-bottom:6px;font-size:13px}
+.risk-list{margin-top:8px;list-style:none}
+.risk-list li{padding:4px 0;font-size:12px;border-top:1px solid rgba(0,0,0,.06)}
+.risk-list li:first-child{border-top:none}
+
+/* DETAIL GRID */
+.detail-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-top:14px}
+.detail-cell{background:#f9fafb;border:1px solid #f0f2f5;border-radius:8px;padding:10px 12px}
+.detail-cell .lbl{font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px}
+.detail-cell .val{font-size:15px;font-weight:800;color:#111827;margin-top:2px}
+
+/* HISTORY */
+.hist-row{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid #f3f4f6;font-size:12px}
+.hist-row:last-child{border-bottom:none}
+.hist-icon{font-size:16px;flex-shrink:0}
+.hist-main b{color:#111827}
+.hist-meta{color:#9ca3af;font-size:11px;margin-top:2px}
+
+/* EMPTY */
+.empty{text-align:center;padding:36px 16px;color:#9ca3af;font-size:13px}
+.viewer-note{background:#fffbeb;border:1px solid #fde68a;color:#92400e;border-radius:8px;padding:10px 14px;font-size:12px;margin-bottom:14px}
+
+/* CHECKBOX ROW */
+.check-row{display:flex;align-items:flex-start;gap:8px;background:#f9fafb;border:1px solid #f0f2f5;border-radius:8px;padding:10px 12px;font-size:13px;margin-top:4px}
+.check-row input{margin-top:2px;flex-shrink:0}
+
+/* MODAL */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;align-items:flex-start;justify-content:center;padding:32px 16px;overflow-y:auto}
+.modal-overlay.open{display:flex}
+.modal-box{background:white;border-radius:14px;padding:24px;width:440px;max-width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);animation:modal-in .2s ease;margin:auto}
+@keyframes modal-in{from{transform:scale(.92);opacity:0}to{transform:scale(1);opacity:1}}
+.modal-title{font-size:16px;font-weight:800;margin-bottom:4px;color:#111827}
+.modal-desc{font-size:13px;color:#6b7280;margin-bottom:16px}
+.modal-footer{display:flex;justify-content:flex-end;gap:10px;margin-top:16px;padding-top:16px;border-top:1px solid #f0f2f5;flex-wrap:wrap}
+.pin-error{color:#dc2626;font-size:12px;font-weight:600;margin-top:8px;display:none}
+.confirm-check{display:flex;align-items:flex-start;gap:8px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 12px;margin-top:14px;font-size:12px;color:#991b1b}
+.confirm-check input{margin-top:2px;flex-shrink:0}
+
+/* TOAST */
+#toast{position:fixed;bottom:28px;right:28px;padding:13px 20px;border-radius:10px;font-size:13px;font-weight:700;box-shadow:0 8px 24px rgba(0,0,0,.2);display:none;z-index:999;animation:toast-in .25s ease}
+#toast.show{display:block}
+#toast.success{background:#065f46;color:white}
+#toast.error{background:#991b1b;color:white}
+#toast.warning{background:#92400e;color:white}
+@keyframes toast-in{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+
+@media (max-width:900px){
+  .btn-hamburger{display:flex}
+  .sidebar{position:fixed;top:0;bottom:0;left:0;transform:translateX(-100%)}
+  .sidebar.open{transform:translateX(0)}
+  .modal-box{padding:18px}
+  .form-row{flex-direction:column;align-items:stretch}
+}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <span class="icon">🚨</span>
+      <h1>RPA Management System</h1>
+      <p>Lapor Kehilangan — Login</p>
+    </div>
+    <div class="login-error" id="login-error"></div>
+    <div class="form-group">
+      <label>Username</label>
+      <input type="text" id="inp-username" placeholder="Masukkan username" autocomplete="username"
+             onkeydown="if(event.key==='Enter')document.getElementById('inp-password').focus()">
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input type="password" id="inp-password" placeholder="Masukkan password" autocomplete="current-password"
+             onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button class="btn-login" id="btn-login" onclick="doLogin()">Masuk →</button>
+    <p class="login-version">v1.0 — RPA System</p>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app-screen">
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+<div class="app-layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <img src="logo.png" style="height:36px;width:auto;object-fit:contain;">
+        <span style="font-size:15px;font-weight:800;color:#f8fafc;">Kurnia's Food</span>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section-label">Utama</div>
+      <div class="nav-item" onclick="navTo('Dashboard.html')">
+        <span class="nav-icon">🏠</span><span class="nav-label-text">Dashboard</span>
+      </div>
+      <div class="nav-section-label">Produksi</div>
+      <div class="nav-item" onclick="navTo('BatchAyamHidup.html')">
+        <span class="nav-icon">🐔</span><span class="nav-label-text">Batch Ayam Hidup</span>
+      </div>
+      <div class="nav-item" onclick="navTo('ProduksiKarkas.html')">
+        <span class="nav-icon">⚙️</span><span class="nav-label-text">Produksi Karkas</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Thawing.html')">
+        <span class="nav-icon">🌡️</span><span class="nav-label-text">Thawing</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Chiller.html')">
+        <span class="nav-icon">❄️</span><span class="nav-label-text">Chiller</span>
+      </div>
+      <div class="nav-item" onclick="navTo('WorkOrder.html')">
+        <span class="nav-icon">📋</span><span class="nav-label-text">Work Order</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Parting.html')">
+        <span class="nav-icon">✂️</span><span class="nav-label-text">Parting</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Boneless.html')">
+        <span class="nav-icon">🥩</span><span class="nav-label-text">Boneless</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Marinasi.html')">
+        <span class="nav-icon">🌶️</span><span class="nav-label-text">Marinasi</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Blasting.html')">
+        <span class="nav-icon">🧊</span><span class="nav-label-text">Blasting</span>
+      </div>
+      <div class="nav-item" onclick="navTo('ByProductKarkas.html')">
+        <span class="nav-icon">📦</span><span class="nav-label-text">By-product Karkas</span>
+      </div>
+      <div class="nav-section-label">Penjualan</div>
+      <div class="nav-item" onclick="navTo('Penjualan.html')"><span class="nav-icon">🛒</span><span class="nav-label-text">Penjualan</span></div>
+      <div class="nav-item" id="nav-cs" style="display:none" onclick="navTo('CS.html')"><span class="nav-icon">🏬</span><span class="nav-label-text">CS (Cold Storage)</span></div>
+      <div class="nav-section-label">Manajemen</div>
+      <div class="nav-item" onclick="navTo('Koreksi.html')">
+        <span class="nav-icon">✅</span><span class="nav-label-text">Koreksi & Approval</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Laporan.html')">
+        <span class="nav-icon">📊</span><span class="nav-label-text">Laporan</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Tracing.html')">
+        <span class="nav-icon">🔍</span><span class="nav-label-text">Tracing Produk</span>
+      </div>
+      <div class="nav-item" id="nav-saldo-awal" style="display:none" onclick="navTo('SaldoAwal.html')">
+        <span class="nav-icon">📋</span><span class="nav-label-text">Saldo Awal Barang</span>
+      </div>
+      <div class="nav-item" id="nav-revisi-batch" style="display:none" onclick="navTo('RevisiBatch.html')">
+        <span class="nav-icon">🔀</span><span class="nav-label-text">Revisi Batch Keranjang</span>
+      </div>
+      <div class="nav-item" id="nav-void-keranjang" style="display:none" onclick="navTo('VoidKeranjang.html')">
+        <span class="nav-icon">🗑️</span><span class="nav-label-text">Void Keranjang</span>
+      </div>
+      <div class="nav-item active">
+        <span class="nav-icon">🚨</span><span class="nav-label-text">Lapor Kehilangan</span>
+        <span class="nav-tag">Aktif</span>
+      </div>
+      <div class="nav-item" id="nav-reprint-label" style="display:none" onclick="navTo('ReprintLabel.html')">
+        <span class="nav-icon">🖨️</span><span class="nav-label-text">Reprint Label</span>
+      </div>
+      <div class="nav-item" onclick="navTo('MasterData.html')">
+        <span class="nav-icon">🗂️</span><span class="nav-label-text">Master Data</span>
+      </div>
+      <div class="nav-item" id="nav-pelanggan" style="display:none" onclick="navTo('KelolaPelanggan.html')"><span class="nav-icon">📇</span><span class="nav-label-text">Kelola Pelanggan</span></div>
+      <div class="nav-item" id="nav-user-mgmt" style="display:none" onclick="navTo('UserManagement.html')">
+        <span class="nav-icon">👥</span><span class="nav-label-text">Manajemen User</span>
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-card">
+        <div class="user-avatar" id="user-avatar">?</div>
+        <div class="user-info-text">
+          <div class="user-name" id="sidebar-name">—</div>
+          <div class="user-role" id="sidebar-role">—</div>
+        </div>
+      </div>
+      <button class="btn-logout" onclick="doLogout()">⬅ Keluar</button>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="main-area">
+    <div class="topbar">
+      <div class="topbar-left">
+        <button class="btn-hamburger" onclick="toggleSidebar()">☰</button>
+        <div class="topbar-left-text">
+          <h1>Lapor Kehilangan</h1>
+          <p id="topbar-date">—</p>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <div class="clock-display" id="clock">—</div>
+      </div>
+    </div>
+
+    <div class="content-area">
+
+      <div id="viewer-note-area"></div>
+
+      <!-- PANEL 1: CARI KERANJANG -->
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <span class="panel-title">1️⃣ Cari Keranjang</span>
+            <div class="panel-hint">Cari dari lokasi manapun (Karkas, Chiller, Thawing, Boneless, Parting, Marinasi, Blasting, Loading) — dipakai saat keranjang atau sebagian isinya hilang/tidak ketemu secara fisik, supaya tercatat sebagai Selisih (bukan cuma dibiarkan tidak cocok di stok).</div>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Kode Keranjang</label>
+              <input type="text" id="search-code" placeholder="Contoh: BL-260803-0056"
+                     style="text-transform:uppercase" onkeydown="if(event.key==='Enter')searchBasket()">
+            </div>
+            <button class="btn btn-primary" onclick="searchBasket()">🔍 Cari</button>
+          </div>
+          <div id="search-result-area" style="margin-top:16px"></div>
+        </div>
+      </div>
+
+      <!-- PANEL 2: DETAIL & AKSI LAPOR -->
+      <div class="panel" id="panel-aksi" style="display:none">
+        <div class="panel-head">
+          <span class="panel-title">2️⃣ Lapor Kehilangan</span>
+        </div>
+        <div class="panel-body">
+          <label class="check-row">
+            <input type="checkbox" id="lh-semua" onchange="toggleSemuaHilang()">
+            <span>Seluruh sisa keranjang ini hilang (keranjang dianggap habis)</span>
+          </label>
+          <div class="form-row" style="margin-top:14px">
+            <div class="form-group">
+              <label>Tanggal Kehilangan</label>
+              <input type="date" id="lh-tanggal" oninput="checkFormReady()">
+              <div class="panel-hint" style="margin-top:4px">Tanggal kejadian sebenarnya (bukan tanggal input) — dipakai sebagai tanggal transaksi di Laporan/Kartu Stok. Maksimal hari ini, tidak bisa mundur ke masa depan.</div>
+            </div>
+          </div>
+          <div class="form-row" style="margin-top:14px">
+            <div class="form-group">
+              <label>Qty Hilang (ekor/bks)</label>
+              <input type="number" id="lh-qty" min="0" step="1" placeholder="0" oninput="checkFormReady()">
+            </div>
+            <div class="form-group">
+              <label>Kg Hilang</label>
+              <input type="number" id="lh-kg" min="0" step="0.1" placeholder="0.0" oninput="checkFormReady()">
+            </div>
+          </div>
+          <div class="form-group" style="margin-top:14px">
+            <label>Alasan / Kronologi <span style="color:#dc2626">*</span></label>
+            <textarea id="lh-alasan" rows="2" placeholder="Contoh: Tidak ditemukan saat stok opname, diduga hilang/tercecer sejak Senin"></textarea>
+          </div>
+          <div id="confirm-check-area"></div>
+          <div style="margin-top:14px;display:flex;justify-content:flex-end">
+            <button class="btn btn-warn" id="btn-lapor" onclick="submitLaporHilang()" disabled>🚨 Catat sebagai Selisih</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- PANEL 3: RIWAYAT -->
+      <div class="panel">
+        <div class="panel-head">
+          <span class="panel-title">🕓 Riwayat Lapor Kehilangan Terakhir</span>
+        </div>
+        <div class="panel-body" id="hist-area">
+          <div class="empty">Memuat riwayat…</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- MODAL: PIN SUPERVISOR -->
+<div class="modal-overlay" id="modal-pin">
+  <div class="modal-box">
+    <div class="modal-title">🔑 Konfirmasi Supervisor</div>
+    <div class="modal-desc" id="pin-desc">Masukkan PIN Supervisor untuk mencatat kehilangan ini sebagai selisih.</div>
+    <div class="form-group">
+      <label>PIN 6 Digit</label>
+      <input type="password" id="pin-input" maxlength="6" inputmode="numeric" pattern="[0-9]*"
+             oninput="this.value=this.value.replace(/\D/g,'')"
+             onkeydown="if(event.key==='Enter')pinSubmit()">
+    </div>
+    <div class="pin-error" id="pin-error">PIN salah atau tidak punya wewenang Supervisor.</div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-pin')">Batal</button>
+      <button class="btn btn-warn" id="pin-ok-btn" onclick="pinSubmit()">✓ Konfirmasi & Catat</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<script>
+const SUPABASE_URL = 'https://dxixqyokuqrdprupsvic.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR4aXhxeW9rdXFyZHBydXBzdmljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5NjM3ODcsImV4cCI6MjA5MjUzOTc4N30.D_yaPwNbe4FFg_hmDeJ9cuxzbNvXZT8l1_TyZuq1t1M';
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ── STATE ──
+let currentUser    = null;
+let foundBasket     = null;   // basket row currently loaded
+let riskLevel       = 'ok';   // ok | warning | danger
+let riskMustConfirm = false;
+
+// ── UTILS ──
+async function sha256(str){
+  const buf=new TextEncoder().encode(str);
+  const hash=await crypto.subtle.digest('SHA-256',buf);
+  return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+function esc(s){return (s==null?'':String(s)).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function fmt(n,d=0){if(n==null||n==='')return'—';return Number(n).toLocaleString('id-ID',{minimumFractionDigits:d,maximumFractionDigits:d})}
+function fmtKg(n){if(n==null)return'—';return Number(n).toLocaleString('id-ID',{minimumFractionDigits:1,maximumFractionDigits:1})+' kg'}
+function fmtDate(s){if(!s)return'—';return new Date(s).toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'})}
+function fmtDT(s){if(!s)return'—';return new Date(s).toLocaleString('id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}
+// Tanggal HARI INI di timezone LOKAL device (bukan UTC) — sengaja TIDAK pakai
+// new Date().toISOString() karena itu selalu konversi ke UTC dulu, jadi bisa
+// mundur 1 hari kalau device dipakai jam 00:00–06:59 WIB (UTC+7). Lihat
+// catatan yang sama di migration 89 (Tanggal Retur).
+function todayISO(){
+  const d=new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function showToast(msg,type='success'){const t=document.getElementById('toast');t.textContent=msg;t.className=`show ${type}`;setTimeout(()=>{t.className=''},3800)}
+function navTo(url){closeSidebar();if(currentUser){localStorage.setItem('rpa_user',JSON.stringify(currentUser));sessionStorage.setItem('rpa_user',JSON.stringify(currentUser))}window.location.href=url}
+function openModal(id){document.getElementById(id).classList.add('open')}
+function closeModal(id){document.getElementById(id).classList.remove('open')}
+
+// ── SIDEBAR ──
+function toggleSidebar(){const s=document.getElementById('sidebar'),o=document.getElementById('sidebar-overlay');s.classList.toggle('open');o.classList.toggle('visible')}
+function closeSidebar(){document.getElementById('sidebar')?.classList.remove('open');document.getElementById('sidebar-overlay')?.classList.remove('visible')}
+
+// ── AUTH ──
+async function doLogin(){
+  const username=document.getElementById('inp-username').value.trim();
+  const password=document.getElementById('inp-password').value;
+  const errEl=document.getElementById('login-error');
+  errEl.style.display='none';
+  if(!username||!password){errEl.textContent='Username dan password wajib diisi.';errEl.style.display='block';return}
+  const btn=document.getElementById('btn-login');
+  btn.disabled=true;btn.textContent='Memproses…';
+  try{
+    const hash=await sha256(password);
+    const{data,error}=await db.from('users').select('id,nama,username,role,aktif,pin,is_system_admin').eq('username',username).eq('password_hash',hash).eq('aktif',true).maybeSingle();
+    if(error)throw error;
+    if(!data){errEl.textContent='Username atau password salah.';errEl.style.display='block';return}
+    data.permissions=await RPA_PERM.fetchPermissions(db,data.id);
+    currentUser=data;localStorage.setItem('rpa_user',JSON.stringify(data));startApp();
+  }catch(e){errEl.textContent='Gagal terhubung ke server.';errEl.style.display='block';}
+  finally{btn.disabled=false;btn.textContent='Masuk →'}
+}
+function doLogout(){localStorage.removeItem('rpa_user');sessionStorage.removeItem('rpa_user');currentUser=null;document.getElementById('app-screen').style.display='none';document.getElementById('login-screen').style.display='flex'}
+
+function startApp(){
+  const moduleRole=RPA_PERM.enforceModuleAccess(currentUser,'lapor_kehilangan');
+  if(!moduleRole)return;
+  currentUser.moduleRole=moduleRole;
+
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('app-screen').style.display='block';
+  const av=document.getElementById('user-avatar');
+  if(av)av.textContent=(currentUser.nama||'?')[0].toUpperCase();
+  document.getElementById('sidebar-name').textContent=currentUser.nama;
+  document.getElementById('sidebar-role').textContent=currentUser.role+(currentUser.is_system_admin?' (Admin)':'');
+  if(currentUser.is_system_admin){const el=document.getElementById('nav-user-mgmt');if(el)el.style.display='flex'}
+  if(RPA_PERM.getModuleRole(currentUser,'saldo_awal')!==null){const el=document.getElementById('nav-saldo-awal');if(el)el.style.display='flex'}
+  if(RPA_PERM.getModuleRole(currentUser,'revisi_batch')!==null){const el=document.getElementById('nav-revisi-batch');if(el)el.style.display='flex'}
+  if(RPA_PERM.getModuleRole(currentUser,'void_keranjang')!==null){const el=document.getElementById('nav-void-keranjang');if(el)el.style.display='flex'}
+  if(RPA_PERM.getModuleRole(currentUser,'reprint_label')!==null){const rlEl=document.getElementById('nav-reprint-label');if(rlEl)rlEl.style.display='flex'}
+
+  if (RPA_PERM.getModuleRole(currentUser, 'cs') !== null) { const csEl = document.getElementById('nav-cs'); if (csEl) csEl.style.display = 'flex'; }
+  if(RPA_PERM.getModuleRole(currentUser,'pelanggan')!==null){const el=document.getElementById('nav-pelanggan');if(el)el.style.display='flex'}
+  if(!RPA_PERM.canApprove(moduleRole)){
+    document.getElementById('viewer-note-area').innerHTML =
+      `<div class="viewer-note">👁️ Anda punya akses <b>lihat saja</b> untuk modul ini — hanya Supervisor/Admin yang bisa mencatat kehilangan.</div>`;
+  }
+
+  startClock();
+  loadRiwayat();
+}
+
+function startClock(){
+  function tick(){
+    const now=new Date();
+    document.getElementById('clock').textContent=now.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    document.getElementById('topbar-date').textContent=now.toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  }
+  tick();setInterval(tick,1000);
+}
+
+// ── AUTO LOGIN ──
+window.addEventListener('DOMContentLoaded',async ()=>{
+  const saved=localStorage.getItem('rpa_user')||sessionStorage.getItem('rpa_user');
+  if(saved){try{currentUser=await RPA_PERM.restoreSession(db);if(currentUser)startApp();}catch{}}
+});
+
+// ============================================================
+// PANEL 1 — CARI KERANJANG + CEK LINEAGE/KAITAN
+// ============================================================
+async function searchBasket(){
+  const codeRaw = document.getElementById('search-code').value.trim();
+  const area = document.getElementById('search-result-area');
+  document.getElementById('panel-aksi').style.display='none';
+  foundBasket = null;
+  if(!codeRaw){showToast('Masukkan kode keranjang.','warning');return}
+  const code = codeRaw.toUpperCase();
+  area.innerHTML = '<div class="empty">⏳ Mencari…</div>';
+
+  const{data:basket,error}=await db.from('baskets')
+    .select('id,basket_code,status,lokasi,qty_awal,qty_sisa,kg_awal,kg_sisa,product_id,batch_id,created_at,voided_at,voided_alasan,product_master(nama_produk,product_code,kategori)')
+    .eq('basket_code',code).maybeSingle();
+
+  if(error){console.error(error);area.innerHTML='<div class="empty">⚠️ Gagal mencari.</div>';return}
+  if(!basket){area.innerHTML=`<div class="empty">Keranjang <b>${esc(code)}</b> tidak ditemukan.</div>`;return}
+
+  foundBasket = basket;
+
+  if(basket.status==='VOID'){
+    area.innerHTML = `
+      <div class="risk-box risk-danger">
+        <div class="risk-title">🗑️ Keranjang ini SUDAH VOID</div>
+        Di-void pada ${fmtDT(basket.voided_at)}${basket.voided_alasan?` — alasan: "${esc(basket.voided_alasan)}"`:''}. Tidak bisa dilaporkan hilang lagi.
+      </div>`;
+    renderDetail(area, basket);
+    return;
+  }
+
+  if(Number(basket.qty_sisa)<=0 && Number(basket.kg_sisa)<=0){
+    area.innerHTML = `
+      <div class="risk-box risk-warn">
+        <div class="risk-title">📭 Keranjang ini sudah HABIS</div>
+        Sisa qty dan kg-nya sudah 0 — tidak ada lagi yang bisa dilaporkan hilang. Kalau seharusnya masih ada sisa, cek dulu di Tracing/Koreksi.
+      </div>`;
+    renderDetail(area, basket);
+    return;
+  }
+
+  // ── Cek lineage/kaitan: movement, dipakai sbg input WO lain, dipakai sbg output WO ──
+  const [mvRes, inRes, outRes] = await Promise.all([
+    db.from('basket_movements').select('id,dari_lokasi,ke_lokasi,status,created_at').eq('basket_id',basket.id).order('created_at',{ascending:false}),
+    db.from('processing_inputs').select('id,order_id,processing_orders(order_code,status)').eq('basket_id',basket.id),
+    db.from('processing_outputs').select('id,order_id,output_type,processing_orders(order_code,status)').eq('basket_id',basket.id)
+  ]);
+
+  const movements = mvRes.data || [];
+  const asInput    = inRes.data || [];
+  const asOutput   = outRes.data || [];
+  const confirmedMv = movements.filter(m=>m.status==='CONFIRMED');
+  const pendingMv    = movements.filter(m=>m.status==='PENDING');
+
+  let level='ok', notes=[];
+  if(pendingMv.length){ level='danger'; notes.push(`⚠ Ada transfer PENDING ke ${pendingMv[0].ke_lokasi} — keranjang ini sedang dalam proses pindah, belum jelas fisiknya ada di mana. Selesaikan/batalkan transfer itu dulu sebelum lapor hilang.`); }
+  if(asInput.length && level!=='danger'){ level='warning'; notes.push(`ℹ️ Pernah dipakai sebagai input di WO: ${asInput.map(i=>i.processing_orders?.order_code||'?').join(', ')} — pastikan sisa yang dilaporkan hilang bukan bagian yang sudah terpakai di sana.`); }
+  if(asOutput.length){ notes.push(`ℹ️ Asal keranjang: output ${asOutput[0].output_type||''} dari WO ${asOutput[0].processing_orders?.order_code||'?'} (status ${asOutput[0].processing_orders?.status||'?'})`); }
+  if(level==='ok' && !notes.length){ notes.push('✓ Tidak ada transfer pending atau kaitan WO lain — aman untuk dilaporkan hilang.'); }
+
+  riskLevel = level;
+  riskMustConfirm = (level==='danger');
+
+  const boxClass = level==='danger' ? 'risk-danger' : level==='warning' ? 'risk-warn' : 'risk-ok';
+  const boxTitle = level==='danger' ? '🚫 Berisiko — selesaikan dulu transfer yang masih PENDING'
+                  : level==='warning' ? '⚠️ Perlu diperhatikan'
+                  : '✓ Aman untuk dilaporkan hilang';
+
+  area.innerHTML = `<div class="risk-box ${boxClass}">
+      <div class="risk-title">${boxTitle}</div>
+      <ul class="risk-list">${notes.map(n=>`<li>${esc(n)}</li>`).join('')}</ul>
+    </div>`;
+  renderDetail(area, basket);
+
+  document.getElementById('panel-aksi').style.display = RPA_PERM.canApprove(currentUser.moduleRole) ? '' : 'none';
+  document.getElementById('lh-semua').checked=false;
+  const tglEl=document.getElementById('lh-tanggal');
+  tglEl.max=todayISO();
+  tglEl.value=todayISO();
+  document.getElementById('lh-qty').value='';
+  document.getElementById('lh-qty').disabled=false;
+  document.getElementById('lh-kg').value='';
+  document.getElementById('lh-kg').disabled=false;
+  document.getElementById('lh-alasan').value='';
+  renderConfirmCheck();
+  checkFormReady();
+}
+
+function renderDetail(area, b){
+  area.innerHTML += `
+    <div class="detail-grid">
+      <div class="detail-cell"><div class="lbl">Kode</div><div class="val" style="font-family:monospace;font-size:13px">${esc(b.basket_code)}</div></div>
+      <div class="detail-cell"><div class="lbl">Status</div><div class="val"><span class="badge ${b.status==='AKTIF'?'b-aktif':b.status==='HABIS'?'b-habis':'b-void'}">${esc(b.status)}</span></div></div>
+      <div class="detail-cell"><div class="lbl">Lokasi</div><div class="val" style="font-size:13px">${esc(b.lokasi||'—')}</div></div>
+      <div class="detail-cell"><div class="lbl">Produk</div><div class="val" style="font-size:13px">${esc(b.product_master?.nama_produk||'—')}</div></div>
+      <div class="detail-cell"><div class="lbl">Qty Awal / Sisa</div><div class="val" style="font-size:13px">${fmt(b.qty_awal)} / ${fmt(b.qty_sisa)}</div></div>
+      <div class="detail-cell"><div class="lbl">Kg Awal / Sisa</div><div class="val" style="font-size:13px">${fmtKg(b.kg_awal)} / ${fmtKg(b.kg_sisa)}</div></div>
+    </div>`;
+}
+
+function renderConfirmCheck(){
+  const el = document.getElementById('confirm-check-area');
+  if(!riskMustConfirm){ el.innerHTML=''; return; }
+  el.innerHTML = `
+    <label class="confirm-check">
+      <input type="checkbox" id="chk-risk-ack" onchange="checkFormReady()">
+      <span>Saya paham keranjang ini <b>masih ada transfer PENDING</b> yang belum selesai. Tetap lanjutkan hanya kalau memang sudah dipastikan fisiknya tidak ketemu — cek dulu di Tracing kalau ragu.</span>
+    </label>`;
+}
+
+// ============================================================
+// PANEL 2 — INPUT QTY/KG HILANG + SUBMIT
+// ============================================================
+function toggleSemuaHilang(){
+  const semua = document.getElementById('lh-semua').checked;
+  const qtyEl = document.getElementById('lh-qty');
+  const kgEl  = document.getElementById('lh-kg');
+  if(semua && foundBasket){
+    qtyEl.value = Number(foundBasket.qty_sisa)||0;
+    kgEl.value  = Number(foundBasket.kg_sisa)||0;
+    qtyEl.disabled = true;
+    kgEl.disabled  = true;
+  } else {
+    qtyEl.disabled = false;
+    kgEl.disabled  = false;
+  }
+  checkFormReady();
+}
+
+document.addEventListener('input', e=>{
+  if(e.target && e.target.id==='lh-alasan') checkFormReady();
+});
+
+function checkFormReady(){
+  const btn = document.getElementById('btn-lapor');
+  if(!btn) return;
+  const qty = parseFloat(document.getElementById('lh-qty')?.value)||0;
+  const kg  = parseFloat(document.getElementById('lh-kg')?.value)||0;
+  const tanggal = document.getElementById('lh-tanggal')?.value;
+  const alasan = document.getElementById('lh-alasan')?.value.trim();
+  const ack = riskMustConfirm ? document.getElementById('chk-risk-ack')?.checked : true;
+  const withinRange = foundBasket && qty>=0 && kg>=0 && qty<=Number(foundBasket.qty_sisa) && kg<=Number(foundBasket.kg_sisa);
+  const adaAngka = qty>0 || kg>0;
+  const tanggalOk = !!tanggal && tanggal<=todayISO();
+  btn.disabled = !(foundBasket && foundBasket.status!=='VOID' && withinRange && adaAngka && tanggalOk && alasan && ack && RPA_PERM.canApprove(currentUser?.moduleRole));
+}
+
+function submitLaporHilang(){
+  if(!foundBasket){showToast('Cari keranjang dulu.','warning');return}
+  const qty = parseFloat(document.getElementById('lh-qty').value)||0;
+  const kg  = parseFloat(document.getElementById('lh-kg').value)||0;
+  const tanggal = document.getElementById('lh-tanggal').value;
+  const alasan = document.getElementById('lh-alasan').value.trim();
+  if(!tanggal){showToast('Tanggal kehilangan wajib diisi.','warning');return}
+  if(tanggal>todayISO()){showToast('Tanggal kehilangan tidak boleh di masa depan.','warning');return}
+  if(!alasan){showToast('Alasan wajib diisi.','warning');return}
+  if(qty<=0 && kg<=0){showToast('Isi jumlah yang hilang (qty dan/atau kg).','warning');return}
+  if(qty>Number(foundBasket.qty_sisa) || kg>Number(foundBasket.kg_sisa)){showToast('Jumlah hilang tidak boleh melebihi sisa keranjang.','warning');return}
+  document.getElementById('pin-desc').textContent =
+    `Catat kehilangan ${fmt(qty)} ekor/bks / ${fmtKg(kg)} dari keranjang ${foundBasket.basket_code} sebagai Selisih tanggal ${fmtDate(tanggal)}. Masukkan PIN Supervisor untuk melanjutkan.`;
+  document.getElementById('pin-input').value='';
+  document.getElementById('pin-error').style.display='none';
+  openModal('modal-pin');
+  setTimeout(()=>document.getElementById('pin-input').focus(),150);
+}
+
+async function pinSubmit(){
+  const pin = document.getElementById('pin-input').value.trim();
+  const errEl = document.getElementById('pin-error');
+  errEl.style.display='none';
+  if(!pin){errEl.textContent='PIN wajib diisi.';errEl.style.display='block';return}
+  const btn = document.getElementById('pin-ok-btn');
+  btn.disabled=true;btn.textContent='Memverifikasi…';
+  try{
+    const sup = await verifySupervisorPin(pin);
+    if(!sup){
+      errEl.textContent='PIN salah atau tidak punya wewenang Supervisor.';
+      errEl.style.display='block';
+      return;
+    }
+    closeModal('modal-pin');
+    await doLaporHilang(sup);
+  } finally {
+    btn.disabled=false;btn.textContent='✓ Konfirmasi & Catat';
+  }
+}
+
+async function verifySupervisorPin(pin){
+  if(!pin) return null;
+  const{data}=await db.from('users').select('id,nama,role,pin').eq('role','SUPERVISOR').eq('aktif',true);
+  const sup=(data||[]).find(u=>u.pin===pin);
+  if(sup) return sup;
+  if(currentUser && pin===currentUser.pin && RPA_PERM.canApprove(currentUser.moduleRole)) return currentUser;
+  return null;
+}
+
+async function doLaporHilang(sup){
+  const qty = parseFloat(document.getElementById('lh-qty').value)||0;
+  const kg  = parseFloat(document.getElementById('lh-kg').value)||0;
+  const tanggal = document.getElementById('lh-tanggal').value;
+  const alasan = document.getElementById('lh-alasan').value.trim();
+  const btn = document.getElementById('btn-lapor');
+  btn.disabled=true; btn.textContent='Memproses…';
+  try{
+    const{data,error}=await db.rpc('fn_lapor_kehilangan',{
+      p_basket_id: foundBasket.id,
+      p_operator_id: currentUser.id,
+      p_supervisor_id: sup.id,
+      p_qty_hilang: qty,
+      p_kg_hilang: kg,
+      p_alasan: alasan,
+      p_tanggal: tanggal
+    });
+    if(error) throw error;
+    showToast(`✓ Kehilangan di keranjang ${data.basket_code} berhasil dicatat sebagai selisih.`,'success');
+    document.getElementById('panel-aksi').style.display='none';
+    document.getElementById('search-code').value='';
+    document.getElementById('search-result-area').innerHTML='';
+    foundBasket=null;
+    await loadRiwayat();
+  }catch(e){
+    console.error(e);
+    showToast('Gagal mencatat: '+(e.message||e),'error');
+  }finally{
+    btn.textContent='🚨 Catat sebagai Selisih';
+    checkFormReady();
+  }
+}
+
+// ============================================================
+// PANEL 3 — RIWAYAT LAPOR KEHILANGAN (via modul ini)
+// ============================================================
+async function loadRiwayat(){
+  const area = document.getElementById('hist-area');
+  const{data,error}=await db.from('audit_log')
+    .select('id,record_id,user_id,data_sebelum,data_sesudah,created_at,users:user_id(nama)')
+    .eq('aksi','BASKET_LAPOR_HILANG')
+    .order('created_at',{ascending:false})
+    .limit(30);
+  if(error){console.error(error);area.innerHTML='<div class="empty">⚠️ Gagal memuat riwayat.</div>';return}
+  if(!data || !data.length){area.innerHTML='<div class="empty">Belum ada riwayat lapor kehilangan lewat modul ini.</div>';return}
+
+  area.innerHTML = data.map(r=>{
+    const before = r.data_sebelum||{};
+    const after  = r.data_sesudah||{};
+    return `<div class="hist-row">
+      <div class="hist-icon">🚨</div>
+      <div class="hist-main">
+        <b>${esc(before.basket_code||'(?)')}</b> — ${esc(before.lokasi||'—')} · hilang ${fmt(after.qty_hilang)} ekor/bks / ${fmtKg(after.kg_hilang)} · tanggal ${fmtDate(after.tanggal)}
+        <div class="hist-meta">${esc(r.users?.nama||'—')} · dicatat ${fmtDT(r.created_at)}${after.alasan?` · "${esc(after.alasan)}"`:''}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+</script>
+</body>
+</html>
