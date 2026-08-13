@@ -466,7 +466,7 @@ async function tampilkanLaporan(){
   try{
     const [pengambilan, hasil, reject] = await Promise.all([
       fetchPengambilan(fromBound,toBound),
-      fetchHasil(fromBound,toBound),
+      fetchHasil(fromBound,toBound,tanggal),
       fetchReject(fromBound,toBound)
     ]);
 
@@ -567,7 +567,7 @@ async function loadTujuanBerikutnya(basketIds){
   return map;
 }
 
-async function fetchHasil(fromBound,toBound){
+async function fetchHasil(fromBound,toBound,tanggal){
   // NB: dulu filter pakai processing_orders.tipe = currentTipe. Itu salah untuk WO
   // MULTI-stage (mis. Parting→Marinasi) karena processing_orders.tipe = 'MULTI',
   // bukan 'MARINASI' — jadi semua hasil dari WO multi-stage hilang dari laporan
@@ -588,10 +588,39 @@ async function fetchHasil(fromBound,toBound){
   if(error) throw error;
   const rows = (data||[]).filter(r => r.baskets?.status !== 'VOID');
 
-  const basketIds = [...new Set(rows.map(r=>r.basket_id).filter(Boolean))];
+  // By-product (Kerongkongan, Drumbone, dst — kategori BYPRODUCT_BONELESS/
+  // BYPRODUCT_PARTING) sejak Migration 57 ("Timbang By-Product Hari Ini") lahir
+  // LANGSUNG dari byproduct_collection_sessions dan TIDAK PERNAH punya baris
+  // processing_outputs sama sekali (lihat catatan migration 57 — pola sama yang
+  // sudah dipakai untuk penyesuaian Tracing.html). Kalau tidak digabung di sini,
+  // basket by-product ini akan selalu hilang dari Hasil Produk & Rekap Hasil
+  // Produksi walau fisiknya sudah benar ditimbang & sudah pindah lokasi (baru
+  // ketahuan lewat basket_movements di laporan lain). byproduct_collection_sessions
+  // hanya ada untuk tipe PARTING/BONELESS (tidak ada utk MARINASI), dan tanggal-nya
+  // sudah kolom DATE murni (tanggal produksi sesi) jadi difilter langsung pakai
+  // tanggal, bukan rentang created_at seperti processing_outputs.
+  let byprodRows = [];
+  if(tanggal && (currentTipe==='BONELESS' || currentTipe==='PARTING')){
+    const { data: bpData, error: bpError } = await db.from('byproduct_collection_sessions')
+      .select(`
+        id, session_code, total_qty, total_kg, basket_id,
+        baskets ( status ),
+        product_master ( nama_produk, product_code )
+      `)
+      .eq('tipe', currentTipe)
+      .eq('status', 'CLOSED')
+      .eq('tanggal', tanggal);
+    if(bpError) throw bpError;
+    byprodRows = (bpData||[]).filter(r => r.basket_id && r.baskets?.status !== 'VOID');
+  }
+
+  const basketIds = [...new Set([
+    ...rows.map(r=>r.basket_id),
+    ...byprodRows.map(r=>r.basket_id)
+  ].filter(Boolean))];
   const tujuanMap = await loadTujuanBerikutnya(basketIds);
 
-  return rows.map(r=>({
+  const fromOutputs = rows.map(r=>({
     barang: r.product_master?.nama_produk || '—',
     qty: Number(r.qty_output)||0,
     kg: Number(r.kg_output)||0,
@@ -600,6 +629,16 @@ async function fetchHasil(fromBound,toBound){
     // target WO yang ada) — keterangan pakai alasan yang wajib diisi saat itu.
     keterangan: r.order_id ? (r.processing_orders?.catatan || '') : `🆓 Tanpa WO — ${r.alasan || 'tanpa alasan tercatat'}`
   }));
+
+  const fromByprod = byprodRows.map(r=>({
+    barang: r.product_master?.nama_produk || '—',
+    qty: Number(r.total_qty)||0,
+    kg: Number(r.total_kg)||0,
+    tujuan: tujuanMap[r.basket_id] || null,
+    keterangan: `📦 By-product — Sesi ${r.session_code}`
+  }));
+
+  return [...fromOutputs, ...fromByprod];
 }
 
 async function fetchReject(fromBound,toBound){
