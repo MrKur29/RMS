@@ -532,13 +532,27 @@ async function loadReport(){
     let cbaskets=[], allBaskets=[];
     if(batchIds.length){
       const [cbasketsData, basketsData] = await Promise.all([
-        fetchAllRows(()=>db.from('carcass_baskets').select('id,qty_timbang,kg_timbang,tipe_kerusakan,product:product_id(product_code,nama_produk,grade,sub_kategori,kg_min,kg_max),basket:basket_id(status)').in('batch_id',batchIds)),
+        fetchAllRows(()=>db.from('carcass_baskets').select('id,basket_id,qty_timbang,kg_timbang,tipe_kerusakan,product:product_id(product_code,nama_produk,grade,sub_kategori,kg_min,kg_max),basket:basket_id(status)').in('batch_id',batchIds)),
         fetchAllRows(()=>db.from('baskets').select('id,qty_awal,kg_awal,lokasi,product:product_id(product_code,nama_produk,grade,sub_kategori,kg_min,kg_max,kategori)').in('batch_id',batchIds))
       ]);
       // Keranjang yang sudah di-VOID (dihapus) tidak boleh ikut dihitung — kalau tidak, laporan
       // akan lebih besar dari yang seharusnya (beda dari Dashboard yang pakai counter tersimpan).
       cbaskets = cbasketsData.filter(r=>r.product && r.basket?.status!=='VOID');
-      allBaskets = basketsData.filter(r=>r.product && r.product.kategori==='KARKAS');
+
+      // "Produk Transfer" harus hanya menghitung keranjang karkas ASLI (yang benar-benar
+      // ditimbang di lantai karkas — punya baris di carcass_baskets), BUKAN semua baris di
+      // tabel `baskets` dengan batch_id ini. Saat sebagian isi sebuah keranjang dipakai
+      // sebagai input WO Parting/Boneless, sistem membuat baris basket BARU untuk porsi itu
+      // (kode mis. "BK-xxxx-1") yang mewarisi batch_id yang sama tapi TIDAK PERNAH punya
+      // baris basket_movements dari_lokasi='LANTAI' sendiri (ia "lahir" di Parting, bukan
+      // dipindah dari lantai) dan TIDAK punya baris carcass_baskets sendiri. Kalau baris
+      // pecahan ini ikut dihitung: (a) qty-nya dobel-hitung di atas qty_awal keranjang
+      // asalnya yang sudah utuh menghitungnya, dan (b) karena tidak ada tujuan_awal, ia
+      // salah nyasar ke kolom "Belum Dialokasi" — padahal sebenarnya sudah teralokasi
+      // (lewat keranjang asalnya). Sama persis dengan bug yang ditemukan & diperbaiki di
+      // LaporanProduksiKarkas.html (versi per-batch) 2026-08-13.
+      const originalBasketIds = new Set(cbasketsData.map(r=>r.basket_id).filter(Boolean));
+      allBaskets = basketsData.filter(r=>r.product && r.product.kategori==='KARKAS' && originalBasketIds.has(r.id));
 
       // "Produk Transfer" harus menunjukkan tujuan PERTAMA keranjang dipindah dari lantai
       // karkas (basket_movements.dari_lokasi='LANTAI'), bukan lokasi terkini keranjang
