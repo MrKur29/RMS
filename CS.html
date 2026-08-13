@@ -219,10 +219,10 @@ tr:last-child td{border-bottom:none}
       <div class="nav-item" onclick="navTo('Tracing.html')"><span class="nav-icon">🔍</span><span class="nav-label-text">Tracing Produk</span></div>
       <div class="nav-item" id="nav-saldo-awal" style="display:none" onclick="navTo('SaldoAwal.html')"><span class="nav-icon">📋</span><span class="nav-label-text">Saldo Awal Barang</span></div>
       <div class="nav-item" onclick="navTo('MasterData.html')"><span class="nav-icon">🗂️</span><span class="nav-label-text">Master Data</span></div>
+      <div class="nav-item" id="nav-pelanggan" style="display:none" onclick="navTo('KelolaPelanggan.html')"><span class="nav-icon">📇</span><span class="nav-label-text">Kelola Pelanggan</span></div>
       <div class="nav-item" id="nav-revisi-batch" style="display:none" onclick="navTo('RevisiBatch.html')"><span class="nav-icon">🔀</span><span class="nav-label-text">Revisi Batch Keranjang</span></div>
       <div class="nav-item" id="nav-void-keranjang" style="display:none" onclick="navTo('VoidKeranjang.html')"><span class="nav-icon">🗑️</span><span class="nav-label-text">Void Keranjang</span></div>
       <div class="nav-item" id="nav-reprint-label" style="display:none" onclick="navTo('ReprintLabel.html')"><span class="nav-icon">🖨️</span><span class="nav-label-text">Reprint Label</span></div>
-      <div class="nav-item" id="nav-pelanggan" style="display:none" onclick="navTo('KelolaPelanggan.html')"><span class="nav-icon">📇</span><span class="nav-label-text">Kelola Pelanggan</span></div>
       <div class="nav-item" id="nav-user-mgmt" style="display:none" onclick="navTo('UserManagement.html')"><span class="nav-icon">👥</span><span class="nav-label-text">Manajemen User</span></div>
     </nav>
     <div class="sidebar-footer">
@@ -615,19 +615,27 @@ async function loadHistory(){
   const tbody=document.getElementById('riwayat-tbody');
   tbody.innerHTML='<tr><td colspan="6"><div class="empty">⏳ Memuat…</div></td></tr>';
 
-  let q=db.from('basket_movements')
-    .select(`id,qty_pindah,kg_pindah,confirmed_at,
-      baskets(basket_code,product_master(nama_produk,product_code)),
-      users!basket_movements_confirmed_by_fkey(nama)`)
-    .eq('ke_lokasi','CS').eq('status','CONFIRMED')
-    .order('confirmed_at',{ascending:false})
-    .limit(1000);
-  if(dari)q=q.gte('confirmed_at',dari+'T00:00:00');
-  if(sampai)q=q.lte('confirmed_at',sampai+'T23:59:59');
-
-  const{data,error}=await q;
-  if(error){console.warn(error);tbody.innerHTML='<tr><td colspan="6"><div class="empty">⚠️ Gagal memuat riwayat.</div></td></tr>';return}
-  historyMovements=data||[];
+  // 2026-08-13 FIX: .limit(1000) di sini diam-diam memotong riwayat begitu ada lebih dari
+  // 1000 perpindahan CONFIRMED ke CS — apalagi kalau filter tanggal dikosongkan (ambil semua
+  // riwayat sepanjang waktu). Ganti dengan fetch bertahap per 1000 baris supaya riwayat lengkap.
+  const PAGE_SIZE=1000; let data=[]; let from=0;
+  while(true){
+    let q=db.from('basket_movements')
+      .select(`id,qty_pindah,kg_pindah,confirmed_at,
+        baskets(basket_code,product_master(nama_produk,product_code)),
+        users!basket_movements_confirmed_by_fkey(nama)`)
+      .eq('ke_lokasi','CS').eq('status','CONFIRMED');
+    if(dari)q=q.gte('confirmed_at',dari+'T00:00:00');
+    if(sampai)q=q.lte('confirmed_at',sampai+'T23:59:59');
+    q=q.order('id',{ascending:true}).range(from,from+PAGE_SIZE-1);
+    const{data:page,error}=await q;
+    if(error){console.warn(error);tbody.innerHTML='<tr><td colspan="6"><div class="empty">⚠️ Gagal memuat riwayat.</div></td></tr>';return}
+    data=data.concat(page||[]);
+    if(!page||page.length<PAGE_SIZE)break;
+    from+=PAGE_SIZE;
+  }
+  data.sort((a,b)=> new Date(b.confirmed_at) - new Date(a.confirmed_at));
+  historyMovements=data;
   populateProdukFilter();
   renderHistory();
 }

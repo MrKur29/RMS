@@ -207,7 +207,6 @@ a{text-decoration:none}
       <div class="nav-section-label">Penjualan</div>
       <div class="nav-item" onclick="navTo('Penjualan.html')"><span class="nav-icon">🛒</span><span class="nav-label-text">Penjualan</span></div>
       <div class="nav-item" id="nav-cs" style="display:none" onclick="navTo('CS.html')"><span class="nav-icon">🏬</span><span class="nav-label-text">CS (Cold Storage)</span></div>
-      <div class="nav-item" id="nav-pelanggan" style="display:none" onclick="navTo('KelolaPelanggan.html')"><span class="nav-icon">📇</span><span class="nav-label-text">Kelola Pelanggan</span></div>
       <div class="nav-section-label">Manajemen</div>
       <div class="nav-item" onclick="navTo('Koreksi.html')">
         <span class="nav-icon">✅</span><span class="nav-label-text">Koreksi & Approval</span>
@@ -220,6 +219,7 @@ a{text-decoration:none}
       <div class="nav-item" onclick="navTo('MasterData.html')">
         <span class="nav-icon">🗂️</span><span class="nav-label-text">Master Data</span>
       </div>
+      <div class="nav-item" id="nav-pelanggan" style="display:none" onclick="navTo('KelolaPelanggan.html')"><span class="nav-icon">📇</span><span class="nav-label-text">Kelola Pelanggan</span></div>
 <div class="nav-item" id="nav-revisi-batch" style="display:none" onclick="navTo('RevisiBatch.html')">
           <span class="nav-icon">🔀</span><span class="nav-label-text">Revisi Batch Keranjang</span>
       </div>
@@ -521,6 +521,25 @@ async function tampilkanRincianTransaksi(){
   }
 }
 
+// 2026-08-13 FIX: query di bawah TIDAK difilter per produk (semua produk di CHILLER
+// sekaligus) — tanpa .range() PostgREST diam-diam memotong di 1000 baris begitu total
+// transaksi CHILLER dalam rentang tanggal yang dipilih melewati itu (transaksi perusahaan
+// ini sudah tembus >1000 baris per lokasi hanya dalam ~1 minggu). Sama persis bug yang
+// ditemukan & diperbaiki di LaporanStokBarang.html — lihat catatan di sana.
+const RINCIAN_PAGE_SIZE = 1000;
+async function fetchAllRows(buildQuery){
+  let all = [];
+  let from = 0;
+  while(true){
+    const { data, error } = await buildQuery().order('id',{ascending:true}).range(from, from+RINCIAN_PAGE_SIZE-1);
+    if(error){ console.error('fetchAllRows', error); return all; }
+    all = all.concat(data||[]);
+    if(!data || data.length < RINCIAN_PAGE_SIZE) break;
+    from += RINCIAN_PAGE_SIZE;
+  }
+  return all;
+}
+
 // Ambil semua sumber transaksi lokasi CHILLER, semua produk, dalam rentang tanggal dateFrom..dateTo.
 async function fetchAllEventsSemuaProduk(dateFrom, dateTo){
   const fromBound = dateFrom+'T00:00:00+07:00';
@@ -531,28 +550,27 @@ async function fetchAllEventsSemuaProduk(dateFrom, dateTo){
 
   // A) Transfer masuk ke Chiller (basket_movements CONFIRMED, ke_lokasi = CHILLER)
   queries.push(
-    db.from('basket_movements')
+    fetchAllRows(()=>db.from('basket_movements')
       .select('id,basket_id,qty_pindah,kg_pindah,confirmed_at,dari_lokasi,status,baskets!inner(basket_code,product_id)')
       .eq('ke_lokasi',LOKASI)
       .eq('status','CONFIRMED')
       .gte('confirmed_at',fromBound)
       .lte('confirmed_at',toBound)
-      .then(({data,error})=>{
-        if(error){console.error('fetchAllEventsSemuaProduk A',error);return}
-        (data||[]).forEach(m=>{
-          events.push({
-            date:new Date(m.confirmed_at), tipe:'Transfer Masuk', tipeCls:'tp-masuk',
-            asalTujuan:asalTujuanLabel(m.dari_lokasi),
-            product_id:m.baskets?.product_id,
-            basketCode:m.baskets?.basket_code||'—',
-            ket:'—',
-            // retur dari Loading (penjualan) — cari PS & customer terkait basket ini
-            _psLookupBasketId: m.dari_lokasi==='LOADING' ? m.basket_id : null,
-            masuk_qty:Number(m.qty_pindah)||0, masuk_kg:Number(m.kg_pindah)||0,
-            keluar_qty:0, keluar_kg:0
-          });
+    ).then(data=>{
+      (data||[]).forEach(m=>{
+        events.push({
+          date:new Date(m.confirmed_at), tipe:'Transfer Masuk', tipeCls:'tp-masuk',
+          asalTujuan:asalTujuanLabel(m.dari_lokasi),
+          product_id:m.baskets?.product_id,
+          basketCode:m.baskets?.basket_code||'—',
+          ket:'—',
+          // retur dari Loading (penjualan) — cari PS & customer terkait basket ini
+          _psLookupBasketId: m.dari_lokasi==='LOADING' ? m.basket_id : null,
+          masuk_qty:Number(m.qty_pindah)||0, masuk_kg:Number(m.kg_pindah)||0,
+          keluar_qty:0, keluar_kg:0
         });
-      })
+      });
+    })
   );
 
   // B) Transfer keluar dari Chiller (basket_movements CONFIRMED, ke_lokasi != CHILLER)
@@ -562,99 +580,94 @@ async function fetchAllEventsSemuaProduk(dateFrom, dateTo){
   //    Dipakai confirmed_at (bukan created_at) supaya konsisten dengan event A di atas
   //    dan dengan waktu transaksi nyatanya terjadi (saat dikonfirmasi, bukan saat dikirim).
   queries.push(
-    db.from('basket_movements')
+    fetchAllRows(()=>db.from('basket_movements')
       .select('id,basket_id,qty_pindah,kg_pindah,confirmed_at,ke_lokasi,status,baskets!inner(basket_code,product_id)')
       .eq('dari_lokasi',LOKASI)
       .eq('status','CONFIRMED')
       .gte('confirmed_at',fromBound)
       .lte('confirmed_at',toBound)
-      .then(({data,error})=>{
-        if(error){console.error('fetchAllEventsSemuaProduk B',error);return}
-        (data||[]).forEach(m=>{
-          events.push({
-            date:new Date(m.confirmed_at), tipe:'Transfer Keluar', tipeCls:'tp-keluar',
-            asalTujuan:asalTujuanLabel(m.ke_lokasi),
-            product_id:m.baskets?.product_id,
-            basketCode:m.baskets?.basket_code||'—',
-            ket:'—',
-            // keluar ke Loading (penjualan) — cari PS & customer terkait basket ini
-            _psLookupBasketId: m.ke_lokasi==='LOADING' ? m.basket_id : null,
-            masuk_qty:0, masuk_kg:0,
-            keluar_qty:Number(m.qty_pindah)||0, keluar_kg:Number(m.kg_pindah)||0
-          });
+    ).then(data=>{
+      (data||[]).forEach(m=>{
+        events.push({
+          date:new Date(m.confirmed_at), tipe:'Transfer Keluar', tipeCls:'tp-keluar',
+          asalTujuan:asalTujuanLabel(m.ke_lokasi),
+          product_id:m.baskets?.product_id,
+          basketCode:m.baskets?.basket_code||'—',
+          ket:'—',
+          // keluar ke Loading (penjualan) — cari PS & customer terkait basket ini
+          _psLookupBasketId: m.ke_lokasi==='LOADING' ? m.basket_id : null,
+          masuk_qty:0, masuk_kg:0,
+          keluar_qty:Number(m.qty_pindah)||0, keluar_kg:Number(m.kg_pindah)||0
         });
-      })
+      });
+    })
   );
 
   // C) Konsumsi ke Work Order (processing_inputs) — keluar, lokasi = processing_orders.tipe
   queries.push(
-    db.from('processing_inputs')
+    fetchAllRows(()=>db.from('processing_inputs')
       .select('id,product_id,qty_input,kg_input,created_at,baskets!inner(basket_code),processing_orders!inner(order_code,tipe)')
       .eq('processing_orders.tipe',LOKASI)
       .gte('created_at',fromBound)
       .lte('created_at',toBound)
-      .then(({data,error})=>{
-        if(error){console.error('fetchAllEventsSemuaProduk C',error);return}
-        (data||[]).forEach(pi=>{
-          events.push({
-            date:new Date(pi.created_at), tipe:'Konsumsi Produksi', tipeCls:'tp-konsumsi',
-            asalTujuan:asalTujuanLabel(pi.processing_orders?.tipe),
-            product_id:pi.product_id,
-            basketCode:pi.baskets?.basket_code||'—',
-            ket:`WO ${pi.processing_orders?.order_code||'—'}`,
-            masuk_qty:0, masuk_kg:0,
-            keluar_qty:Number(pi.qty_input)||0, keluar_kg:Number(pi.kg_input)||0
-          });
+    ).then(data=>{
+      (data||[]).forEach(pi=>{
+        events.push({
+          date:new Date(pi.created_at), tipe:'Konsumsi Produksi', tipeCls:'tp-konsumsi',
+          asalTujuan:asalTujuanLabel(pi.processing_orders?.tipe),
+          product_id:pi.product_id,
+          basketCode:pi.baskets?.basket_code||'—',
+          ket:`WO ${pi.processing_orders?.order_code||'—'}`,
+          masuk_qty:0, masuk_kg:0,
+          keluar_qty:Number(pi.qty_input)||0, keluar_kg:Number(pi.kg_input)||0
         });
-      })
+      });
+    })
   );
 
   // D) Hasil produksi (processing_outputs) — masuk, tujuan_lokasi = CHILLER
   queries.push(
-    db.from('processing_outputs')
+    fetchAllRows(()=>db.from('processing_outputs')
       .select('id,product_id,qty_output,kg_output,created_at,baskets!inner(basket_code),processing_orders!inner(order_code,tipe)')
       .eq('tujuan_lokasi',LOKASI)
       .gte('created_at',fromBound)
       .lte('created_at',toBound)
-      .then(({data,error})=>{
-        if(error){console.error('fetchAllEventsSemuaProduk D',error);return}
-        (data||[]).forEach(po=>{
-          events.push({
-            date:new Date(po.created_at), tipe:'Hasil Produksi', tipeCls:'tp-output',
-            asalTujuan:asalTujuanLabel(po.processing_orders?.tipe),
-            product_id:po.product_id,
-            basketCode:po.baskets?.basket_code||'—',
-            ket:`WO ${po.processing_orders?.order_code||'—'} (keranjang baru)`,
-            masuk_qty:Number(po.qty_output)||0, masuk_kg:Number(po.kg_output)||0,
-            keluar_qty:0, keluar_kg:0
-          });
+    ).then(data=>{
+      (data||[]).forEach(po=>{
+        events.push({
+          date:new Date(po.created_at), tipe:'Hasil Produksi', tipeCls:'tp-output',
+          asalTujuan:asalTujuanLabel(po.processing_orders?.tipe),
+          product_id:po.product_id,
+          basketCode:po.baskets?.basket_code||'—',
+          ket:`WO ${po.processing_orders?.order_code||'—'} (keranjang baru)`,
+          masuk_qty:Number(po.qty_output)||0, masuk_kg:Number(po.kg_output)||0,
+          keluar_qty:0, keluar_kg:0
         });
-      })
+      });
+    })
   );
 
   // E) Koreksi disetujui pada basket yang SAAT INI berada di Chiller
   //    (corrections.record_id polimorfik / tanpa FK — diselesaikan 2 langkah)
   queries.push(
     (async()=>{
-      const { data: baskets, error: bErr } = await db.from('baskets')
+      const baskets = await fetchAllRows(()=>db.from('baskets')
         .select('id,basket_code,product_id')
         .eq('lokasi',LOKASI)
-        .neq('status','VOID');
-      if(bErr){console.error('fetchAllEventsSemuaProduk E (baskets)',bErr);return}
-      const basketIds = (baskets||[]).map(b=>b.id);
+        .neq('status','VOID'));
+      const basketIds = baskets.map(b=>b.id);
       if(!basketIds.length) return;
       const basketMeta = {};
-      (baskets||[]).forEach(b=>{basketMeta[b.id]={code:b.basket_code, product_id:b.product_id}});
+      baskets.forEach(b=>{basketMeta[b.id]={code:b.basket_code, product_id:b.product_id}});
 
-      const { data, error } = await db.from('corrections')
+      const data = await fetchAllRows(()=>db.from('corrections')
         .select('id,record_id,field_salah,nilai_lama,nilai_baru,reviewed_at')
         .eq('tabel_terkait','baskets')
         .eq('status','APPROVED')
         .in('record_id',basketIds)
         .in('field_salah',['qty_sisa','kg_sisa','qty_awal','kg_awal'])
         .gte('reviewed_at',fromBound)
-        .lte('reviewed_at',toBound);
-      if(error){console.error('fetchAllEventsSemuaProduk E (corrections)',error);return}
+        .lte('reviewed_at',toBound));
       (data||[]).forEach(c=>{
         const meta = basketMeta[c.record_id] || {};
         const lama=parseFloat(c.nilai_lama); const baru=parseFloat(c.nilai_baru);
@@ -692,29 +705,28 @@ async function fetchAllEventsSemuaProduk(dateFrom, dateTo){
   //    belakangan lewat revisi sesi FINAL tetap muncul di rentang tanggal yang
   //    benar, bukan hilang atau salah tanggal.
   queries.push(
-    db.from('baskets')
+    fetchAllRows(()=>db.from('baskets')
       .select('id,basket_code,product_id,qty_awal,kg_awal,created_at,saldo_awal_sessions!inner(tanggal_opname,catatan)')
       .eq('basket_type','SALDO_AWAL')
       .eq('lokasi_opname',LOKASI)
       .neq('status','VOID')
       .gte('saldo_awal_sessions.tanggal_opname',dateFrom)
       .lte('saldo_awal_sessions.tanggal_opname',dateTo)
-      .then(({data,error})=>{
-        if(error){console.error('fetchAllEventsSemuaProduk G',error);return}
-        (data||[]).forEach(b=>{
-          if(!/^SA-[0-9]{6}-[0-9]{4}$/.test(b.basket_code)) return;  // lewati hasil split
-          const s=b.saldo_awal_sessions;
-          events.push({
-            date:new Date(s.tanggal_opname), tipe:'Stok Awal', tipeCls:'tp-produksi',
-            asalTujuan:'Saldo Awal',
-            product_id:b.product_id,
-            basketCode:b.basket_code||'—',
-            ket:`Saldo Awal (Stok Opname)${s?.tanggal_opname?' — '+fmtDateID(s.tanggal_opname):''}${s?.catatan?' — '+s.catatan:''}`,
-            masuk_qty:Number(b.qty_awal)||0, masuk_kg:Number(b.kg_awal)||0,
-            keluar_qty:0, keluar_kg:0
-          });
+    ).then(data=>{
+      (data||[]).forEach(b=>{
+        if(!/^SA-[0-9]{6}-[0-9]{4}$/.test(b.basket_code)) return;  // lewati hasil split
+        const s=b.saldo_awal_sessions;
+        events.push({
+          date:new Date(s.tanggal_opname), tipe:'Stok Awal', tipeCls:'tp-produksi',
+          asalTujuan:'Saldo Awal',
+          product_id:b.product_id,
+          basketCode:b.basket_code||'—',
+          ket:`Saldo Awal (Stok Opname)${s?.tanggal_opname?' — '+fmtDateID(s.tanggal_opname):''}${s?.catatan?' — '+s.catatan:''}`,
+          masuk_qty:Number(b.qty_awal)||0, masuk_kg:Number(b.kg_awal)||0,
+          keluar_qty:0, keluar_kg:0
         });
-      })
+      });
+    })
   );
 
   await Promise.all(queries);
@@ -724,12 +736,10 @@ async function fetchAllEventsSemuaProduk(dateFrom, dateTo){
   //    lebih dari satu picking slip (mis. keranjang balik lagi setelah retur), ambil PS terbaru.
   const psBasketIds = [...new Set(events.map(e=>e._psLookupBasketId).filter(Boolean))];
   if(psBasketIds.length){
-    const { data: psItems, error: psErr } = await db.from('picking_slip_items')
+    const psItems = await fetchAllRows(()=>db.from('picking_slip_items')
       .select('basket_id,picking_slips(ps_code,nama_pelanggan,created_at)')
-      .in('basket_id', psBasketIds);
-    if(psErr){
-      console.error('fetchAllEventsSemuaProduk F (picking_slip_items)',psErr);
-    } else {
+      .in('basket_id', psBasketIds));
+    {
       const psMap = {};
       (psItems||[]).forEach(pi=>{
         const ps = pi.picking_slips;

@@ -206,7 +206,6 @@ a{text-decoration:none}
       <div class="nav-section-label">Penjualan</div>
       <div class="nav-item" onclick="navTo('Penjualan.html')"><span class="nav-icon">🛒</span><span class="nav-label-text">Penjualan</span></div>
       <div class="nav-item" id="nav-cs" style="display:none" onclick="navTo('CS.html')"><span class="nav-icon">🏬</span><span class="nav-label-text">CS (Cold Storage)</span></div>
-      <div class="nav-item" id="nav-pelanggan" style="display:none" onclick="navTo('KelolaPelanggan.html')"><span class="nav-icon">📇</span><span class="nav-label-text">Kelola Pelanggan</span></div>
       <div class="nav-section-label">Manajemen</div>
       <div class="nav-item" onclick="navTo('Koreksi.html')">
         <span class="nav-icon">✅</span><span class="nav-label-text">Koreksi & Approval</span>
@@ -219,6 +218,7 @@ a{text-decoration:none}
       <div class="nav-item" onclick="navTo('MasterData.html')">
         <span class="nav-icon">🗂️</span><span class="nav-label-text">Master Data</span>
       </div>
+      <div class="nav-item" id="nav-pelanggan" style="display:none" onclick="navTo('KelolaPelanggan.html')"><span class="nav-icon">📇</span><span class="nav-label-text">Kelola Pelanggan</span></div>
 <div class="nav-item" id="nav-revisi-batch" style="display:none" onclick="navTo('RevisiBatch.html')">
           <span class="nav-icon">🔀</span><span class="nav-label-text">Revisi Batch Keranjang</span>
       </div>
@@ -615,6 +615,25 @@ async function tampilkanKartuStok(){
   }
 }
 
+// 2026-08-13: proaktif ditambahkan pagination di sini juga (per escalated rule di
+// feedback_supabase_1000_row_cap) — query di bawah SUDAH difilter per satu produk jadi
+// hari ini masih di bawah 1000 baris, tapi supaya tidak diam-diam berulang seperti bug
+// di LaporanStokBarang.html (lihat catatan fetchAllRows di sana), semua query company/
+// lintas-tanggal di kartu stok ini juga dipagination sejak sekarang.
+const KARTU_PAGE_SIZE = 1000;
+async function fetchAllRows(buildQuery){
+  let all = [];
+  let from = 0;
+  while(true){
+    const { data, error } = await buildQuery().order('id',{ascending:true}).range(from, from+KARTU_PAGE_SIZE-1);
+    if(error){ console.error('fetchAllRows', error); return all; }
+    all = all.concat(data||[]);
+    if(!data || data.length < KARTU_PAGE_SIZE) break;
+    from += KARTU_PAGE_SIZE;
+  }
+  return all;
+}
+
 // Ambil semua sumber transaksi (tanpa batas bawah tanggal — dipakai untuk hitung saldo awal),
 // dibatasi tanggal atas (dateTo) supaya query tidak membengkak.
 async function fetchAllEvents(productId, lokasi, dateTo){
@@ -626,91 +645,87 @@ async function fetchAllEvents(productId, lokasi, dateTo){
   // A) Produksi karkas awal (basket lahir di LANTAI) — hanya relevan utk lokasi LANTAI
   if(lokasi==='LANTAI'){
     queries.push(
-      db.from('baskets')
+      fetchAllRows(()=>db.from('baskets')
         .select('id,basket_code,qty_awal,kg_awal,created_at,carcass_baskets!inner(id)')
         .eq('product_id',productId)
         .neq('status','VOID')
         .lte('created_at',toBound)
-        .then(({data,error})=>{
-          if(error){console.error('fetchAllEvents A',error);return}
-          (data||[]).forEach(b=>{
-            events.push({
-              date:new Date(b.created_at), tipe:'Produksi Karkas', tipeCls:'tp-produksi',
-              asalTujuan:asalTujuanLabel('LANTAI'), basketCode:b.basket_code,
-              ket:'Timbang karkas',
-              masuk_qty:Number(b.qty_awal)||0, masuk_kg:Number(b.kg_awal)||0,
-              keluar_qty:0, keluar_kg:0
-            });
+      ).then(data=>{
+        (data||[]).forEach(b=>{
+          events.push({
+            date:new Date(b.created_at), tipe:'Produksi Karkas', tipeCls:'tp-produksi',
+            asalTujuan:asalTujuanLabel('LANTAI'), basketCode:b.basket_code,
+            ket:'Timbang karkas',
+            masuk_qty:Number(b.qty_awal)||0, masuk_kg:Number(b.kg_awal)||0,
+            keluar_qty:0, keluar_kg:0
           });
-        })
+        });
+      })
     );
   }
 
   // B) Transfer masuk ke lokasi (basket_movements CONFIRMED, ke_lokasi = lokasi)
   queries.push(
-    db.from('basket_movements')
+    fetchAllRows(()=>db.from('basket_movements')
       .select('id,qty_pindah,kg_pindah,confirmed_at,dari_lokasi,status,baskets!inner(basket_code,product_id)')
       .eq('baskets.product_id',productId)
       .eq('ke_lokasi',lokasi)
       .eq('status','CONFIRMED')
       .lte('confirmed_at',toBound)
-      .then(({data,error})=>{
-        if(error){console.error('fetchAllEvents B',error);return}
-        (data||[]).forEach(m=>{
-          events.push({
-            date:new Date(m.confirmed_at), tipe:'Transfer Masuk', tipeCls:'tp-masuk',
-            asalTujuan:asalTujuanLabel(m.dari_lokasi), basketCode:m.baskets?.basket_code||'—',
-            ket:'—',
-            masuk_qty:Number(m.qty_pindah)||0, masuk_kg:Number(m.kg_pindah)||0,
-            keluar_qty:0, keluar_kg:0
-          });
+    ).then(data=>{
+      (data||[]).forEach(m=>{
+        events.push({
+          date:new Date(m.confirmed_at), tipe:'Transfer Masuk', tipeCls:'tp-masuk',
+          asalTujuan:asalTujuanLabel(m.dari_lokasi), basketCode:m.baskets?.basket_code||'—',
+          ket:'—',
+          masuk_qty:Number(m.qty_pindah)||0, masuk_kg:Number(m.kg_pindah)||0,
+          keluar_qty:0, keluar_kg:0
         });
-      })
+      });
+    })
   );
 
   // C) Transfer keluar dari lokasi (basket_movements CONFIRMED — hanya yang benar-benar
   //    sudah dikonfirmasi penerima; PENDING/REJECTED tidak dihitung sebagai keluar,
   //    sama seperti perbaikan di Laporan Rincian Transaksi Chiller 2026-08-03)
   queries.push(
-    db.from('basket_movements')
+    fetchAllRows(()=>db.from('basket_movements')
       .select('id,qty_pindah,kg_pindah,confirmed_at,ke_lokasi,status,baskets!inner(basket_code,product_id)')
       .eq('baskets.product_id',productId)
       .eq('dari_lokasi',lokasi)
       .eq('status','CONFIRMED')
       .lte('confirmed_at',toBound)
-      .then(({data,error})=>{
-        if(error){console.error('fetchAllEvents C',error);return}
-        (data||[]).forEach(m=>{
-          events.push({
-            date:new Date(m.confirmed_at), tipe:'Transfer Keluar', tipeCls:'tp-keluar',
-            asalTujuan:asalTujuanLabel(m.ke_lokasi), basketCode:m.baskets?.basket_code||'—',
-            ket:'—',
-            masuk_qty:0, masuk_kg:0,
-            keluar_qty:Number(m.qty_pindah)||0, keluar_kg:Number(m.kg_pindah)||0
-          });
+    ).then(data=>{
+      (data||[]).forEach(m=>{
+        events.push({
+          date:new Date(m.confirmed_at), tipe:'Transfer Keluar', tipeCls:'tp-keluar',
+          asalTujuan:asalTujuanLabel(m.ke_lokasi), basketCode:m.baskets?.basket_code||'—',
+          ket:'—',
+          masuk_qty:0, masuk_kg:0,
+          keluar_qty:Number(m.qty_pindah)||0, keluar_kg:Number(m.kg_pindah)||0
         });
-      })
+      });
+    })
   );
 
   // D) Konsumsi ke Work Order (processing_inputs) — keluar, lokasi = processing_orders.tipe
   queries.push(
-    db.from('processing_inputs')
+    fetchAllRows(()=>db.from('processing_inputs')
       .select('id,qty_input,kg_input,created_at,baskets!inner(basket_code),processing_orders!inner(order_code,tipe)')
       .eq('product_id',productId)
       .eq('processing_orders.tipe',lokasi)
       .lte('created_at',toBound)
-      .then(({data,error})=>{
-        if(error){console.error('fetchAllEvents D',error);return}
-        (data||[]).forEach(pi=>{
-          events.push({
-            date:new Date(pi.created_at), tipe:'Konsumsi Produksi', tipeCls:'tp-konsumsi',
-            asalTujuan:asalTujuanLabel(pi.processing_orders?.tipe), basketCode:pi.baskets?.basket_code||'—',
-            ket:`WO ${pi.processing_orders?.order_code||'—'}`,
-            masuk_qty:0, masuk_kg:0,
-            keluar_qty:Number(pi.qty_input)||0, keluar_kg:Number(pi.kg_input)||0
-          });
+    ).then(data=>{
+      (data||[]).forEach(pi=>{
+        events.push({
+          date:new Date(pi.created_at), tipe:'Konsumsi Produksi', tipeCls:'tp-konsumsi',
+          asalTujuan:asalTujuanLabel(pi.processing_orders?.tipe), basketCode:pi.baskets?.basket_code||'—',
+          ket:`WO ${pi.processing_orders?.order_code||'—'}`,
+          masuk_qty:0, masuk_kg:0,
+          keluar_qty:Number(pi.qty_input)||0, keluar_kg:Number(pi.kg_input)||0
         });
-      })
+      });
+    })
   );
 
   // E) Hasil produksi (processing_outputs) — masuk, tujuan_lokasi = lokasi
@@ -718,23 +733,22 @@ async function fetchAllEvents(productId, lokasi, dateTo){
   // "Tanpa WO" (order_id NULL, mis. Boneless "Catat Tanpa WO") tetap harus tampil
   // di kartu stok, !inner akan diam-diam membuangnya.
   queries.push(
-    db.from('processing_outputs')
+    fetchAllRows(()=>db.from('processing_outputs')
       .select('id,qty_output,kg_output,created_at,order_id,baskets!inner(basket_code),processing_orders(order_code)')
       .eq('product_id',productId)
       .eq('tujuan_lokasi',lokasi)
       .lte('created_at',toBound)
-      .then(({data,error})=>{
-        if(error){console.error('fetchAllEvents E',error);return}
-        (data||[]).forEach(po=>{
-          events.push({
-            date:new Date(po.created_at), tipe:'Hasil Produksi', tipeCls:'tp-output',
-            asalTujuan:asalTujuanLabel(lokasi), basketCode:po.baskets?.basket_code||'—',
-            ket: po.order_id ? `WO ${po.processing_orders?.order_code||'—'} (keranjang baru)` : '🆓 Tanpa WO (keranjang baru)',
-            masuk_qty:Number(po.qty_output)||0, masuk_kg:Number(po.kg_output)||0,
-            keluar_qty:0, keluar_kg:0
-          });
+    ).then(data=>{
+      (data||[]).forEach(po=>{
+        events.push({
+          date:new Date(po.created_at), tipe:'Hasil Produksi', tipeCls:'tp-output',
+          asalTujuan:asalTujuanLabel(lokasi), basketCode:po.baskets?.basket_code||'—',
+          ket: po.order_id ? `WO ${po.processing_orders?.order_code||'—'} (keranjang baru)` : '🆓 Tanpa WO (keranjang baru)',
+          masuk_qty:Number(po.qty_output)||0, masuk_kg:Number(po.kg_output)||0,
+          keluar_qty:0, keluar_kg:0
         });
-      })
+      });
+    })
   );
 
   // F) Koreksi disetujui pada basket (qty_sisa/kg_sisa/qty_awal/kg_awal), diatribusikan
@@ -744,25 +758,23 @@ async function fetchAllEvents(productId, lokasi, dateTo){
   //    corrections dengan record_id IN (...).
   queries.push(
     (async()=>{
-      const { data: baskets, error: bErr } = await db.from('baskets')
+      const baskets = await fetchAllRows(()=>db.from('baskets')
         .select('id,basket_code')
         .eq('product_id',productId)
         .eq('lokasi',lokasi)
-        .neq('status','VOID');
-      if(bErr){console.error('fetchAllEvents F (baskets)',bErr);return}
-      const basketIds = (baskets||[]).map(b=>b.id);
+        .neq('status','VOID'));
+      const basketIds = baskets.map(b=>b.id);
       if(!basketIds.length) return;
       const basketCodeById = {};
-      (baskets||[]).forEach(b=>{basketCodeById[b.id]=b.basket_code});
+      baskets.forEach(b=>{basketCodeById[b.id]=b.basket_code});
 
-      const { data, error } = await db.from('corrections')
+      const data = await fetchAllRows(()=>db.from('corrections')
         .select('id,record_id,field_salah,nilai_lama,nilai_baru,reviewed_at')
         .eq('tabel_terkait','baskets')
         .eq('status','APPROVED')
         .in('record_id',basketIds)
         .in('field_salah',['qty_sisa','kg_sisa','qty_awal','kg_awal'])
-        .lte('reviewed_at',toBound);
-      if(error){console.error('fetchAllEvents F (corrections)',error);return}
+        .lte('reviewed_at',toBound));
       (data||[]).forEach(c=>{
         const lama=parseFloat(c.nilai_lama); const baru=parseFloat(c.nilai_baru);
         const delta = (isNaN(baru)?0:baru) - (isNaN(lama)?0:lama);
@@ -795,26 +807,25 @@ async function fetchAllEvents(productId, lokasi, dateTo){
   //    belakangan lewat revisi sesi FINAL tetap muncul & terurut di tanggal
   //    opname aslinya, bukan hilang dari laporan "sampai tanggal opname".
   queries.push(
-    db.from('baskets')
+    fetchAllRows(()=>db.from('baskets')
       .select('id,basket_code,qty_awal,kg_awal,created_at,keterangan,saldo_awal_sessions!inner(tanggal_opname)')
       .eq('basket_type','SALDO_AWAL')
       .eq('product_id',productId)
       .eq('lokasi_opname',lokasi)
       .neq('status','VOID')
       .lte('saldo_awal_sessions.tanggal_opname',dateTo)
-      .then(({data,error})=>{
-        if(error){console.error('fetchAllEvents G',error);return}
-        (data||[]).forEach(b=>{
-          if(!/^SA-[0-9]{6}-[0-9]{4}$/.test(b.basket_code)) return;  // lewati hasil split
-          events.push({
-            date:new Date(b.saldo_awal_sessions.tanggal_opname), tipe:'Saldo Awal (Opname)', tipeCls:'tp-produksi',
-            asalTujuan:asalTujuanLabel(lokasi), basketCode:b.basket_code,
-            ket:b.keterangan||'Stok opname cutover',
-            masuk_qty:Number(b.qty_awal)||0, masuk_kg:Number(b.kg_awal)||0,
-            keluar_qty:0, keluar_kg:0
-          });
+    ).then(data=>{
+      (data||[]).forEach(b=>{
+        if(!/^SA-[0-9]{6}-[0-9]{4}$/.test(b.basket_code)) return;  // lewati hasil split
+        events.push({
+          date:new Date(b.saldo_awal_sessions.tanggal_opname), tipe:'Saldo Awal (Opname)', tipeCls:'tp-produksi',
+          asalTujuan:asalTujuanLabel(lokasi), basketCode:b.basket_code,
+          ket:b.keterangan||'Stok opname cutover',
+          masuk_qty:Number(b.qty_awal)||0, masuk_kg:Number(b.kg_awal)||0,
+          keluar_qty:0, keluar_kg:0
         });
-      })
+      });
+    })
   );
 
   await Promise.all(queries);

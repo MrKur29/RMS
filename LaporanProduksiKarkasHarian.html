@@ -223,7 +223,6 @@ a{text-decoration:none}
       <div class="nav-section-label">Penjualan</div>
       <div class="nav-item" onclick="navTo('Penjualan.html')"><span class="nav-icon">🛒</span><span class="nav-label-text">Penjualan</span></div>
       <div class="nav-item" id="nav-cs" style="display:none" onclick="navTo('CS.html')"><span class="nav-icon">🏬</span><span class="nav-label-text">CS (Cold Storage)</span></div>
-      <div class="nav-item" id="nav-pelanggan" style="display:none" onclick="navTo('KelolaPelanggan.html')"><span class="nav-icon">📇</span><span class="nav-label-text">Kelola Pelanggan</span></div>
       <div class="nav-section-label">Manajemen</div>
       <div class="nav-item" onclick="navTo('Koreksi.html')">
         <span class="nav-icon">✅</span><span class="nav-label-text">Koreksi & Approval</span>
@@ -236,6 +235,7 @@ a{text-decoration:none}
       <div class="nav-item" onclick="navTo('MasterData.html')">
         <span class="nav-icon">🗂️</span><span class="nav-label-text">Master Data</span>
       </div>
+      <div class="nav-item" id="nav-pelanggan" style="display:none" onclick="navTo('KelolaPelanggan.html')"><span class="nav-icon">📇</span><span class="nav-label-text">Kelola Pelanggan</span></div>
 <div class="nav-item" id="nav-revisi-batch" style="display:none" onclick="navTo('RevisiBatch.html')">
           <span class="nav-icon">🔀</span><span class="nav-label-text">Revisi Batch Keranjang</span>
       </div>
@@ -479,6 +479,24 @@ window.addEventListener('DOMContentLoaded',async ()=>{
 // ══════════════════════════════════════════════════════════════
 function todayISO(){return new Date().toISOString().split('T')[0]}
 
+// 2026-08-13: proaktif ditambahkan pagination (per escalated rule di
+// feedback_supabase_1000_row_cap) — query di bawah company-wide untuk SEMUA batch
+// dalam satu hari, tanpa .range() bisa diam-diam terpotong di 1000 baris begitu
+// volume produksi harian bertambah.
+const HARIAN_PAGE_SIZE = 1000;
+async function fetchAllRows(buildQuery){
+  let all = [];
+  let from = 0;
+  while(true){
+    const { data, error } = await buildQuery().order('id',{ascending:true}).range(from, from+HARIAN_PAGE_SIZE-1);
+    if(error){ console.error('fetchAllRows', error); return all; }
+    all = all.concat(data||[]);
+    if(!data || data.length < HARIAN_PAGE_SIZE) break;
+    from += HARIAN_PAGE_SIZE;
+  }
+  return all;
+}
+
 // Ambil tujuan pindah PERTAMA tiap keranjang dari lantai karkas (basket_movements
 // dengan dari_lokasi='LANTAI'), diurutkan paling awal. Kalau sebuah keranjang pernah
 // dikirim beberapa kali dari lantai (mis. sempat ditolak lalu dikirim ulang), yang
@@ -486,12 +504,11 @@ function todayISO(){return new Date().toISOString().split('T')[0]}
 async function loadTujuanAwal(basketIds){
   const map = {};
   if(!basketIds.length) return map;
-  const { data, error } = await db.from('basket_movements')
-    .select('basket_id,ke_lokasi,created_at')
+  const data = await fetchAllRows(()=>db.from('basket_movements')
+    .select('id,basket_id,ke_lokasi,created_at')
     .in('basket_id', basketIds)
-    .eq('dari_lokasi','LANTAI')
-    .order('created_at',{ascending:true});
-  if(error){ console.error(error); return map; }
+    .eq('dari_lokasi','LANTAI'));
+  data.sort((a,b)=> new Date(a.created_at) - new Date(b.created_at));
   (data||[]).forEach(m=>{ if(!(m.basket_id in map)) map[m.basket_id]=m.ke_lokasi; });
   return map;
 }
@@ -514,16 +531,14 @@ async function loadReport(){
 
     let cbaskets=[], allBaskets=[];
     if(batchIds.length){
-      const [basketsRes, transferRes] = await Promise.all([
-        db.from('carcass_baskets').select('qty_timbang,kg_timbang,tipe_kerusakan,product:product_id(product_code,nama_produk,grade,sub_kategori,kg_min,kg_max),basket:basket_id(status)').in('batch_id',batchIds),
-        db.from('baskets').select('id,qty_awal,kg_awal,lokasi,product:product_id(product_code,nama_produk,grade,sub_kategori,kg_min,kg_max,kategori)').in('batch_id',batchIds)
+      const [cbasketsData, basketsData] = await Promise.all([
+        fetchAllRows(()=>db.from('carcass_baskets').select('id,qty_timbang,kg_timbang,tipe_kerusakan,product:product_id(product_code,nama_produk,grade,sub_kategori,kg_min,kg_max),basket:basket_id(status)').in('batch_id',batchIds)),
+        fetchAllRows(()=>db.from('baskets').select('id,qty_awal,kg_awal,lokasi,product:product_id(product_code,nama_produk,grade,sub_kategori,kg_min,kg_max,kategori)').in('batch_id',batchIds))
       ]);
-      if(basketsRes.error) throw basketsRes.error;
-      if(transferRes.error) throw transferRes.error;
       // Keranjang yang sudah di-VOID (dihapus) tidak boleh ikut dihitung — kalau tidak, laporan
       // akan lebih besar dari yang seharusnya (beda dari Dashboard yang pakai counter tersimpan).
-      cbaskets = (basketsRes.data||[]).filter(r=>r.product && r.basket?.status!=='VOID');
-      allBaskets = (transferRes.data||[]).filter(r=>r.product && r.product.kategori==='KARKAS');
+      cbaskets = cbasketsData.filter(r=>r.product && r.basket?.status!=='VOID');
+      allBaskets = basketsData.filter(r=>r.product && r.product.kategori==='KARKAS');
 
       // "Produk Transfer" harus menunjukkan tujuan PERTAMA keranjang dipindah dari lantai
       // karkas (basket_movements.dari_lokasi='LANTAI'), bukan lokasi terkini keranjang
