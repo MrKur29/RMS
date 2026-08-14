@@ -1882,8 +1882,8 @@ async function doScanKeranjang(){
    ============================================================ */
 /* ============================================================
    RENDER ITEM LIST DI MODAL — qty/kg editable, muncul opsi resolusi
-   selisih (Kembali ke Chiller / Ajukan Selisih) kalau angka final beda
-   dari yang tercatat saat scan.
+   selisih (Kembali ke Chiller / Ajukan Selisih / Taruh di Loading) kalau
+   angka final beda dari yang tercatat saat scan.
    ============================================================ */
 function renderBuatItems(){
   const list   = document.getElementById('buat-items-list');
@@ -1930,6 +1930,7 @@ function renderBuatItems(){
           <div class="sel-title">⚠️ Selisih ${selisihQty} ekor / ${selisihKg.toFixed(2)} kg — pilih tindakan:</div>
           <div class="sel-opts">
             <label class="sel-opt"><input type="radio" name="resolusi-${idx}" value="RETUR" ${item.resolusi==='RETUR'?'checked':''} onchange="updateItemResolusi(${idx},'RETUR')"> Kembali ke Chiller</label>
+            <label class="sel-opt"><input type="radio" name="resolusi-${idx}" value="STOK_LOADING" ${item.resolusi==='STOK_LOADING'?'checked':''} onchange="updateItemResolusi(${idx},'STOK_LOADING')"> Taruh di Loading</label>
             <label class="sel-opt"><input type="radio" name="resolusi-${idx}" value="SELISIH" ${item.resolusi==='SELISIH'?'checked':''} onchange="updateItemResolusi(${idx},'SELISIH')"> Ajukan Selisih</label>
           </div>
           <input type="text" placeholder="Alasan (wajib)…" value="${item.alasan||''}" oninput="updateItemAlasan(${idx},this.value)">
@@ -1975,14 +1976,15 @@ function removeItem(idx){
    SIMPAN PICKING SLIP — satu aksi final (tidak ada tahap DRAFT lagi):
    sekaligus mengonfirmasi terima dari Chiller untuk keranjang yang masih
    PENDING, menuntaskan resolusi selisih per item, dan basket langsung SOLD.
-   Lewat RPC buat_picking_slip_final() (migrasi 66) supaya atomik.
+   Lewat RPC buat_picking_slip_final() (migrasi 66, opsi Taruh di Loading
+   ditambah di migrasi 94) supaya atomik.
    ============================================================ */
 function validasiBuatItems(){
   for(const item of buatItems){
     const adaSelisih = item.qty_final !== item.qty_awal || item.kg_final !== item.kg_awal;
     if(adaSelisih){
       if(item.resolusi === 'NONE'){
-        return `Keranjang ${item.basket_code} ada selisih — pilih "Kembali ke Chiller" atau "Ajukan Selisih" dulu.`;
+        return `Keranjang ${item.basket_code} ada selisih — pilih "Kembali ke Chiller", "Taruh di Loading", atau "Ajukan Selisih" dulu.`;
       }
       if(!item.alasan || !item.alasan.trim()){
         return `Keranjang ${item.basket_code} — alasan wajib diisi.`;
