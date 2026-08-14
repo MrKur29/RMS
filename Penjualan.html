@@ -174,6 +174,13 @@ a{text-decoration:none}
 .item-card-selisih input[type=text]{width:100%;margin-top:8px;padding:7px 10px;border:1.5px solid #fed7aa;border-radius:6px;font-size:12px}
 
 /* ===== PIN SUPERVISOR MODAL ===== */
+/* z-index lebih tinggi dari .modal-backdrop biasa (200) — PIN Supervisor
+   sering dibuka SAAT modal lain (mis. Revisi Picking Slip) masih terbuka
+   di belakangnya (supaya kalau PIN salah/dibatalkan, form revisi yang
+   sudah diisi tidak hilang). Tanpa ini, urutan DOM menentukan siapa di
+   atas — modal-pin-sup ditulis lebih dulu di HTML daripada modal lain
+   seperti modal-revisi-ps, jadi tanpa override malah tertutup di belakang. */
+#modal-pin-sup{z-index:300}
 .modal-box.modal-sm{width:400px}
 .pin-input{width:100%;padding:14px;border:2px solid #d1d5db;border-radius:8px;font-size:22px;font-weight:800;letter-spacing:6px;text-align:center;color:#111827;font-family:monospace;transition:border-color .2s}
 .pin-input:focus{outline:none;border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.15)}
@@ -333,6 +340,9 @@ a{text-decoration:none}
         </div>
         <div class="nav-item" id="nav-void-keranjang" style="display:none" onclick="navTo('VoidKeranjang.html')">
             <span class="nav-icon">🗑️</span><span class="nav-label-text">Void Keranjang</span>
+        </div>
+        <div class="nav-item" id="nav-lapor-hilang" style="display:none" onclick="navTo('LaporKehilangan.html')">
+            <span class="nav-icon">🚨</span><span class="nav-label-text">Lapor Kehilangan</span>
         </div>
         <div class="nav-item" id="nav-reprint-label" style="display:none" onclick="navTo('ReprintLabel.html')">
             <span class="nav-icon">🖨️</span><span class="nav-label-text">Reprint Label</span>
@@ -830,6 +840,79 @@ a{text-decoration:none}
   </div>
 </div>
 
+<!-- ============================================================
+     MODAL: REVISI PICKING SLIP (Supervisor only — migration 92/93)
+     Edit tujuan, edit pelanggan/driver, keluarkan keranjang (balik ke
+     Loading Dock), tambah keranjang (dari stok Loading Dock yang sudah
+     AKTIF, ATAU dari kiriman Chiller yang masih belum dikonfirmasi terima
+     — migration 93, dikonfirmasi otomatis saat ditambahkan di sini).
+     Tombol pemicu ("✏️ Revisi") hanya tampil kalau
+     RPA_PERM.canApprove(currentUser.moduleRole) true — lihat renderPsTable()
+     & openDetail(). Eksekusi tetap digerbang PIN Supervisor lewat
+     showSupervisorPin() seperti fitur revisi lain di halaman ini.
+     ============================================================ -->
+<div class="modal-backdrop" id="modal-revisi-ps">
+  <div class="modal-box" style="width:720px">
+    <div class="modal-head">
+      <div class="modal-title">✏️ Revisi Picking Slip — <span id="rv-ps-code" style="font-family:monospace;color:#2563eb"></span></div>
+      <button class="modal-close" onclick="closeRevisiPs()">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <div class="form-row">
+        <div class="form-field">
+          <label>Tujuan</label>
+          <input type="text" id="rv-tujuan" placeholder="misal: jual, pasar X, …">
+        </div>
+        <div class="form-field">
+          <label>Customer *</label>
+          <select id="rv-pelanggan"></select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-field">
+          <label>Driver Loading</label>
+          <select id="rv-supir"><option value="">— Tidak ada —</option></select>
+        </div>
+        <div class="form-field"></div>
+      </div>
+
+      <hr style="border:none;border-top:1px solid #f3f4f6;margin:12px 0 16px">
+
+      <div class="panel-title" style="margin-bottom:8px">📦 Keranjang dalam Picking Slip Ini</div>
+      <div id="rv-items-list"></div>
+
+      <hr style="border:none;border-top:1px solid #f3f4f6;margin:16px 0">
+
+      <div class="panel-title" style="margin-bottom:8px">➕ Tambah Keranjang</div>
+      <div class="scan-area" style="border-radius:8px;margin-bottom:10px">
+        <div class="scan-field-wrap">
+          <span class="scan-icon">📷</span>
+          <input type="text" class="scan-input" id="rv-scan-input"
+                 placeholder="Scan QR / ketik kode keranjang…"
+                 onkeydown="if(event.key==='Enter')doScanTambahRevisi()"
+                 oninput="clearRvScanResult()">
+        </div>
+        <div class="scan-hint">Keranjang yang sudah AKTIF di Loading Dock, ATAU yang masih kiriman pending dari Chiller (belum dikonfirmasi) — otomatis dikonfirmasi terima saat ditambahkan di sini</div>
+        <div class="scan-result" id="rv-scan-result"></div>
+      </div>
+      <div id="rv-tambah-list"></div>
+
+      <hr style="border:none;border-top:1px solid #f3f4f6;margin:16px 0">
+
+      <div class="form-field">
+        <label>Alasan Revisi <span style="color:#dc2626">*</span></label>
+        <textarea id="rv-alasan" rows="2" placeholder="Kenapa picking slip ini perlu direvisi… (berlaku untuk semua perubahan di atas)"></textarea>
+      </div>
+      <div class="pin-error" id="rv-err" style="display:none"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeRevisiPs()">Batal</button>
+      <button class="btn btn-primary" id="rv-btn-simpan" onclick="simpanRevisiPs()">✅ Simpan Revisi</button>
+    </div>
+  </div>
+</div>
+
 <!-- TOAST -->
 <div id="toast-container"></div>
 
@@ -960,6 +1043,7 @@ function startApp(){
   }
   if (RPA_PERM.getModuleRole(currentUser, 'revisi_batch') !== null) { const rbEl = document.getElementById('nav-revisi-batch'); if (rbEl) rbEl.style.display = 'flex'; }
     if (RPA_PERM.getModuleRole(currentUser, 'void_keranjang') !== null) { const vkEl = document.getElementById('nav-void-keranjang'); if (vkEl) vkEl.style.display = 'flex'; }
+    if (RPA_PERM.getModuleRole(currentUser, 'lapor_kehilangan') !== null) { const lhEl = document.getElementById('nav-lapor-hilang'); if (lhEl) lhEl.style.display = 'flex'; }
     if (RPA_PERM.getModuleRole(currentUser, 'reprint_label') !== null) { const rlEl = document.getElementById('nav-reprint-label'); if (rlEl) rlEl.style.display = 'flex'; }
     if (RPA_PERM.getModuleRole(currentUser, 'cs') !== null) { const csEl = document.getElementById('nav-cs'); if (csEl) csEl.style.display = 'flex'; }
     if(RPA_PERM.getModuleRole(currentUser,'pelanggan')!==null){const el=document.getElementById('nav-pelanggan');if(el)el.style.display='flex'}
@@ -1112,6 +1196,7 @@ function renderPsTable(rows){
           <button class="btn btn-ghost btn-sm" onclick="openDetail('${ps.id}')">👁 Detail</button>
           ${ps.status==='DRAFT' ? `<button class="btn btn-success btn-sm" onclick="confirmPs('${ps.id}')">✓ Confirm</button>` : ''}
           ${ps.status==='CONFIRMED' ? `<button class="btn btn-ghost btn-sm" onclick="openRetur('${ps.id}')">↩️ Retur</button>` : ''}
+          ${ps.status==='CONFIRMED' && RPA_PERM.canApprove(currentUser.moduleRole) ? `<button class="btn btn-ghost btn-sm" onclick="openRevisiPs('${ps.id}')">✏️ Revisi</button>` : ''}
           <!-- Tombol "📅 Tanggal" (revisi manual, migration 83) DIMATIKAN 2026-08-08:
                tanggal PS sekarang otomatis mengikuti tanggal pindah Chiller→Loading
                saat PS dibuat, jadi revisi manual tidak dibutuhkan lagi. Modal &
@@ -1184,6 +1269,274 @@ function simpanEditTanggalPs(){
       toast(`✅ Tanggal PS ${psCode} direvisi ke ${new Date(tglBaru+'T00:00').toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'})}`, 'success', 5000);
       closeEditTanggalPs();
       await loadPickingSlips();
+    }
+  });
+}
+
+/* ============================================================
+   REVISI PICKING SLIP (Supervisor only — migration 92/93)
+   Edit tujuan, edit pelanggan/driver, keluarkan keranjang (balik ke
+   Loading Dock), tambah keranjang (dari stok Loading Dock yang sudah
+   AKTIF, ATAU dari kiriman Chiller yang masih belum dikonfirmasi terima
+   — dikonfirmasi otomatis di sini, migration 93, karena tidak ada lagi
+   tombol "Terima" berdiri sendiri sejak modul Selisih Penjualan). Tombol
+   pemicu hanya tampil untuk moduleRole admin/supervisor (lihat
+   renderPsTable() & openDetail()); eksekusi tetap digerbang PIN Supervisor.
+   ============================================================ */
+let revisiPsData  = null;        // { id, ps_code, tujuan, pelanggan_id, supir_id, items:[...] } — item aktif saja
+let rvKeluarkanIds = new Set();  // picking_slip_items.id yang ditandai keluar
+let rvTambahItems  = [];         // basket (+ pending_movement_id kalau ada) yang ditandai utk ditambahkan
+
+function populateRvPelangganSelect(selectedId){
+  const sel = document.getElementById('rv-pelanggan');
+  sel.innerHTML = '<option value="">— Pilih Customer —</option>';
+  allPelanggan.forEach(p => {
+    const o = document.createElement('option');
+    o.value = p.id; o.textContent = p.nama; o.dataset.nama = p.nama;
+    sel.appendChild(o);
+  });
+  sel.value = selectedId || '';
+}
+function populateRvSupirSelect(selectedId){
+  const sel = document.getElementById('rv-supir');
+  sel.innerHTML = '<option value="">— Tidak ada —</option>';
+  allSupir.forEach(s => {
+    const o = document.createElement('option');
+    o.value = s.id; o.textContent = s.nama; o.dataset.nama = s.nama;
+    sel.appendChild(o);
+  });
+  sel.value = selectedId || '';
+}
+
+async function openRevisiPs(psId){
+  const [rPs, rItems] = await Promise.all([
+    db.from('picking_slips').select('*').eq('id', psId).single(),
+    db.from('picking_slip_items').select('*').eq('ps_id', psId).eq('status','ACTIVE').order('basket_code'),
+  ]);
+  if(rPs.error || !rPs.data){ toast('Gagal memuat picking slip', 'error'); return; }
+
+  revisiPsData = {
+    id: rPs.data.id, ps_code: rPs.data.ps_code, tujuan: rPs.data.tujuan,
+    pelanggan_id: rPs.data.pelanggan_id, nama_pelanggan: rPs.data.nama_pelanggan,
+    supir_id: rPs.data.supir_id, nama_supir: rPs.data.nama_supir,
+    items: rItems.data || [],
+  };
+  rvKeluarkanIds = new Set();
+  rvTambahItems  = [];
+
+  document.getElementById('rv-ps-code').textContent = revisiPsData.ps_code;
+  document.getElementById('rv-tujuan').value = revisiPsData.tujuan || '';
+  populateRvPelangganSelect(revisiPsData.pelanggan_id);
+  populateRvSupirSelect(revisiPsData.supir_id);
+  document.getElementById('rv-alasan').value = '';
+  document.getElementById('rv-err').style.display = 'none';
+  document.getElementById('rv-scan-input').value = '';
+  clearRvScanResult();
+
+  renderRevisiItems();
+  renderRevisiTambah();
+
+  document.getElementById('modal-revisi-ps').classList.add('open');
+}
+
+function closeRevisiPs(){
+  document.getElementById('modal-revisi-ps').classList.remove('open');
+  revisiPsData  = null;
+  rvKeluarkanIds = new Set();
+  rvTambahItems  = [];
+}
+
+function toggleKeluarkanRevisi(itemId){
+  if(rvKeluarkanIds.has(itemId)) rvKeluarkanIds.delete(itemId);
+  else rvKeluarkanIds.add(itemId);
+  renderRevisiItems();
+}
+
+function renderRevisiItems(){
+  const list = document.getElementById('rv-items-list');
+  if(!revisiPsData || !revisiPsData.items.length){
+    list.innerHTML = '<div style="padding:16px;text-align:center;color:#9ca3af;font-size:12px">Tidak ada keranjang aktif</div>';
+    return;
+  }
+  list.innerHTML = revisiPsData.items.map(item => {
+    if(rvKeluarkanIds.has(item.id)){
+      return `
+        <div class="item-card" style="background:#fef2f2;border-color:#fecaca">
+          <div class="item-card-top">
+            <div>
+              <div class="item-code" style="text-decoration:line-through">${item.basket_code}</div>
+              <div class="item-sub">${item.nama_item} — akan dikeluarkan, kembali ke Loading Dock</div>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="toggleKeluarkanRevisi('${item.id}')">↩️ Batal</button>
+          </div>
+        </div>`;
+    }
+    const canKeluarkan = (item.resolusi || 'NONE') === 'NONE';
+    return `
+      <div class="item-card">
+        <div class="item-card-top">
+          <div>
+            <div class="item-code">${item.basket_code}</div>
+            <div class="item-sub">${item.nama_item} — ${item.qty_ekor} ekor / ${(+item.berat_kg).toFixed(2)} kg</div>
+          </div>
+          ${canKeluarkan
+            ? `<button class="btn btn-ghost btn-sm" style="color:#dc2626" onclick="toggleKeluarkanRevisi('${item.id}')">🚪 Keluarkan</button>`
+            : `<span style="font-size:11px;color:#9ca3af" title="Item ini punya resolusi ${item.resolusi} — tidak bisa dikeluarkan lewat revisi, gunakan modul Retur/Selisih">🔒 ${item.resolusi}</span>`}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function clearRvScanResult(){
+  const el = document.getElementById('rv-scan-result');
+  el.className = 'scan-result';
+  el.innerHTML = '';
+}
+
+async function doScanTambahRevisi(){
+  const kode = document.getElementById('rv-scan-input').value.trim().toUpperCase();
+  if(!kode) return;
+  const resEl = document.getElementById('rv-scan-result');
+  resEl.className = 'scan-result visible';
+  resEl.innerHTML = '⏳ Mencari keranjang…';
+
+  let found = null;
+
+  // 1) Jalur normal: sudah resmi AKTIF di Loading Dock.
+  const { data: atLoading } = await db.from('baskets')
+    .select('id,basket_code,qty_sisa,kg_sisa,lokasi,status,product_id,product_master(nama_produk)')
+    .eq('basket_code', kode).maybeSingle();
+
+  if(atLoading && atLoading.status === 'AKTIF' && atLoading.lokasi === 'LOADING'){
+    found = {
+      basket_id: atLoading.id, basket_code: atLoading.basket_code, product_id: atLoading.product_id,
+      nama_item: atLoading.product_master?.nama_produk || '—',
+      qty_sisa: atLoading.qty_sisa || 0, kg_sisa: +(atLoading.kg_sisa || 0),
+      pending_movement_id: null, pending: false,
+    };
+  } else {
+    // 2) Migration 93: masih kiriman PENDING dari Chiller, belum sempat
+    //    di-scan ke Picking Slip manapun — tidak ada tombol "Terima" lain,
+    //    jadi ditambahkan (sekaligus dikonfirmasi terima) langsung di sini.
+    const { data: pendingMv } = await db.from('basket_movements')
+      .select('id,basket_id,qty_pindah,kg_pindah,baskets!inner(basket_code,product_id,product_master(nama_produk))')
+      .eq('dari_lokasi','CHILLER').eq('ke_lokasi','LOADING').eq('status','PENDING')
+      .eq('baskets.basket_code', kode)
+      .order('created_at',{ascending:true})
+      .maybeSingle();
+    if(pendingMv){
+      found = {
+        basket_id: pendingMv.basket_id, basket_code: pendingMv.baskets?.basket_code, product_id: pendingMv.baskets?.product_id,
+        nama_item: pendingMv.baskets?.product_master?.nama_produk || '—',
+        qty_sisa: pendingMv.qty_pindah || 0, kg_sisa: +(pendingMv.kg_pindah || 0),
+        pending_movement_id: pendingMv.id, pending: true,
+      };
+    }
+  }
+
+  if(!found){
+    resEl.className = 'scan-result visible scan-err';
+    resEl.innerHTML = `❌ Keranjang <strong>${kode}</strong> tidak ditemukan (bukan di Loading Dock, dan tidak ada kiriman pending dari Chiller)`;
+    return;
+  }
+  if(rvTambahItems.some(i => i.basket_id === found.basket_id) || revisiPsData.items.some(i => i.basket_code === found.basket_code)){
+    resEl.className = 'scan-result visible scan-err';
+    resEl.innerHTML = `⚠️ Keranjang <strong>${kode}</strong> sudah ada di daftar`;
+    return;
+  }
+
+  rvTambahItems.push(found);
+  renderRevisiTambah();
+  clearRvScanResult();
+  document.getElementById('rv-scan-input').value = '';
+}
+
+function removeTambahRevisi(idx){
+  rvTambahItems.splice(idx, 1);
+  renderRevisiTambah();
+}
+
+function renderRevisiTambah(){
+  const list = document.getElementById('rv-tambah-list');
+  if(!rvTambahItems.length){ list.innerHTML = ''; return; }
+  list.innerHTML = rvTambahItems.map((b, idx) => `
+    <div class="item-card" style="background:#f0fdf4;border-color:#bbf7d0">
+      <div class="item-card-top">
+        <div>
+          <div class="item-code">${b.basket_code}${b.pending ? ' <span style="color:#d97706;font-weight:600">(belum dikonfirmasi)</span>' : ''}</div>
+          <div class="item-sub">${b.nama_item} — ${b.qty_sisa} ekor / ${b.kg_sisa.toFixed(2)} kg — <span style="color:#16a34a;font-weight:700">akan ditambahkan</span></div>
+        </div>
+        <button class="item-remove" onclick="removeTambahRevisi(${idx})" title="Batal">×</button>
+      </div>
+    </div>`).join('');
+}
+
+function simpanRevisiPs(){
+  const errEl = document.getElementById('rv-err');
+  errEl.style.display = 'none';
+  if(!revisiPsData) return;
+
+  const tujuanBaru  = document.getElementById('rv-tujuan').value.trim();
+  const pelangganSel = document.getElementById('rv-pelanggan');
+  const supirSel      = document.getElementById('rv-supir');
+  const alasan        = document.getElementById('rv-alasan').value.trim();
+
+  if(!pelangganSel.value){
+    errEl.textContent = 'Customer wajib dipilih.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  const tujuanBerubah    = tujuanBaru !== (revisiPsData.tujuan || '');
+  const pelangganBerubah = pelangganSel.value !== (revisiPsData.pelanggan_id || '');
+  const supirBerubah     = (supirSel.value || null) !== (revisiPsData.supir_id || null);
+  const adaKeluarkan     = rvKeluarkanIds.size > 0;
+  const adaTambah        = rvTambahItems.length > 0;
+
+  if(!tujuanBerubah && !pelangganBerubah && !supirBerubah && !adaKeluarkan && !adaTambah){
+    errEl.textContent = 'Tidak ada perubahan — ubah tujuan/customer/driver, keluarkan, atau tambah keranjang dulu.';
+    errEl.style.display = 'block';
+    return;
+  }
+  if(!alasan){
+    errEl.textContent = 'Alasan revisi wajib diisi.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  const psId   = revisiPsData.id;
+  const psCode = revisiPsData.ps_code;
+  const namaPelanggan = pelangganSel.value ? pelangganSel.options[pelangganSel.selectedIndex].dataset.nama : null;
+  const namaSupir     = supirSel.value ? supirSel.options[supirSel.selectedIndex].dataset.nama : null;
+  const ringkasan = [
+    tujuanBerubah ? `tujuan → "${tujuanBaru || '—'}"` : null,
+    pelangganBerubah ? `customer → "${namaPelanggan}"` : null,
+    supirBerubah ? `driver → "${namaSupir || '—'}"` : null,
+    adaKeluarkan ? `${rvKeluarkanIds.size} keranjang keluar` : null,
+    adaTambah ? `${rvTambahItems.length} keranjang ditambah` : null,
+  ].filter(Boolean).join(', ');
+
+  showSupervisorPin({
+    title: '🔑 Revisi Picking Slip',
+    desc: `Merevisi ${psCode}: ${ringkasan}.`,
+    onConfirm: async (sup) => {
+      const { data, error } = await db.rpc('revise_picking_slip', {
+        p_ps_id: psId,
+        p_tujuan_baru: tujuanBaru || null,
+        p_pelanggan_id: pelangganBerubah ? pelangganSel.value : null,
+        p_nama_pelanggan: pelangganBerubah ? namaPelanggan : null,
+        p_supir_id: supirBerubah ? (supirSel.value || null) : revisiPsData.supir_id,
+        p_nama_supir: supirBerubah ? namaSupir : revisiPsData.nama_supir,
+        p_keluarkan_item_ids: Array.from(rvKeluarkanIds),
+        p_tambah_items: rvTambahItems.map(i => ({ basket_id: i.basket_id, pending_movement_id: i.pending_movement_id || null })),
+        p_alasan: alasan,
+        p_user_id: sup.id,
+      });
+      if(error){ toast('Gagal: ' + error.message, 'error'); return; }
+      if(!data?.ok){ toast('Gagal: ' + (data?.msg || 'Unknown error'), 'error'); return; }
+      toast(`✅ ${psCode} berhasil direvisi — ${data.total_karung} karung / ${data.total_ekor} ekor / ${(+data.total_kg).toFixed(2)} kg`, 'success', 5000);
+      closeRevisiPs();
+      await Promise.all([loadPickingSlips(), loadLoadingStock(), loadPendingMovements()]);
     }
   });
 }
@@ -2251,8 +2604,13 @@ async function openDetail(psId){
     db.from('picking_slips').select('*').eq('id', psId).single(),
     db.from('picking_slip_items').select('*').eq('ps_id', psId).order('basket_code'),
   ]);
-  const ps    = rPs.data;
-  const items = rItems.data || [];
+  const ps       = rPs.data;
+  const allItems = rItems.data || [];
+  // Item yang sudah "dikeluarkan" lewat Revisi (migration 92) TIDAK ikut
+  // masuk rekap/cetak — baris tidak dihapus, cuma disembunyikan dari lembar
+  // kirim karena keranjangnya sudah balik ke Loading Dock.
+  const items        = allItems.filter(i => i.status !== 'DIKELUARKAN');
+  const removedItems = allItems.filter(i => i.status === 'DIKELUARKAN');
 
   // --- Rekap per item (group by nama_item) ---
   const rekap = {};
@@ -2287,6 +2645,13 @@ async function openDetail(psId){
 
   document.getElementById('detail-modal-title').textContent = `Picking Slip — ${ps.ps_code}`;
   document.getElementById('detail-modal-body').innerHTML = `
+    ${removedItems.length ? `
+    <div class="no-print" style="margin-bottom:10px;padding:8px 12px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;font-size:11px;color:#7f1d1d">
+      <strong>⚠️ ${removedItems.length} keranjang pernah dikeluarkan lewat revisi (tidak masuk cetakan):</strong>
+      <ul style="margin:4px 0 0 16px">
+        ${removedItems.map(i => `<li>${i.basket_code} — ${i.qty_ekor} ekor / ${(+i.berat_kg).toFixed(2)} kg — alasan: "${i.dikeluarkan_alasan||'—'}" (${i.dikeluarkan_at ? new Date(i.dikeluarkan_at).toLocaleString('id-ID') : '—'})</li>`).join('')}
+      </ul>
+    </div>` : ''}
     <!-- LEMBAR 1 -->
     <div class="print-sheet">
       <h2 style="font-size:13px;font-weight:900;margin-bottom:6px">Picking Slip — ${ps.ps_code}</h2>
@@ -2389,6 +2754,7 @@ async function openDetail(psId){
     <button class="btn btn-ghost" onclick="closeModalDetail()">Tutup</button>
     <button class="btn btn-ghost" onclick="window.print()">🖨 Print</button>
     ${ps.status==='DRAFT' ? `<button class="btn btn-success" onclick="closeModalDetail();confirmPs('${ps.id}')">✓ Konfirmasi</button>` : ''}
+    ${ps.status==='CONFIRMED' && RPA_PERM.canApprove(currentUser.moduleRole) ? `<button class="btn btn-primary" onclick="closeModalDetail();openRevisiPs('${ps.id}')">✏️ Revisi</button>` : ''}
   `;
 
   document.getElementById('modal-detail').classList.add('open');
