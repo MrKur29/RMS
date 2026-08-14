@@ -1730,6 +1730,37 @@ async function refreshLoadingStock(){
     return { data };
   }
 
+  // 2026-08-14 FIX: keranjang yang sudah AKTIF di LOADING (bukan lagi PENDING
+  // dari Chiller) sebelumnya pakai baskets.created_at (kapan BARIS keranjang
+  // itu dibuat, mis. saat parting/produksi) sebagai "tanggal pindah dari
+  // Chiller" di updateTanggalDariItems() — salah total kalau keranjang itu
+  // sempat dikeluarkan lagi dari PS lain lewat Revisi Picking Slip lalu
+  // discan ulang hari itu juga (kasus nyata: PSC-260812-037, keranjang
+  // BK-260812-0331 menyeret tanggal PS mundur ke tanggal keranjang itu
+  // pertama dikemas, bukan tanggal dia keluar Chiller). Yang benar: tanggal
+  // movement CHILLER→LOADING TERAKHIR yang CONFIRMED untuk keranjang itu.
+  // Fallback ke baskets.created_at hanya kalau memang tidak pernah ada
+  // movement seperti itu (mis. keranjang lahir langsung di LOADING lewat
+  // Saldo Awal).
+  async function fetchTglPindahMap(basketIds){
+    const map = {};
+    if(!basketIds.length) return map;
+    const CHUNK = 200;
+    for(let i = 0; i < basketIds.length; i += CHUNK){
+      const chunk = basketIds.slice(i, i + CHUNK);
+      const { data, error } = await db.from('basket_movements')
+        .select('basket_id,created_at')
+        .eq('dari_lokasi','CHILLER').eq('ke_lokasi','LOADING').eq('status','CONFIRMED')
+        .in('basket_id', chunk)
+        .order('created_at', {ascending:false});
+      if(error){ console.warn('fetchTglPindahMap:', error); continue; }
+      for(const m of (data||[])){
+        if(!(m.basket_id in map)) map[m.basket_id] = m.created_at; // desc order -> pertama ketemu = paling baru
+      }
+    }
+    return map;
+  }
+
   const [atLoadingRes, pendingRes] = await Promise.all([
     fetchAllLoadingStock(),
     db.from('basket_movements')
@@ -1738,12 +1769,14 @@ async function refreshLoadingStock(){
       .order('created_at',{ascending:true})
   ]);
 
+  const tglPindahMap = await fetchTglPindahMap((atLoadingRes.data||[]).map(b => b.id));
+
   const rows = [
     ...(atLoadingRes.data||[]).map(b => ({
       basket_id: b.id, basket_code: b.basket_code, product_id: b.product_id,
       nama_item: b.product_master?.nama_produk || '—',
       qty_awal: b.qty_sisa || 0, kg_awal: +(b.kg_sisa || 0),
-      pending_movement_id: null, pending: false, tgl_pindah: b.created_at || null
+      pending_movement_id: null, pending: false, tgl_pindah: tglPindahMap[b.id] || b.created_at || null
     })),
     ...(pendingRes.data||[]).map(m => ({
       basket_id: m.basket_id, basket_code: m.baskets?.basket_code, product_id: m.baskets?.product_id,
@@ -1828,11 +1861,21 @@ async function doScanKeranjang(){
     .maybeSingle();
 
   if(atLoading && atLoading.status === 'AKTIF' && atLoading.lokasi === 'LOADING'){
+    // 2026-08-14 FIX: sama seperti refreshLoadingStock() — tgl_pindah harus
+    // dari movement CHILLER→LOADING terakhir yang CONFIRMED, bukan
+    // baskets.created_at (lihat komentar lengkap di fetchTglPindahMap()).
+    const { data: lastMv } = await db.from('basket_movements')
+      .select('created_at')
+      .eq('basket_id', atLoading.id)
+      .eq('dari_lokasi','CHILLER').eq('ke_lokasi','LOADING').eq('status','CONFIRMED')
+      .order('created_at', {ascending:false})
+      .limit(1)
+      .maybeSingle();
     found = {
       basket_id: atLoading.id, basket_code: atLoading.basket_code, product_id: atLoading.product_id,
       nama_item: atLoading.product_master?.nama_produk || '—',
       qty_awal: atLoading.qty_sisa || 0, kg_awal: +(atLoading.kg_sisa || 0),
-      pending_movement_id: null, pending: false, tgl_pindah: atLoading.created_at || null
+      pending_movement_id: null, pending: false, tgl_pindah: lastMv?.created_at || atLoading.created_at || null
     };
   } else {
     const { data: pendingMv } = await db
