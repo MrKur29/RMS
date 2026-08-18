@@ -222,6 +222,9 @@ tr:last-child td{border-bottom:none}
       <div class="nav-item" id="nav-pelanggan" style="display:none" onclick="navTo('KelolaPelanggan.html')"><span class="nav-icon">📇</span><span class="nav-label-text">Kelola Pelanggan</span></div>
       <div class="nav-item" id="nav-revisi-batch" style="display:none" onclick="navTo('RevisiBatch.html')"><span class="nav-icon">🔀</span><span class="nav-label-text">Revisi Batch Keranjang</span></div>
       <div class="nav-item" id="nav-void-keranjang" style="display:none" onclick="navTo('VoidKeranjang.html')"><span class="nav-icon">🗑️</span><span class="nav-label-text">Void Keranjang</span></div>
+      <div class="nav-item" id="nav-lapor-hilang" style="display:none" onclick="navTo('LaporKehilangan.html')">
+          <span class="nav-icon">🚨</span><span class="nav-label-text">Lapor Kehilangan</span>
+      </div>
       <div class="nav-item" id="nav-reprint-label" style="display:none" onclick="navTo('ReprintLabel.html')"><span class="nav-icon">🖨️</span><span class="nav-label-text">Reprint Label</span></div>
       <div class="nav-item" id="nav-user-mgmt" style="display:none" onclick="navTo('UserManagement.html')"><span class="nav-icon">👥</span><span class="nav-label-text">Manajemen User</span></div>
     </nav>
@@ -460,6 +463,7 @@ function startApp(){
   if(RPA_PERM.getModuleRole(currentUser,'saldo_awal')!==null){const el=document.getElementById('nav-saldo-awal');if(el)el.style.display='flex'}
   if(RPA_PERM.getModuleRole(currentUser,'revisi_batch')!==null){const el=document.getElementById('nav-revisi-batch');if(el)el.style.display='flex'}
   if(RPA_PERM.getModuleRole(currentUser,'void_keranjang')!==null){const el=document.getElementById('nav-void-keranjang');if(el)el.style.display='flex'}
+  if (RPA_PERM.getModuleRole(currentUser, 'lapor_kehilangan') !== null) { const lhEl = document.getElementById('nav-lapor-hilang'); if (lhEl) lhEl.style.display = 'flex'; }
   if(RPA_PERM.getModuleRole(currentUser,'reprint_label')!==null){const el=document.getElementById('nav-reprint-label');if(el)el.style.display='flex'}
   if(RPA_PERM.getModuleRole(currentUser,'pelanggan')!==null){const el=document.getElementById('nav-pelanggan');if(el)el.style.display='flex'}
 

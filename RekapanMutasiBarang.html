@@ -228,6 +228,9 @@ a{text-decoration:none}
       <div class="nav-item" id="nav-void-keranjang" style="display:none" onclick="navTo('VoidKeranjang.html')">
           <span class="nav-icon">🗑️</span><span class="nav-label-text">Void Keranjang</span>
       </div>
+      <div class="nav-item" id="nav-lapor-hilang" style="display:none" onclick="navTo('LaporKehilangan.html')">
+          <span class="nav-icon">🚨</span><span class="nav-label-text">Lapor Kehilangan</span>
+      </div>
       <div class="nav-item" id="nav-reprint-label" style="display:none" onclick="navTo('ReprintLabel.html')">
           <span class="nav-icon">🖨️</span><span class="nav-label-text">Reprint Label</span>
       </div>
@@ -462,6 +465,7 @@ function startApp(){
   if(currentUser.is_system_admin){const el=document.getElementById('nav-user-mgmt');if(el)el.style.display='flex'}
   if (RPA_PERM.getModuleRole(currentUser, 'revisi_batch') !== null) { const rbEl = document.getElementById('nav-revisi-batch'); if (rbEl) rbEl.style.display = 'flex'; }
     if (RPA_PERM.getModuleRole(currentUser, 'void_keranjang') !== null) { const vkEl = document.getElementById('nav-void-keranjang'); if (vkEl) vkEl.style.display = 'flex'; }
+    if (RPA_PERM.getModuleRole(currentUser, 'lapor_kehilangan') !== null) { const lhEl = document.getElementById('nav-lapor-hilang'); if (lhEl) lhEl.style.display = 'flex'; }
     if (RPA_PERM.getModuleRole(currentUser, 'reprint_label') !== null) { const rlEl = document.getElementById('nav-reprint-label'); if (rlEl) rlEl.style.display = 'flex'; }
     if (RPA_PERM.getModuleRole(currentUser, 'cs') !== null) { const csEl = document.getElementById('nav-cs'); if (csEl) csEl.style.display = 'flex'; }
     if(RPA_PERM.getModuleRole(currentUser,'pelanggan')!==null){const el=document.getElementById('nav-pelanggan');if(el)el.style.display='flex'}
