@@ -8,6 +8,8 @@
 <script src="permissions.js"></script>
 <script src="viewstate.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="labelPrint.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f2f5;color:#111827;font-size:14px}
@@ -635,6 +637,23 @@ tr:hover td{background:#f9fafb}
   </div>
 </div>
 
+<!-- MODAL DETAIL KERANJANG + CETAK LABEL -->
+<div class="modal-backdrop" id="modal-basket-label">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header">
+      <h3>🧺 Detail Keranjang</h3>
+      <button class="modal-close" onclick="closeModal('modal-basket-label')">✕</button>
+    </div>
+    <div class="modal-body" id="modal-basket-label-body">
+      <div class="empty-state"><p>Memuat...</p></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-basket-label')">Tutup</button>
+      <button class="btn btn-primary" id="btn-print-basket-label" onclick="cetakBasketLabel()" disabled>🖨️ Cetak Label</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL KAMERA QR -->
 <div class="modal-backdrop" id="modal-camera">
   <div class="modal" style="max-width:420px">
@@ -671,6 +690,8 @@ let activeSession = null;   // sesi yang sedang ditampilkan
 let karungList    = [];     // list karung sesi aktif
 let outputList    = [];     // list output sesi aktif
 let productMaster = [];     // cache product_master
+let currentLabelBasket      = null;  // basket yang lagi ditampilkan di modal detail/cetak label
+let currentLabelSessionCode = null;  // session_code terkait, dipakai sebagai refValue di label
 
 // ============================================================
 // HELPERS
@@ -1244,7 +1265,7 @@ function renderOutputs() {
           <td style="padding:8px 10px;border-bottom:1px solid #f3f4f6;text-align:right">${o.qty!=null ? o.qty : '—'}</td>
           <td style="padding:8px 10px;border-bottom:1px solid #f3f4f6;text-align:right;font-weight:800">${fmtKg(o.kg)} kg</td>
           <td style="padding:8px 10px;border-bottom:1px solid #f3f4f6">${o.tanggal_produksi ? fmtDate(o.tanggal_produksi) : '—'}</td>
-          <td style="padding:8px 10px;border-bottom:1px solid #f3f4f6"><code style="font-size:11px">${o.basket_id ? '🧺' : '—'}</code></td>
+          <td style="padding:8px 10px;border-bottom:1px solid #f3f4f6">${o.basket_id ? `<button class="btn btn-ghost btn-sm" style="padding:4px 8px" onclick="showBasketLabel('${o.basket_id}','${activeSession.session_code}')" title="Detail & Cetak Label">🧺</button>` : '<span style="color:#9ca3af">—</span>'}</td>
           <td style="padding:8px 10px;border-bottom:1px solid #f3f4f6;text-align:center"><button class="btn btn-ghost btn-sm" style="color:#dc2626;padding:4px 8px" onclick="hapusOutput('${o.id}')">🗑️</button></td>
         </tr>`).join('')}
         <tr>
@@ -1276,6 +1297,70 @@ async function generateThawingBasketCode() {
   const { data, error } = await db.rpc('generate_basket_code', { p_prefix: 'BT' });
   if (error) throw error;
   return data;
+}
+
+// ============================================================
+// MODAL DETAIL KERANJANG + CETAK LABEL
+// Dipanggil dari ikon 🧺 di tabel Daftar Output (sesi aktif) maupun
+// tabel Distribusi Output di Detail Sesi (riwayat/sesi lama).
+// ============================================================
+async function showBasketLabel(basketId, sessionCode) {
+  const bodyEl = document.getElementById('modal-basket-label-body');
+  const btnPrint = document.getElementById('btn-print-basket-label');
+  bodyEl.innerHTML = '<div class="empty-state"><p>Memuat...</p></div>';
+  btnPrint.disabled = true;
+  currentLabelBasket = null;
+  currentLabelSessionCode = sessionCode || null;
+  openModal('modal-basket-label');
+
+  try {
+    const { data: b, error } = await db.from('baskets')
+      .select('id,basket_code,basket_type,status,lokasi,qty_awal,qty_sisa,kg_awal,kg_sisa,tanggal_produksi,product_master(nama_produk,satuan_qty)')
+      .eq('id', basketId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!b) { bodyEl.innerHTML = '<div class="empty-state"><p>Keranjang tidak ditemukan.</p></div>'; return; }
+
+    currentLabelBasket = b;
+    const pm = b.product_master || {};
+    const satuan = pm.satuan_qty || '';
+    const printable = b.status === 'AKTIF';
+
+    bodyEl.innerHTML = `
+      ${!printable ? `<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:7px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:#b91c1c">🚫 Keranjang berstatus <b>${b.status}</b> — label tidak bisa dicetak.</div>` : ''}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div><span style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase">Kode Keranjang</span><br><strong style="font-family:monospace">${b.basket_code}</strong></div>
+        <div><span style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase">Status</span><br><strong>${b.status}</strong></div>
+        <div><span style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase">Produk</span><br><strong>${pm.nama_produk||'—'}</strong></div>
+        <div><span style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase">Lokasi</span><br><strong>${b.lokasi||'—'}</strong></div>
+        <div><span style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase">Qty</span><br><strong>${b.qty_sisa!=null?b.qty_sisa:'—'} / ${b.qty_awal!=null?b.qty_awal:'—'} ${satuan}</strong></div>
+        <div><span style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase">Kg</span><br><strong>${fmtKg(b.kg_sisa)} / ${fmtKg(b.kg_awal)} kg</strong></div>
+        <div><span style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase">Tgl Produksi</span><br><strong>${fmtDate(b.tanggal_produksi)}</strong></div>
+        <div><span style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase">No Sesi</span><br><strong>${currentLabelSessionCode||'—'}</strong></div>
+      </div>
+    `;
+    btnPrint.disabled = !printable;
+  } catch(e) {
+    console.error(e);
+    bodyEl.innerHTML = '<div class="empty-state"><p>Gagal memuat detail keranjang.</p></div>';
+  }
+}
+
+function cetakBasketLabel() {
+  if (!currentLabelBasket) return;
+  const b = currentLabelBasket;
+  if (b.status !== 'AKTIF') { toast('Keranjang ini tidak bisa dicetak labelnya.', 'warn'); return; }
+  const pm = b.product_master || {};
+  const satuan = pm.satuan_qty || '';
+  RPALabel.printStandardLabel({
+    code:       b.basket_code,
+    namaProduk: pm.nama_produk || '—',
+    qtyText:    `${b.qty_sisa!=null?b.qty_sisa:'—'} ${satuan}`.trim(),
+    kgText:     `${fmtKg(b.kg_sisa)} kg`,
+    tglText:    fmtDate(b.tanggal_produksi),
+    refLabel:   'No Sesi',
+    refValue:   currentLabelSessionCode || '—'
+  });
 }
 
 async function tambahOutput() {
@@ -1601,6 +1686,7 @@ async function lihatDetailSesi(sessionId, sessionCode) {
             <th style="text-align:right;padding:6px 8px;background:#f8fafc;border-bottom:1px solid #e5e7eb">Qty</th>
             <th style="text-align:right;padding:6px 8px;background:#f8fafc;border-bottom:1px solid #e5e7eb">Kg</th>
             <th style="text-align:left;padding:6px 8px;background:#f8fafc;border-bottom:1px solid #e5e7eb">Tgl Produksi</th>
+            <th style="text-align:center;padding:6px 8px;background:#f8fafc;border-bottom:1px solid #e5e7eb">Basket</th>
           </tr></thead>
           <tbody>
             ${outputs.map(o => `<tr>
@@ -1609,10 +1695,12 @@ async function lihatDetailSesi(sessionId, sessionCode) {
               <td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;text-align:right">${o.qty!=null ? o.qty : '—'}</td>
               <td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;text-align:right;font-weight:700">${fmtKg(o.kg)} kg</td>
               <td style="padding:6px 8px;border-bottom:1px solid #f3f4f6">${o.tanggal_produksi ? fmtDate(o.tanggal_produksi) : '—'}</td>
+              <td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;text-align:center">${o.basket_id ? `<button class="btn btn-ghost btn-sm" style="padding:4px 8px" onclick="showBasketLabel('${o.basket_id}','${sesi.session_code}')" title="Detail & Cetak Label">🧺</button>` : '<span style="color:#9ca3af">—</span>'}</td>
             </tr>`).join('')}
             <tr>
               <td style="padding:6px 8px;font-weight:800" colspan="3">Total</td>
               <td style="padding:6px 8px;text-align:right;font-weight:900;color:#2563eb">${fmtKg(outputKg)} kg</td>
+              <td></td>
               <td></td>
             </tr>
           </tbody>
