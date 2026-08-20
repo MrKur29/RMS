@@ -375,7 +375,7 @@ a{text-decoration:none}
         </div>
 
         <div class="rpt-note">
-          Catatan: baris bertipe <b>Terjual</b>, <b>Pindah Lokasi</b>, <b>Alokasi Blasting</b>, <b>Menunggu Konfirmasi</b>, dan <b>Ditolak</b> bersifat informasi saja (kolom Masuk/Keluar dikosongkan) karena tidak mengubah Qty Sisa keranjang ini secara langsung di sistem saat ini — beda dengan <b>Konsumsi Produksi</b>, <b>Transfer Keluar (Sebagian)</b>, <b>Stok Awal</b>, dan <b>Koreksi</b> yang benar-benar menambah/mengurangi saldo.
+          Catatan: baris bertipe <b>Terjual</b>, <b>Pindah Lokasi</b> (perpindahan fisik biasa, bukan write-off), <b>Menunggu Konfirmasi</b>, dan <b>Ditolak</b> bersifat informasi saja (kolom Masuk/Keluar dikosongkan) karena tidak mengubah Qty Sisa keranjang ini secara langsung di sistem saat ini — beda dengan <b>Konsumsi Produksi</b>, <b>Transfer Keluar (Sebagian)</b>, <b>Alokasi Blasting</b>, <b>Selisih / Musnah</b> (write-off ke lokasi virtual Selisih/Musnah), <b>Stok Awal</b>, dan <b>Koreksi</b> yang benar-benar menambah/mengurangi saldo.
           Deteksi asal "Split Transfer Masuk" (keranjang hasil kirim sebagian, kode berakhiran "-N") memerlukan Migration 60 sudah dijalankan di Supabase — jika belum, keranjang split akan tampil sebagai "Asal tidak diketahui".
         </div>
       </div>
@@ -703,13 +703,32 @@ async function tampilkanLedger(basket){
   });
 
   // 3) basket_movements — transfer sebagian (keluar nyata), transfer penuh/pindah (informasi),
-  //    plus status PENDING/REJECTED (informasi, belum berpengaruh ke saldo)
+  //    plus status PENDING/REJECTED (informasi, belum berpengaruh ke saldo).
+  //    [FIX 2026-08-20] ke_lokasi SELISIH/MUSNAH adalah lokasi virtual write-off
+  //    (Void Keranjang TIDAK lewat sini — itu basket.status=VOID langsung, tidak
+  //    pernah insert basket_movements — lihat item 7 di bawah), BUKAN perpindahan
+  //    fisik biasa: basket_movements-nya SELALU is_partial=false (baik hilang
+  //    total maupun hilang sebagian, migration 66/71/74/90 semua insert 1 baris
+  //    non-partial dg qty_pindah = qty yg ditulis-off) tapi qty_sisa keranjang
+  //    ITU SENDIRI yang berkurang di database (bukan pindah ke keranjang lain
+  //    seperti split-transfer). Sebelumnya baris ini ikut ke-lump ke cabang
+  //    "Pindah Lokasi" (informasi, tidak ikut saldo) sehingga saldo ledger di
+  //    laporan ini berbeda dari Qty Sisa database utk basket manapun yang pernah
+  //    ditulis-off via Lapor Kehilangan/Selisih Penjualan/Selisih Terima
+  //    Blasting — ditemukan dari kasus SA-260807-0086/0087. Dipisah jadi cabang
+  //    sendiri di sini, SEBELUM cek is_partial, supaya kena baik yang total
+  //    maupun (secara teori) yang sebagian.
   const{data:movRows,error:movErr}=await db.from('basket_movements')
-    .select('id,dari_lokasi,ke_lokasi,qty_pindah,kg_pindah,status,is_partial,created_at,confirmed_at,rejected_at,reject_alasan')
+    .select('id,dari_lokasi,ke_lokasi,qty_pindah,kg_pindah,status,is_partial,created_at,confirmed_at,rejected_at,reject_alasan,catatan')
     .eq('basket_id',basket.id);
   if(movErr)console.error('[KartuStokKeranjang] basket_movements gagal:',movErr);
+  const WRITE_OFF_LOKASI=new Set(['SELISIH','MUSNAH']);
   (movRows||[]).forEach(m=>{
-    if(m.is_partial&&m.status==='CONFIRMED'){
+    if(m.status==='CONFIRMED'&&WRITE_OFF_LOKASI.has(m.ke_lokasi)){
+      events.push({date:new Date(m.confirmed_at||m.created_at),tipe:'Selisih / Musnah',tipeCls:'tp-keluar',
+        ket:`Ditulis-off sebagai ${esc(asalTujuanLabel(m.ke_lokasi))} dari ${esc(asalTujuanLabel(m.dari_lokasi))}${m.catatan?' — '+esc(m.catatan):''}`,
+        masuk_qty:0,masuk_kg:0,keluar_qty:Number(m.qty_pindah)||0,keluar_kg:Number(m.kg_pindah)||0,isInfo:false});
+    }else if(m.is_partial&&m.status==='CONFIRMED'){
       events.push({date:new Date(m.confirmed_at||m.created_at),tipe:'Transfer Keluar (Sebagian)',tipeCls:'tp-keluar',
         ket:`Kirim sebagian ke ${esc(asalTujuanLabel(m.ke_lokasi))} — dikonfirmasi, menjadi keranjang baru di tujuan`,
         masuk_qty:0,masuk_kg:0,keluar_qty:Number(m.qty_pindah)||0,keluar_kg:Number(m.kg_pindah)||0,isInfo:false});
