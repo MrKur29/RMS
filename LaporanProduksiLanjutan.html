@@ -331,7 +331,7 @@ a{text-decoration:none}
         </div>
 
         <div class="hint" style="padding:0 4px 12px">
-          Catatan: Pengambilan Produk = keranjang yang benar-benar MASUK ke lantai ini pada tanggal ini (transfer antar-lantai yang sudah dikonfirmasi, ditambah basket baru dari Thawing yang lahir langsung di lantai ini). Sumber = lokasi asal keranjang itu sebelum masuk ke sini (langsung dari produksi karkas ditampilkan sebagai "Karkas"), bukan kategori produksi asal jauhnya. Keterangan = catatan yang ditulis pengirim saat transfer. Rekap hanya menampilkan barang yang punya aktivitas pada tanggal ini (bukan daftar tetap semua ukuran). Summary/% Rendemen belum tersedia di laporan ini.
+          Catatan: Pengambilan Produk = keranjang yang benar-benar MASUK ke lantai ini pada tanggal ini (transfer antar-lantai yang sudah dikonfirmasi, ditambah basket baru dari Thawing yang lahir langsung di lantai ini). Sumber = lokasi asal keranjang itu sebelum masuk ke sini (langsung dari produksi karkas ditampilkan sebagai "Karkas"), bukan kategori produksi asal jauhnya. Keterangan = catatan yang ditulis pengirim saat transfer. Baris berwarna merah dengan Ek/Kg negatif = keranjang bahan baku dari Chiller yang sisa tidak terpakai dan dikembalikan ke Chiller pada tanggal yang sama — sudah otomatis dikurangkan dari TOTAL Pengambilan Produk maupun dari kolom "Dari Chiller" di Rekap Barang Masuk. Ini hanya berlaku untuk keranjang yang asalnya memang dari Chiller; keranjang hasil produksi (lahir di lantai ini sendiri) yang dikirim ke Chiller TIDAK dihitung di sini — itu tercatat di Hasil Produk/Rekap Hasil Produksi (kolom "Ke Chiller"). Rekap hanya menampilkan barang yang punya aktivitas pada tanggal ini (bukan daftar tetap semua ukuran). Summary/% Rendemen belum tersedia di laporan ini.
         </div>
 
       </div>
@@ -494,7 +494,7 @@ async function fetchPengambilan(fromBound,toBound){
   //    (basket_movements.ke_lokasi = lantai ini, status CONFIRMED pada tanggal ini).
   const movQ = db.from('basket_movements')
     .select(`
-      id, qty_pindah, kg_pindah, dari_lokasi, catatan, confirmed_at,
+      id, basket_id, qty_pindah, kg_pindah, dari_lokasi, catatan, confirmed_at,
       baskets ( basket_code, basket_type, tanggal_produksi, status, product_master ( nama_produk, product_code ) )
     `)
     .eq('ke_lokasi', dest)
@@ -507,7 +507,7 @@ async function fetchPengambilan(fromBound,toBound){
   //    (dipilih di form Thawing), jadi TIDAK pernah lewat basket_movements sama sekali.
   const thawQ = db.from('thawing_outputs')
     .select(`
-      id, qty, kg, created_at,
+      id, basket_id, qty, kg, created_at,
       baskets ( basket_code, tanggal_produksi, status ),
       product_master ( nama_produk, product_code )
     `)
@@ -516,14 +516,34 @@ async function fetchPengambilan(fromBound,toBound){
     .lte('created_at', toBound)
     .order('created_at');
 
-  const [movRes, thawRes] = await Promise.all([movQ, thawQ]);
+  // C) Keranjang sisa yang DIKEMBALIKAN ke Chiller (basket_movements.dari_lokasi =
+  //    lantai ini, ke_lokasi = CHILLER, CONFIRMED) — alur "return sebagian" di
+  //    Migration 12 (basket dikirim penuh ke lantai ini, lalu sisa yang tidak
+  //    terpakai dikirim balik). Menurut aturan operasional, keranjang sisa selalu
+  //    dikembalikan di HARI YANG SAMA (tidak pernah menginap semalam), jadi cukup
+  //    dicocokkan dalam rentang tanggal yang sama dengan A) lewat basket_id.
+  const returnQ = db.from('basket_movements')
+    .select(`
+      id, basket_id, qty_pindah, kg_pindah, catatan, confirmed_at,
+      baskets ( basket_code, basket_type, tanggal_produksi, status, product_master ( nama_produk, product_code ) )
+    `)
+    .eq('dari_lokasi', dest)
+    .eq('ke_lokasi', 'CHILLER')
+    .eq('status', 'CONFIRMED')
+    .gte('confirmed_at', fromBound)
+    .lte('confirmed_at', toBound)
+    .order('confirmed_at');
+
+  const [movRes, thawRes, returnRes] = await Promise.all([movQ, thawQ, returnQ]);
   if(movRes.error) throw movRes.error;
   if(thawRes.error) throw thawRes.error;
+  if(returnRes.error) throw returnRes.error;
 
   // Keranjang VOID (baskets.status = 'VOID', sumber kebenaran — Migration 67)
   // dikeluarkan sepenuhnya, konsisten dengan fetchHasil() di bawah.
-  const movData  = (movRes.data ||[]).filter(r => r.baskets?.status  !== 'VOID');
-  const thawData = (thawRes.data||[]).filter(r => r.baskets?.status !== 'VOID');
+  const movData    = (movRes.data   ||[]).filter(r => r.baskets?.status !== 'VOID');
+  const thawData   = (thawRes.data  ||[]).filter(r => r.baskets?.status !== 'VOID');
+  const returnData = (returnRes.data||[]).filter(r => r.baskets?.status !== 'VOID');
 
   const fromMov = movData.map(r=>{
     const rawCat = r.dari_lokasi || r.baskets?.basket_type || 'LAINNYA';
@@ -532,6 +552,7 @@ async function fetchPengambilan(fromBound,toBound){
       ek: Number(r.qty_pindah)||0,
       kg: Number(r.kg_pindah)||0,
       cat: normalizeCat(rawCat),
+      basketId: r.basket_id,
       basketCode: r.baskets?.basket_code || '—',
       tglProduksi: r.baskets?.tanggal_produksi || null,
       keterangan: r.catatan || ''
@@ -543,12 +564,43 @@ async function fetchPengambilan(fromBound,toBound){
     ek: Number(r.qty)||0,
     kg: Number(r.kg)||0,
     cat: 'THAWING',
+    basketId: r.basket_id,
     basketCode: r.baskets?.basket_code || '—',
     tglProduksi: r.baskets?.tanggal_produksi || null,
     keterangan: ''
   }));
 
-  return [...fromMov, ...fromThaw];
+  // Peta basket_id -> kategori Sumber asalnya, dipakai supaya baris pengembalian
+  // (di bawah) HANYA dianggap "sisa balik" kalau basket itu memang tercatat masuk
+  // dari CHILLER (raw material asli). Kalau basket_id-nya tidak match ke manapun
+  // di daftar Pengambilan (fromMov/fromThaw), berarti itu keranjang HASIL PRODUKSI
+  // yang baru lahir di modul ini sendiri (via processing_outputs / byproduct
+  // session) lalu dikirim ke Chiller sebagai tujuan biasa — itu domainnya Hasil
+  // Produk/Rekap Hasil Produksi (kolom "Ke Chiller" di sana), BUKAN pengurang
+  // Pengambilan Produk. Begitu juga kalau basket itu match tapi sumber aslinya
+  // BUKAN Chiller (mis. masuk dari Parting/Boneless) — tetap tidak dinetkan di
+  // sini, sesuai keputusan user: hanya barang yang benar dari Chiller yang boleh
+  // dianggap minus.
+  const catByBasket = {};
+  [...fromMov, ...fromThaw].forEach(r=>{ if(r.basketId) catByBasket[r.basketId] = r.cat; });
+
+  const fromReturn = returnData
+    .filter(r => r.basket_id && catByBasket[r.basket_id] === 'CHILLER')
+    .map(r=>({
+      barang: r.baskets?.product_master?.nama_produk || '—',
+      // "|| 0" kedua di sini bukan redundan: -(0) di JS menghasilkan -0, yang kalau
+      // langsung dilempar ke toLocaleString() akan tercetak sebagai "-0" (kosmetik
+      // jelek). -0 falsy, jadi "-0 || 0" menormalkannya balik ke 0 biasa.
+      ek: (-(Number(r.qty_pindah)||0)) || 0,
+      kg: (-(Number(r.kg_pindah)||0)) || 0,
+      cat: 'CHILLER',
+      basketId: r.basket_id,
+      basketCode: r.baskets?.basket_code || '—',
+      tglProduksi: r.baskets?.tanggal_produksi || null,
+      keterangan: '↩️ Balik ke Chiller' + (r.catatan ? ' — '+r.catatan : '')
+    }));
+
+  return [...fromMov, ...fromThaw, ...fromReturn];
 }
 
 // processing_outputs.tujuan_lokasi selalu diisi nama lantai ini sendiri saat basket
@@ -679,11 +731,16 @@ function renderPengambilan(rows){
   let totEk=0, totKg=0;
   tb.innerHTML = rows.map(r=>{
     totEk+=r.ek; totKg+=r.kg;
+    // Baris "Balik ke Chiller" (lihat fromReturn di fetchPengambilan) selalu
+    // punya ek/kg negatif — ditonjolkan merah supaya kelihatan beda dari baris
+    // masuk normal, meski TOTAL & Rekap Barang Masuk sudah otomatis net.
+    const isReturn = r.ek<0 || r.kg<0;
+    const numStyle = isReturn ? ' style="color:#dc2626;font-weight:700"' : '';
     return '<tr>'+
       '<td>'+esc(r.barang)+'</td>'+
       '<td>'+esc(r.basketCode)+'</td>'+
-      '<td class="num">'+fmt(r.ek)+'</td>'+
-      '<td class="num">'+fmtKgNum(r.kg)+'</td>'+
+      '<td class="num"'+numStyle+'>'+fmt(r.ek)+'</td>'+
+      '<td class="num"'+numStyle+'>'+fmtKgNum(r.kg)+'</td>'+
       '<td>'+esc(sourceLabel(r.cat))+'</td>'+
       '<td>'+(r.tglProduksi?fmtDate(r.tglProduksi):'—')+'</td>'+
       '<td>'+(r.keterangan?esc(r.keterangan):'<span style="color:#9ca3af;font-style:italic">—</span>')+'</td>'+
