@@ -736,6 +736,36 @@ a{text-decoration:none}
   </div>
 </div>
 
+<!-- ==================== MODAL: BATALKAN KEDATANGAN (belum pernah naik rak) ==================== -->
+<div class="modal-overlay" id="modal-batalkan">
+  <div class="modal-box modal-sm">
+    <div class="modal-title">🚫 Batalkan Kedatangan</div>
+    <div class="modal-desc">
+      Keranjang <strong id="bt-code" style="font-family:monospace">—</strong> belum pernah diproses/dialokasikan ke rak
+      di Blasting — akan langsung dikembalikan ke <strong id="bt-tujuan">—</strong> memakai <strong>kode yang sama</strong>
+      (tanpa keranjang baru, tanpa perlu cetak ulang label), tanpa menunggu konfirmasi.
+    </div>
+    <div class="modal-info-box">
+      <div class="modal-info-row"><span class="modal-info-label">Produk</span><span class="modal-info-val" id="bt-produk">—</span></div>
+      <div class="modal-info-row"><span class="modal-info-label">Qty</span><span class="modal-info-val" id="bt-qty">—</span></div>
+    </div>
+    <div class="form-group" style="margin-bottom:0">
+      <label>Alasan Pembatalan <span style="color:#dc2626">*</span></label>
+      <textarea id="bt-alasan" placeholder="cth: Salah kirim, tidak jadi dibekukan…" rows="2" maxlength="500"></textarea>
+    </div>
+    <div class="form-group" style="margin-top:10px;margin-bottom:0">
+      <label>PIN Supervisor <span style="color:#dc2626">*</span></label>
+      <input type="password" id="bt-pin" placeholder="● ● ● ●" maxlength="6" inputmode="numeric"
+             oninput="this.value=this.value.replace(/\D/g,'')">
+    </div>
+    <div id="bt-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-top:8px;display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-batalkan')">Batal</button>
+      <button class="btn btn-red" id="bt-btn-ok" onclick="doBatalkan()">🚫 Ya, Batalkan</button>
+    </div>
+  </div>
+</div>
+
 <!-- ==================== MODAL: EDIT ALOKASI ==================== -->
 <div class="modal-overlay" id="modal-edit-alokasi">
   <div class="modal-box modal-sm">
@@ -1254,6 +1284,7 @@ function renderStok(){
           <td style="display:flex;flex-wrap:wrap;gap:4px;padding:8px 14px">
             <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();goToRakTab('${b.id}')">🗂️ Alokasi ke Rak</button>
             <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openReturn('${b.id}')" ${availEkor<=0?'disabled':''}>↩️ Return</button>
+            ${(Number(b.qty_sisa)===Number(b.qty_awal)&&!allocEkor&&!frozenEkor)?`<button class="btn btn-ghost btn-sm" style="color:#dc2626" onclick="event.stopPropagation();openBatalkan('${b.id}')">🚫 Batalkan</button>`:''}
           </td>
         </tr>`;
       });
@@ -1536,6 +1567,84 @@ async function doReturn(){
     await loadAll();
   }catch(e){showErr('mr-err','Gagal: '+(e.message||''));}
   finally{btn.disabled=false;btn.textContent='↩️ Kirim ke Chiller'}
+}
+
+// ── TAB 1: BATALKAN KEDATANGAN (keranjang belum pernah naik rak — migration 104) ──
+// Beda dari "Return": ini untuk keranjang yang qty_sisa-nya masih 100% utuh
+// (belum pernah dikirim sebagian/dialokasikan) dan ternyata batal diproses.
+// Langsung dieksekusi (tanpa antrian PENDING) & pakai kode keranjang yang
+// SAMA — lihat catatan di blasting_batalkan_kedatangan (migration 104) soal
+// kenapa ini aman dilakukan reuse kode, beda dari Return biasa.
+async function openBatalkan(basketId){
+  const b=blastingStock.find(x=>x.id===basketId);
+  if(!b)return;
+  const pm=b.product_master||{};
+  setEl('bt-code',b.basket_code);
+  setEl('bt-produk',pm.nama_produk||'—');
+  setEl('bt-qty',`${fmt(b.qty_sisa)} ekor / ${fmtKg(b.kg_sisa)}`);
+  setEl('bt-tujuan','…');
+  document.getElementById('bt-alasan').value='';
+  document.getElementById('bt-pin').value='';
+  showErr('bt-err','');
+  document.getElementById('bt-btn-ok')._basketId=basketId;
+  openModal('modal-batalkan');
+
+  // Cari lokasi asal (utk ditampilkan saja — RPC yg menentukan ulang secara
+  // otentik saat eksekusi). Jalur 1: movement full-transfer basket_id=basket
+  // ini. Jalur 2 (fallback): audit_log basket_id_hasil, utk kedatangan lewat
+  // partial-transfer (lihat catatan di migration 104).
+  let asal=null;
+  const{data:mv1}=await db.from('basket_movements').select('dari_lokasi')
+    .eq('basket_id',basketId).eq('ke_lokasi','BLASTING').eq('status','CONFIRMED')
+    .order('confirmed_at',{ascending:false}).limit(1).maybeSingle();
+  if(mv1)asal=mv1.dari_lokasi;
+  if(!asal){
+    const{data:al1}=await db.from('audit_log').select('data_sesudah')
+      .eq('aksi','MOVEMENT_CONFIRMED')
+      .eq('data_sesudah->>basket_id_hasil',basketId)
+      .eq('data_sesudah->>ke_lokasi','BLASTING')
+      .order('created_at',{ascending:false}).limit(1).maybeSingle();
+    if(al1)asal=al1.data_sesudah?.dari_lokasi;
+  }
+  setEl('bt-tujuan',asal?lokasiLabel(asal):'(tidak ditemukan — cek dulu sebelum lanjut)');
+}
+
+async function doBatalkan(){
+  const btn=document.getElementById('bt-btn-ok');
+  const basketId=btn._basketId;
+  const alasan=document.getElementById('bt-alasan').value.trim();
+  const pin=document.getElementById('bt-pin').value;
+  showErr('bt-err','');
+  if(!alasan){showErr('bt-err','Alasan pembatalan wajib diisi.');return}
+  if(!pin||pin.length<4){showErr('bt-err','PIN harus minimal 4 digit.');return}
+
+  // Verifikasi PIN — Supervisor, System Admin, atau user dengan permission modul 'blasting' setara supervisor
+  const{data:pinUser}=await db.from('users').select('id,nama,role,is_system_admin').eq('pin',pin).eq('aktif',true).maybeSingle();
+  let sup=null;
+  if(pinUser){
+    if(pinUser.role==='SUPERVISOR'||pinUser.is_system_admin){
+      sup=pinUser;
+    }else{
+      const pinUserPerms=await RPA_PERM.fetchPermissions(db,pinUser.id);
+      if(RPA_PERM.canApprove(pinUserPerms['blasting']||null))sup=pinUser;
+    }
+  }
+  if(!sup){showErr('bt-err','PIN salah atau bukan Supervisor.');document.getElementById('bt-pin').value='';return}
+
+  btn.disabled=true;btn.textContent='Memproses…';
+  try{
+    const{data,error}=await db.rpc('blasting_batalkan_kedatangan',{
+      p_basket_id:basketId,p_user_id:currentUser.id,
+      p_alasan:`${alasan} (PIN oleh: ${sup.nama})`
+    });
+    if(error)throw error;
+    const r=typeof data==='string'?JSON.parse(data):data;
+    if(!r.ok)throw new Error(r.error||'Gagal membatalkan.');
+    showToast(`Keranjang ${r.basket_code} dibatalkan, kembali ke ${lokasiLabel(r.ke_lokasi)} ✅`,'success');
+    closeModal('modal-batalkan');
+    await loadAll();
+  }catch(e){showErr('bt-err','Gagal: '+(e.message||''));}
+  finally{btn.disabled=false;btn.textContent='🚫 Ya, Batalkan'}
 }
 
 // ── TAB 2: RAK ──
