@@ -218,6 +218,7 @@ tr:last-child td{border-bottom:none}
       <div class="nav-item" onclick="navTo('Laporan.html')"><span class="nav-icon">📊</span><span class="nav-label-text">Laporan</span></div>
       <div class="nav-item" onclick="navTo('Tracing.html')"><span class="nav-icon">🔍</span><span class="nav-label-text">Tracing Produk</span></div>
       <div class="nav-item" id="nav-saldo-awal" style="display:none" onclick="navTo('SaldoAwal.html')"><span class="nav-icon">📋</span><span class="nav-label-text">Saldo Awal Barang</span></div>
+      <div class="nav-item" id="nav-stok-opname-chiller" style="display:none" onclick="navTo('StokOpnameChiller.html')"><span class="nav-icon">🧮</span><span class="nav-label-text">Stok Opname Chiller</span></div>
       <div class="nav-item" onclick="navTo('MasterData.html')"><span class="nav-icon">🗂️</span><span class="nav-label-text">Master Data</span></div>
       <div class="nav-item" id="nav-pelanggan" style="display:none" onclick="navTo('KelolaPelanggan.html')"><span class="nav-icon">📇</span><span class="nav-label-text">Kelola Pelanggan</span></div>
       <div class="nav-item" id="nav-revisi-batch" style="display:none" onclick="navTo('RevisiBatch.html')"><span class="nav-icon">🔀</span><span class="nav-label-text">Revisi Batch Keranjang</span></div>
@@ -461,6 +462,7 @@ function startApp(){
   document.getElementById('sidebar-role').textContent=currentUser.is_system_admin?'Admin':(currentUser.role==='SUPERVISOR'?'Supervisor':'Operator');
   if(currentUser.is_system_admin){const el=document.getElementById('nav-user-mgmt');if(el)el.style.display='flex'}
   if(RPA_PERM.getModuleRole(currentUser,'saldo_awal')!==null){const el=document.getElementById('nav-saldo-awal');if(el)el.style.display='flex'}
+  if(RPA_PERM.getModuleRole(currentUser,'stok_opname_chiller')!==null){const el=document.getElementById('nav-stok-opname-chiller');if(el)el.style.display='flex'}
   if(RPA_PERM.getModuleRole(currentUser,'revisi_batch')!==null){const el=document.getElementById('nav-revisi-batch');if(el)el.style.display='flex'}
   if(RPA_PERM.getModuleRole(currentUser,'void_keranjang')!==null){const el=document.getElementById('nav-void-keranjang');if(el)el.style.display='flex'}
   if (RPA_PERM.getModuleRole(currentUser, 'lapor_kehilangan') !== null) { const lhEl = document.getElementById('nav-lapor-hilang'); if (lhEl) lhEl.style.display = 'flex'; }

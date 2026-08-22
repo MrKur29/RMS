@@ -561,6 +561,10 @@ a { text-decoration: none; }
                 <span class="nav-icon">📋</span>
                 <span class="nav-label-text">Saldo Awal Barang</span>
             </div>
+            <div class="nav-item" id="nav-stok-opname-chiller" style="display:none" onclick="navTo('StokOpnameChiller.html')">
+                <span class="nav-icon">🧮</span>
+                <span class="nav-label-text">Stok Opname Chiller</span>
+            </div>
             <div class="nav-item" onclick="navTo('MasterData.html')">
                 <span class="nav-icon">🗂️</span>
                 <span class="nav-label-text">Master Data</span>
@@ -1082,6 +1086,9 @@ function startApp() {
     // untuk operator harian.
     if (RPA_PERM.getModuleRole(currentUser, 'saldo_awal') !== null) {
         document.getElementById('nav-saldo-awal').style.display = 'flex';
+    }
+    if (RPA_PERM.getModuleRole(currentUser, 'stok_opname_chiller') !== null) {
+        document.getElementById('nav-stok-opname-chiller').style.display = 'flex';
     }
 
     // Tanggal topbar
