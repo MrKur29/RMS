@@ -374,6 +374,7 @@ a{text-decoration:none}
               <thead>
                 <tr>
                   <th>Basket</th>
+                  <th>Item</th>
                   <th>Tercatat</th>
                   <th>Aktual</th>
                   <th>Alasan</th>
@@ -383,7 +384,7 @@ a{text-decoration:none}
                 </tr>
               </thead>
               <tbody id="tbody-selisih-terima">
-                <tr><td colspan="7"><div class="empty">Memuat…</div></td></tr>
+                <tr><td colspan="8"><div class="empty">Memuat…</div></td></tr>
               </tbody>
             </table>
           </div>
@@ -834,8 +835,9 @@ let riwayatSelisihTerimaList = [];
 
 async function loadSelisihTerima(){
   const{data,error}=await db.from('blasting_terima_selisih')
-    .select(`id,basket_id,basket_code,qty_tercatat,kg_tercatat,qty_aktual,kg_aktual,alasan,diajukan_at,
+    .select(`id,basket_id,basket_code,product_id,qty_tercatat,kg_tercatat,qty_aktual,kg_aktual,alasan,diajukan_at,
               diajukan_oleh(nama),
+              product_master(nama_produk,product_code),
               movement:movement_id(id,is_partial,dari_lokasi,ke_lokasi)`)
     .eq('status','PENDING')
     .order('diajukan_at',{ascending:false});
@@ -850,13 +852,14 @@ function renderSelisihTerima(){
   if(!tbody)return;
   if(pill){pill.textContent=selisihTerimaList.length;pill.className=`panel-pill ${selisihTerimaList.length>0?'alert':'ok'}`}
   if(!selisihTerimaList.length){
-    tbody.innerHTML=`<tr><td colspan="7"><div class="empty">Tidak ada selisih terima pending</div></td></tr>`;
+    tbody.innerHTML=`<tr><td colspan="8"><div class="empty">Tidak ada selisih terima pending</div></td></tr>`;
     return;
   }
   const canApprove=RPA_PERM.canApprove(currentUser.moduleRole);
   tbody.innerHTML=selisihTerimaList.map(r=>`
     <tr>
       <td><span style="font-family:monospace;font-weight:700">${esc(r.basket_code)}</span></td>
+      <td>${esc(r.product_master?.nama_produk)||'—'}</td>
       <td>${fmt(r.qty_tercatat)} ek<br><span class="tbl-sub">${fmtKg(r.kg_tercatat)}</span></td>
       <td>${fmt(r.qty_aktual)} ek<br><span class="tbl-sub">${fmtKg(r.kg_aktual)}</span></td>
       <td style="max-width:200px">${esc(r.alasan)}</td>
@@ -922,6 +925,7 @@ async function openReviewSelisihTerima(id){
 
   document.getElementById('st-info-box').innerHTML=`
     <div class="modal-info-row"><span class="modal-info-label">Basket</span><span class="modal-info-val" style="font-family:monospace">${esc(r.basket_code)}</span></div>
+    <div class="modal-info-row"><span class="modal-info-label">Item</span><span class="modal-info-val">${esc(r.product_master?.nama_produk)||'—'}</span></div>
     <div class="modal-info-row"><span class="modal-info-label">Tercatat</span><span class="modal-info-val">${fmt(r.qty_tercatat)} ekor / ${fmtKg(r.kg_tercatat)}</span></div>
     <div class="modal-info-row"><span class="modal-info-label">Aktual</span><span class="modal-info-val">${fmt(r.qty_aktual)} ekor / ${fmtKg(r.kg_aktual)}</span></div>
     <div class="modal-info-row"><span class="modal-info-label">Alasan</span><span class="modal-info-val">${esc(r.alasan)}</span></div>

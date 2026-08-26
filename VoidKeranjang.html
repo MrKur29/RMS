@@ -450,9 +450,9 @@ function startApp(){
 
   if (RPA_PERM.getModuleRole(currentUser, 'cs') !== null) { const csEl = document.getElementById('nav-cs'); if (csEl) csEl.style.display = 'flex'; }
   if(RPA_PERM.getModuleRole(currentUser,'pelanggan')!==null){const el=document.getElementById('nav-pelanggan');if(el)el.style.display='flex'}
-  if(!RPA_PERM.canApprove(moduleRole)){
+  if(RPA_PERM.isViewOnly(moduleRole)){
     document.getElementById('viewer-note-area').innerHTML =
-      `<div class="viewer-note">👁️ Anda punya akses <b>lihat saja</b> untuk modul ini — hanya Supervisor/Admin yang bisa void keranjang.</div>`;
+      `<div class="viewer-note">👁️ Anda punya akses <b>lihat saja</b> untuk modul ini — tidak bisa void keranjang.</div>`;
   }
 
   startClock();
@@ -541,7 +541,7 @@ async function searchBasket(){
     </div>`;
   renderDetail(area, basket);
 
-  document.getElementById('panel-aksi').style.display = RPA_PERM.canApprove(currentUser.moduleRole) ? '' : 'none';
+  document.getElementById('panel-aksi').style.display = RPA_PERM.canInput(currentUser.moduleRole) ? '' : 'none';
   document.getElementById('vk-alasan').value='';
   renderConfirmCheck();
   checkFormReady();
@@ -580,7 +580,7 @@ function checkFormReady(){
   if(!btn) return;
   const alasan = document.getElementById('vk-alasan')?.value.trim();
   const ack = riskMustConfirm ? document.getElementById('chk-risk-ack')?.checked : true;
-  btn.disabled = !(foundBasket && foundBasket.status!=='VOID' && alasan && ack && RPA_PERM.canApprove(currentUser?.moduleRole));
+  btn.disabled = !(foundBasket && foundBasket.status!=='VOID' && alasan && ack && RPA_PERM.canInput(currentUser?.moduleRole));
 }
 
 function submitVoid(){

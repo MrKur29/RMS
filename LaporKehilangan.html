@@ -486,9 +486,9 @@ function startApp(){
 
   if (RPA_PERM.getModuleRole(currentUser, 'cs') !== null) { const csEl = document.getElementById('nav-cs'); if (csEl) csEl.style.display = 'flex'; }
   if(RPA_PERM.getModuleRole(currentUser,'pelanggan')!==null){const el=document.getElementById('nav-pelanggan');if(el)el.style.display='flex'}
-  if(!RPA_PERM.canApprove(moduleRole)){
+  if(RPA_PERM.isViewOnly(moduleRole)){
     document.getElementById('viewer-note-area').innerHTML =
-      `<div class="viewer-note">👁️ Anda punya akses <b>lihat saja</b> untuk modul ini — hanya Supervisor/Admin yang bisa mencatat kehilangan.</div>`;
+      `<div class="viewer-note">👁️ Anda punya akses <b>lihat saja</b> untuk modul ini — tidak bisa mencatat kehilangan.</div>`;
   }
 
   startClock();
@@ -584,7 +584,7 @@ async function searchBasket(){
     </div>`;
   renderDetail(area, basket);
 
-  document.getElementById('panel-aksi').style.display = RPA_PERM.canApprove(currentUser.moduleRole) ? '' : 'none';
+  document.getElementById('panel-aksi').style.display = RPA_PERM.canInput(currentUser.moduleRole) ? '' : 'none';
   document.getElementById('lh-semua').checked=false;
   const tglEl=document.getElementById('lh-tanggal');
   tglEl.max=todayISO();
@@ -654,7 +654,7 @@ function checkFormReady(){
   const withinRange = foundBasket && qty>=0 && kg>=0 && qty<=Number(foundBasket.qty_sisa) && kg<=Number(foundBasket.kg_sisa);
   const adaAngka = qty>0 || kg>0;
   const tanggalOk = !!tanggal && tanggal<=todayISO();
-  btn.disabled = !(foundBasket && foundBasket.status!=='VOID' && withinRange && adaAngka && tanggalOk && alasan && ack && RPA_PERM.canApprove(currentUser?.moduleRole));
+  btn.disabled = !(foundBasket && foundBasket.status!=='VOID' && withinRange && adaAngka && tanggalOk && alasan && ack && RPA_PERM.canInput(currentUser?.moduleRole));
 }
 
 function submitLaporHilang(){
