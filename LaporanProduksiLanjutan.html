@@ -583,11 +583,39 @@ async function fetchPengambilan(fromBound,toBound){
   // BUKAN Chiller (mis. masuk dari Parting/Boneless) — tetap tidak dinetkan di
   // sini, sesuai keputusan user: hanya barang yang benar dari Chiller yang boleh
   // dianggap minus.
+  //
+  // FIX 2026-08-27 (BK-260811-0264-1 hilang dari Rekap Barang Masuk): untuk
+  // pengiriman SEBAGIAN (is_partial=true), basket_movements.basket_id baris
+  // "masuk" TETAP basket SUMBER (pre-split) — sesuai desain migration 60,
+  // basket baru di tujuan (kode "<sumber>-N") baru dibuat saat konfirmasi dan
+  // basket_id-nya TIDAK PERNAH ditulis balik ke movement itu. Jadi kalau basket
+  // split ini sendiri yang balik ke Chiller di hari yang sama, basket_id-nya
+  // beda dari basket_id di baris masuk (punya basket induk) — lookup
+  // berbasis basket_id gagal dan baris retur hilang tanpa jejak dari laporan.
+  // catByCode + rootCat() di bawah menambal ini lewat kode keranjang: kode
+  // basket split SELALU "<kode induk>-N", jadi kalau basket_id tidak match,
+  // lucuti akhiran "-N" berulang sampai ketemu kode yang cocok di daftar
+  // Pengambilan (juga menangani split berlapis, mis. "-2-1" -> "-2" -> induk).
   const catByBasket = {};
-  [...fromMov, ...fromThaw].forEach(r=>{ if(r.basketId) catByBasket[r.basketId] = r.cat; });
+  const catByCode = {};
+  [...fromMov, ...fromThaw].forEach(r=>{
+    if(r.basketId) catByBasket[r.basketId] = r.cat;
+    if(r.basketCode) catByCode[r.basketCode] = r.cat;
+  });
+  function rootCat(basketId, basketCode){
+    if(basketId && catByBasket[basketId]) return catByBasket[basketId];
+    let code = basketCode;
+    while(code){
+      if(catByCode[code]) return catByCode[code];
+      const m = /^(.*)-\d+$/.exec(code);
+      if(!m) return undefined;
+      code = m[1];
+    }
+    return undefined;
+  }
 
   const fromReturn = returnData
-    .filter(r => r.basket_id && catByBasket[r.basket_id] === 'CHILLER')
+    .filter(r => r.basket_id && rootCat(r.basket_id, r.baskets?.basket_code) === 'CHILLER')
     .map(r=>({
       barang: r.baskets?.product_master?.nama_produk || '—',
       // "|| 0" kedua di sini bukan redundan: -(0) di JS menghasilkan -0, yang kalau
