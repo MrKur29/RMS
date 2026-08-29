@@ -404,16 +404,16 @@ a{text-decoration:none}
           </div>
           <table class="rpt-table" id="tbl-transfer">
             <thead>
-              <tr><th rowspan="2">Barang</th><th colspan="2">Parting</th><th colspan="2">Boneless</th><th colspan="2">Chiller</th><th colspan="2">Belum Dialokasi</th></tr>
-              <tr><th class="num">Ek</th><th class="num">Kg</th><th class="num">Ek</th><th class="num">Kg</th><th class="num">Ek</th><th class="num">Kg</th><th class="num">Ek</th><th class="num">Kg</th></tr>
+              <tr><th rowspan="2">Barang</th><th colspan="2">Parting</th><th colspan="2">Boneless</th><th colspan="2">Marinasi</th><th colspan="2">Chiller</th><th colspan="2">Belum Dialokasi</th></tr>
+              <tr><th class="num">Ek</th><th class="num">Kg</th><th class="num">Ek</th><th class="num">Kg</th><th class="num">Ek</th><th class="num">Kg</th><th class="num">Ek</th><th class="num">Kg</th><th class="num">Ek</th><th class="num">Kg</th></tr>
             </thead>
             <tbody id="tbody-transfer">
-              <tr><td colspan="9"><div class="empty">Memuat…</div></td></tr>
+              <tr><td colspan="11"><div class="empty">Memuat…</div></td></tr>
             </tbody>
           </table>
           </div>
 
-          <div class="hint no-print" style="margin-top:14px">Catatan: Rincian ini merangkum semua sesi timbang karkas untuk batch ini. Kolom "Produk Transfer" menunjukkan tujuan PERTAMA keranjang karkas hasil batch ini dipindah dari lantai karkas (Parting/Boneless/Chiller jika sudah pernah dipindah kesana; kolom "Belum Dialokasi" untuk yang belum pernah dipindah sama sekali), bukan lokasi terkininya.</div>
+          <div class="hint no-print" style="margin-top:14px">Catatan: Rincian ini merangkum semua sesi timbang karkas untuk batch ini. Kolom "Produk Transfer" menunjukkan tujuan yang SUDAH CONFIRMED keranjang karkas hasil batch ini dipindah dari lantai karkas (bukan tujuan percobaan pertama apapun statusnya, dan bukan lokasi terkininya); kolom "Belum Dialokasi" untuk qty yang belum pernah confirmed dipindah kemanapun.</div>
         </div>
 
         <!-- RINCIAN KERANJANG — layar saja, tidak ikut print, bisa di-download Excel -->
@@ -635,20 +635,34 @@ async function selectBatch(batch){
   await renderReport(batch);
 }
 
-// Ambil tujuan pindah PERTAMA tiap keranjang dari lantai karkas (basket_movements
-// dengan dari_lokasi='LANTAI'), diurutkan paling awal. Kalau sebuah keranjang pernah
-// dikirim beberapa kali dari lantai (mis. sempat ditolak lalu dikirim ulang), yang
-// dipakai adalah kiriman pertama secara kronologis.
-async function loadTujuanAwal(basketIds){
-  const map = {};
+// 2026-08-29 FIX: sebelumnya (loadTujuanAwal) memakai movement PERTAMA APAPUN
+// STATUSNYA — kalau percobaan pertama dari lantai DITOLAK lalu keranjang dikirim
+// ulang ke tujuan lain dan itu yang benar-benar CONFIRMED, keranjang tsb tetap
+// salah tercatat di kolom tujuan yang ditolak. Sama persis dengan bug yang
+// ditemukan & diperbaiki di LaporanProduksiKarkasHarian.html 2026-08-27.
+// Sekarang: hanya movement dari_lokasi='LANTAI' berstatus CONFIRMED yang dihitung,
+// dikelompokkan PER TUJUAN (bukan cuma tujuan pertama), pakai qty_pindah/kg_pindah
+// aktual (bukan qty_awal keranjang penuh) — supaya keranjang yang dikirim sebagian2
+// (partial) ke lebih dari satu tujuan juga terhitung benar per tujuannya masing2.
+async function loadKonfirmasiPerBasket(basketIds){
+  const map = {}; // basket_id -> { PARTING:{ek,kg}, BONELESS:{ek,kg}, MARINASI:{ek,kg}, CHILLER:{ek,kg}, LAIN:{ek,kg} }
   if(!basketIds.length) return map;
   const { data, error } = await db.from('basket_movements')
-    .select('basket_id,ke_lokasi,created_at')
+    .select('id,basket_id,ke_lokasi,qty_pindah,kg_pindah')
     .in('basket_id', basketIds)
     .eq('dari_lokasi','LANTAI')
-    .order('created_at',{ascending:true});
+    .eq('status','CONFIRMED');
   if(error){ console.error(error); return map; }
-  (data||[]).forEach(m=>{ if(!(m.basket_id in map)) map[m.basket_id]=m.ke_lokasi; });
+  (data||[]).forEach(m=>{
+    if(!map[m.basket_id]) map[m.basket_id] = {};
+    // LAIN = tujuan lain yang belum punya kolom sendiri di tabel ini — belum pernah
+    // terjadi di data historis, tapi dijaga di sini supaya tidak salah kebaca sebagai
+    // Chiller seperti bug lama.
+    const key = (m.ke_lokasi==='PARTING'||m.ke_lokasi==='BONELESS'||m.ke_lokasi==='CHILLER'||m.ke_lokasi==='MARINASI') ? m.ke_lokasi : 'LAIN';
+    if(!map[m.basket_id][key]) map[m.basket_id][key] = {ek:0,kg:0};
+    map[m.basket_id][key].ek += Number(m.qty_pindah)||0;
+    map[m.basket_id][key].kg += Number(m.kg_pindah)||0;
+  });
   return map;
 }
 
@@ -710,17 +724,18 @@ async function renderReport(batch){
     renderRekap(batch, totals);
 
     // "Tujuan Pindah" (Rincian Keranjang) & "Produk Transfer" harus menunjukkan tujuan
-    // PERTAMA keranjang dipindah dari lantai karkas (basket_movements.dari_lokasi='LANTAI'),
-    // bukan lokasi terkini keranjang (baskets.lokasi) — lokasi terkini bisa sudah berubah
-    // lagi setelah pindah lanjutan (mis. Parting → Chiller), sehingga menyesatkan untuk
-    // laporan produksi karkas.
+    // yang SUDAH CONFIRMED keranjang dipindah dari lantai karkas
+    // (basket_movements.dari_lokasi='LANTAI', status CONFIRMED), bukan lokasi terkini
+    // keranjang (baskets.lokasi — bisa sudah berubah lagi setelah pindah lanjutan, mis.
+    // Parting → Chiller) dan bukan cuma tujuan percobaan PERTAMA apapun statusnya
+    // (lihat catatan fix 2026-08-29 di loadKonfirmasiPerBasket).
     const basketIds = [...new Set([
       ...rincianRows.map(r=>r.basket?.id),
       ...allBaskets.map(r=>r.id)
     ].filter(Boolean))];
-    const tujuanAwalMap = await loadTujuanAwal(basketIds);
-    rincianRows.forEach(r=>{ r.tujuan_awal = r.basket?.id ? (tujuanAwalMap[r.basket.id]||null) : null; });
-    allBaskets.forEach(r=>{ r.tujuan_awal = r.id ? (tujuanAwalMap[r.id]||null) : null; });
+    const konfirmasiMap = await loadKonfirmasiPerBasket(basketIds);
+    rincianRows.forEach(r=>{ r.konfirmasi = r.basket?.id ? (konfirmasiMap[r.basket.id]||{}) : {}; });
+    allBaskets.forEach(r=>{ r.konfirmasi = r.id ? (konfirmasiMap[r.id]||{}) : {}; });
 
     renderTransfer(allBaskets);
     renderRincianKeranjang(rincianRows);
@@ -970,13 +985,23 @@ function renderTransfer(basketRows){
     const p=r.product;
     const key=p.product_code;
     if(!map[key]) map[key]={nama_produk:p.nama_produk, grade:p.grade, ukuran:parseUkuran(p),
-      parting:{ek:0,kg:0}, boneless:{ek:0,kg:0}, chiller:{ek:0,kg:0}, belum:{ek:0,kg:0}};
-    // tujuan_awal null/undefined artinya keranjang belum PERNAH dipindah dari lantai karkas
-    // (belum ada baris basket_movements dari_lokasi='LANTAI') — jadi belum dialokasi kemanapun,
-    // bukan otomatis Chiller. Dulu ini salah masuk ke bucket 'chiller' (fallback ternary).
-    const bucket = !r.tujuan_awal ? 'belum' : r.tujuan_awal==='PARTING' ? 'parting' : r.tujuan_awal==='BONELESS' ? 'boneless' : 'chiller';
-    map[key][bucket].ek += Number(r.qty_awal)||0;
-    map[key][bucket].kg += Number(r.kg_awal)||0;
+      parting:{ek:0,kg:0}, boneless:{ek:0,kg:0}, marinasi:{ek:0,kg:0}, chiller:{ek:0,kg:0}, belum:{ek:0,kg:0}};
+    // 2026-08-29 FIX: dulu bucket ditentukan dari tujuan PERCOBAAN PERTAMA (apa pun
+    // statusnya) — sekarang dari movement yang SUDAH CONFIRMED saja (r.konfirmasi,
+    // lihat loadKonfirmasiPerBasket). "Belum Dialokasi" = qty_awal keranjang dikurangi
+    // SEMUA porsi yang sudah confirmed pindah kemanapun (termasuk 'LAIN' bila ada —
+    // tujuan lain di luar Parting/Boneless/Marinasi/Chiller yang belum pernah terjadi
+    // di data historis — porsinya tetap dikurangkan di sini biar total tetap balance
+    // ke qty_awal, hanya saja belum ada kolom sendiri untuk itu di tabel ini).
+    const k = r.konfirmasi || {};
+    const confEk = (k.PARTING?.ek||0)+(k.BONELESS?.ek||0)+(k.MARINASI?.ek||0)+(k.CHILLER?.ek||0)+(k.LAIN?.ek||0);
+    const confKg = (k.PARTING?.kg||0)+(k.BONELESS?.kg||0)+(k.MARINASI?.kg||0)+(k.CHILLER?.kg||0)+(k.LAIN?.kg||0);
+    if(k.PARTING){ map[key].parting.ek+=k.PARTING.ek; map[key].parting.kg+=k.PARTING.kg; }
+    if(k.BONELESS){ map[key].boneless.ek+=k.BONELESS.ek; map[key].boneless.kg+=k.BONELESS.kg; }
+    if(k.MARINASI){ map[key].marinasi.ek+=k.MARINASI.ek; map[key].marinasi.kg+=k.MARINASI.kg; }
+    if(k.CHILLER){ map[key].chiller.ek+=k.CHILLER.ek; map[key].chiller.kg+=k.CHILLER.kg; }
+    map[key].belum.ek += Math.max(0, (Number(r.qty_awal)||0) - confEk);
+    map[key].belum.kg += Math.max(0, (Number(r.kg_awal)||0) - confKg);
   });
   const gradeOrder={A:0,B:1,C:2};
   const groups=Object.values(map).sort((a,b)=>{
@@ -987,15 +1012,16 @@ function renderTransfer(basketRows){
   currentTransferGroups = groups;
   const btnExcel=document.getElementById('btn-excel-transfer');
   const tbody=document.getElementById('tbody-transfer');
-  if(!groups.length){tbody.innerHTML='<tr><td colspan="9"><div class="empty">Belum ada keranjang karkas untuk batch ini.</div></td></tr>';if(btnExcel)btnExcel.disabled=true;return}
+  if(!groups.length){tbody.innerHTML='<tr><td colspan="11"><div class="empty">Belum ada keranjang karkas untuk batch ini.</div></td></tr>';if(btnExcel)btnExcel.disabled=true;return}
   if(btnExcel)btnExcel.disabled=false;
-  const tot={parting:{ek:0,kg:0},boneless:{ek:0,kg:0},chiller:{ek:0,kg:0},belum:{ek:0,kg:0}};
+  const tot={parting:{ek:0,kg:0},boneless:{ek:0,kg:0},marinasi:{ek:0,kg:0},chiller:{ek:0,kg:0},belum:{ek:0,kg:0}};
   let rows=groups.map(g=>{
-    ['parting','boneless','chiller','belum'].forEach(k=>{tot[k].ek+=g[k].ek;tot[k].kg+=g[k].kg});
+    ['parting','boneless','marinasi','chiller','belum'].forEach(k=>{tot[k].ek+=g[k].ek;tot[k].kg+=g[k].kg});
     return `<tr>
       <td>${esc(g.nama_produk)}</td>
       <td class="num">${int(g.parting.ek)}</td><td class="num">${num(g.parting.kg)}</td>
       <td class="num">${int(g.boneless.ek)}</td><td class="num">${num(g.boneless.kg)}</td>
+      <td class="num">${int(g.marinasi.ek)}</td><td class="num">${num(g.marinasi.kg)}</td>
       <td class="num">${int(g.chiller.ek)}</td><td class="num">${num(g.chiller.kg)}</td>
       <td class="num">${int(g.belum.ek)}</td><td class="num">${num(g.belum.kg)}</td>
     </tr>`;
@@ -1004,6 +1030,7 @@ function renderTransfer(basketRows){
     <td>TOTAL</td>
     <td class="num">${int(tot.parting.ek)}</td><td class="num">${num(tot.parting.kg)}</td>
     <td class="num">${int(tot.boneless.ek)}</td><td class="num">${num(tot.boneless.kg)}</td>
+    <td class="num">${int(tot.marinasi.ek)}</td><td class="num">${num(tot.marinasi.kg)}</td>
     <td class="num">${int(tot.chiller.ek)}</td><td class="num">${num(tot.chiller.kg)}</td>
     <td class="num">${int(tot.belum.ek)}</td><td class="num">${num(tot.belum.kg)}</td>
   </tr></tfoot>`;
@@ -1015,6 +1042,16 @@ function renderTransfer(basketRows){
 // ══════════════════════════════════════════════════════════════
 const TIPE_RUSAK_MAP = {1:'1 - KDG', 2:'2 - PROCESS'};
 function properCase(s){ if(!s) return ''; return String(s).toLowerCase().replace(/\b\w/g, c=>c.toUpperCase()); }
+// Ubah peta tujuan CONFIRMED (r.konfirmasi, lihat loadKonfirmasiPerBasket) jadi 1 string
+// untuk kolom "Tujuan Pindah" per-keranjang. Kosong = belum pernah confirmed kemanapun.
+// Kalau sebuah keranjang confirmed ke lebih dari satu tujuan (dikirim sebagian2), semua
+// tujuannya ditampilkan dipisah koma.
+function formatTujuanKonfirmasi(k){
+  if(!k) return '';
+  const tujuan = Object.keys(k).filter(key=>(k[key]?.ek||0)>0 || (k[key]?.kg||0)>0);
+  if(!tujuan.length) return '';
+  return tujuan.map(t=>properCase(t)).join(', ');
+}
 
 function renderRincianKeranjang(rows){
   currentRincianRows = rows;
@@ -1046,7 +1083,7 @@ function renderRincianKeranjang(rows){
       <td class="num">${int(r.qty_timbang)}</td>
       <td class="num">${num(r.kg_timbang)}</td>
       <td>${TIPE_RUSAK_MAP[r.tipe_kerusakan]||'—'}</td>
-      <td>${esc(properCase(r.tujuan_awal))||'—'}</td>
+      <td>${esc(formatTujuanKonfirmasi(r.konfirmasi))||'—'}</td>
       <td>${fmtDT(r.created_at)}</td>
       <td>${isVoid?'<span class="badge b-block">🗑️ VOID</span>':'<span class="badge b-ok">Aktif</span>'}</td>
     </tr>`;
@@ -1066,7 +1103,7 @@ function downloadRincianExcel(){
       'Qty (Ekor)':       Number(r.qty_timbang)||0,
       'Kg':               Number(r.kg_timbang)||0,
       'Tipe Rusak':       TIPE_RUSAK_MAP[r.tipe_kerusakan] || '',
-      'Tujuan Pindah':    properCase(r.tujuan_awal) || '',
+      'Tujuan Pindah':    formatTujuanKonfirmasi(r.konfirmasi) || '',
       'Waktu Timbang':    r.created_at ? new Date(r.created_at).toLocaleString('id-ID') : '',
       'Status':           b.status==='VOID' ? 'VOID (tidak dihitung)' : 'Aktif'
     };
@@ -1107,15 +1144,17 @@ function downloadTransferExcel(){
   if(!currentTransferGroups.length){ showToast('Tidak ada data untuk diunduh','error'); return; }
   if(typeof XLSX === 'undefined'){ showToast('Modul Excel gagal dimuat, coba refresh halaman','error'); return; }
 
-  const tot={parting:{ek:0,kg:0},boneless:{ek:0,kg:0},chiller:{ek:0,kg:0},belum:{ek:0,kg:0}};
+  const tot={parting:{ek:0,kg:0},boneless:{ek:0,kg:0},marinasi:{ek:0,kg:0},chiller:{ek:0,kg:0},belum:{ek:0,kg:0}};
   const rows = currentTransferGroups.map(g=>{
-    ['parting','boneless','chiller','belum'].forEach(k=>{tot[k].ek+=g[k].ek;tot[k].kg+=g[k].kg});
+    ['parting','boneless','marinasi','chiller','belum'].forEach(k=>{tot[k].ek+=g[k].ek;tot[k].kg+=g[k].kg});
     return {
       'Barang':        g.nama_produk || '',
       'Parting Ek':    Number(g.parting.ek)||0,
       'Parting Kg':    Number(g.parting.kg)||0,
       'Boneless Ek':   Number(g.boneless.ek)||0,
       'Boneless Kg':   Number(g.boneless.kg)||0,
+      'Marinasi Ek':   Number(g.marinasi.ek)||0,
+      'Marinasi Kg':   Number(g.marinasi.kg)||0,
       'Chiller Ek':    Number(g.chiller.ek)||0,
       'Chiller Kg':    Number(g.chiller.kg)||0,
       'Belum Dialokasi Ek': Number(g.belum.ek)||0,
@@ -1126,12 +1165,13 @@ function downloadTransferExcel(){
     'Barang':'TOTAL',
     'Parting Ek':tot.parting.ek, 'Parting Kg':tot.parting.kg,
     'Boneless Ek':tot.boneless.ek, 'Boneless Kg':tot.boneless.kg,
+    'Marinasi Ek':tot.marinasi.ek, 'Marinasi Kg':tot.marinasi.kg,
     'Chiller Ek':tot.chiller.ek, 'Chiller Kg':tot.chiller.kg,
     'Belum Dialokasi Ek':tot.belum.ek, 'Belum Dialokasi Kg':tot.belum.kg
   });
 
   const ws = XLSX.utils.json_to_sheet(rows);
-  ws['!cols'] = [{wch:24},{wch:10},{wch:10},{wch:11},{wch:11},{wch:10},{wch:10},{wch:15},{wch:15}];
+  ws['!cols'] = [{wch:24},{wch:10},{wch:10},{wch:11},{wch:11},{wch:10},{wch:10},{wch:10},{wch:10},{wch:15},{wch:15}];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Produk Transfer');
   const safeCode = (currentBatch?.batch_code || 'batch').replace(/[^a-zA-Z0-9_-]/g,'_');
