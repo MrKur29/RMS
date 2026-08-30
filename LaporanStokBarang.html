@@ -549,6 +549,19 @@ async function fetchAllRows(buildQuery){
 // Hitung agregat masuk/keluar per product_id di suatu lokasi, sampai dengan asOfDate (inklusif),
 // menggunakan model transaksi yang sama dengan Laporan Kartu Stok — namun tanpa filter produk,
 // lalu dikelompokkan per product_id.
+// Migration 107b (opsi B, 2026-08-30): keranjang VOID yang qty/kg-nya masih
+// UTUH (qty_sisa==qty_awal, kg_sisa==kg_awal) dianggap tidak pernah ada sama
+// sekali -- jejaknya di basket_movements/processing_inputs/processing_outputs
+// dikecualikan dari laporan ini. Basket VOID yang SUDAH sempat berkurang/split
+// TETAP dihitung apa adanya (childnya nyata, tidak aman dihilangkan begitu saja).
+// Lihat project_void_keranjang_stock_report_gap_2026_08_29.md.
+function isVoidGhost(b){
+  if(!b || b.status!=='VOID') return false;
+  const qtyMatch = Number(b.qty_sisa)===Number(b.qty_awal);
+  const kgMatch = Math.abs(Number(b.kg_sisa)-Number(b.kg_awal))<0.001;
+  return qtyMatch && kgMatch;
+}
+
 async function buildStokAggregate(lokasi, asOfDate){
   const toBound = asOfDate+'T23:59:59+07:00';
   const agg = {}; // product_id -> {masuk_qty,masuk_kg,keluar_qty,keluar_kg}
@@ -579,12 +592,12 @@ async function buildStokAggregate(lokasi, asOfDate){
   // B) Transfer masuk ke lokasi (basket_movements CONFIRMED, ke_lokasi = lokasi)
   tasks.push(
     fetchAllRows(()=>db.from('basket_movements')
-      .select('id,qty_pindah,kg_pindah,confirmed_at,status,baskets!inner(product_id)')
+      .select('id,qty_pindah,kg_pindah,confirmed_at,status,baskets!inner(product_id,status,qty_sisa,qty_awal,kg_sisa,kg_awal)')
       .eq('ke_lokasi',lokasi)
       .eq('status','CONFIRMED')
       .lte('confirmed_at',toBound)
     ).then(data=>{
-      (data||[]).forEach(m=>{
+      (data||[]).filter(m=>!isVoidGhost(m.baskets)).forEach(m=>{
         const pid = m.baskets?.product_id;
         add(pid,'masuk_qty',Number(m.qty_pindah)||0);
         add(pid,'masuk_kg', Number(m.kg_pindah)||0);
@@ -598,12 +611,12 @@ async function buildStokAggregate(lokasi, asOfDate){
   //    LaporanRincianTransaksiChiller.html — 2026-08-05)
   tasks.push(
     fetchAllRows(()=>db.from('basket_movements')
-      .select('id,qty_pindah,kg_pindah,confirmed_at,baskets!inner(product_id)')
+      .select('id,qty_pindah,kg_pindah,confirmed_at,baskets!inner(product_id,status,qty_sisa,qty_awal,kg_sisa,kg_awal)')
       .eq('dari_lokasi',lokasi)
       .eq('status','CONFIRMED')
       .lte('confirmed_at',toBound)
     ).then(data=>{
-      (data||[]).forEach(m=>{
+      (data||[]).filter(m=>!isVoidGhost(m.baskets)).forEach(m=>{
         const pid = m.baskets?.product_id;
         add(pid,'keluar_qty',Number(m.qty_pindah)||0);
         add(pid,'keluar_kg', Number(m.kg_pindah)||0);
@@ -614,11 +627,11 @@ async function buildStokAggregate(lokasi, asOfDate){
   // D) Konsumsi ke Work Order (processing_inputs) — keluar, lokasi = processing_orders.tipe
   tasks.push(
     fetchAllRows(()=>db.from('processing_inputs')
-      .select('id,product_id,qty_input,kg_input,created_at,processing_orders!inner(tipe)')
+      .select('id,product_id,qty_input,kg_input,created_at,baskets!inner(status,qty_sisa,qty_awal,kg_sisa,kg_awal),processing_orders!inner(tipe)')
       .eq('processing_orders.tipe',lokasi)
       .lte('created_at',toBound)
     ).then(data=>{
-      (data||[]).forEach(pi=>{
+      (data||[]).filter(pi=>!isVoidGhost(pi.baskets)).forEach(pi=>{
         add(pi.product_id,'keluar_qty',Number(pi.qty_input)||0);
         add(pi.product_id,'keluar_kg', Number(pi.kg_input)||0);
       });
@@ -628,11 +641,11 @@ async function buildStokAggregate(lokasi, asOfDate){
   // E) Hasil produksi (processing_outputs) — masuk, tujuan_lokasi = lokasi
   tasks.push(
     fetchAllRows(()=>db.from('processing_outputs')
-      .select('id,product_id,qty_output,kg_output,created_at')
+      .select('id,product_id,qty_output,kg_output,created_at,baskets!inner(status,qty_sisa,qty_awal,kg_sisa,kg_awal)')
       .eq('tujuan_lokasi',lokasi)
       .lte('created_at',toBound)
     ).then(data=>{
-      (data||[]).forEach(po=>{
+      (data||[]).filter(po=>!isVoidGhost(po.baskets)).forEach(po=>{
         add(po.product_id,'masuk_qty',Number(po.qty_output)||0);
         add(po.product_id,'masuk_kg', Number(po.kg_output)||0);
       });

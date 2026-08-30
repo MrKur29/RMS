@@ -642,6 +642,19 @@ async function fetchAllRows(buildQuery){
 
 // Ambil semua sumber transaksi (tanpa batas bawah tanggal — dipakai untuk hitung saldo awal),
 // dibatasi tanggal atas (dateTo) supaya query tidak membengkak.
+// Migration 107b (opsi B, 2026-08-30): keranjang VOID yang qty/kg-nya masih
+// UTUH (qty_sisa==qty_awal, kg_sisa==kg_awal) dianggap tidak pernah ada sama
+// sekali -- jejaknya di basket_movements/processing_inputs/processing_outputs
+// dikecualikan dari laporan ini. Basket VOID yang SUDAH sempat berkurang/split
+// TETAP dihitung apa adanya (childnya nyata, tidak aman dihilangkan begitu saja).
+// Lihat project_void_keranjang_stock_report_gap_2026_08_29.md.
+function isVoidGhost(b){
+  if(!b || b.status!=='VOID') return false;
+  const qtyMatch = Number(b.qty_sisa)===Number(b.qty_awal);
+  const kgMatch = Math.abs(Number(b.kg_sisa)-Number(b.kg_awal))<0.001;
+  return qtyMatch && kgMatch;
+}
+
 async function fetchAllEvents(productId, lokasi, dateTo){
   const toBound = dateTo+'T23:59:59+07:00';
   const events=[];
@@ -673,13 +686,13 @@ async function fetchAllEvents(productId, lokasi, dateTo){
   // B) Transfer masuk ke lokasi (basket_movements CONFIRMED, ke_lokasi = lokasi)
   queries.push(
     fetchAllRows(()=>db.from('basket_movements')
-      .select('id,qty_pindah,kg_pindah,confirmed_at,dari_lokasi,status,baskets!inner(basket_code,product_id)')
+      .select('id,qty_pindah,kg_pindah,confirmed_at,dari_lokasi,status,baskets!inner(basket_code,product_id,status,qty_sisa,qty_awal,kg_sisa,kg_awal)')
       .eq('baskets.product_id',productId)
       .eq('ke_lokasi',lokasi)
       .eq('status','CONFIRMED')
       .lte('confirmed_at',toBound)
     ).then(data=>{
-      (data||[]).forEach(m=>{
+      (data||[]).filter(m=>!isVoidGhost(m.baskets)).forEach(m=>{
         events.push({
           date:new Date(m.confirmed_at), tipe:'Transfer Masuk', tipeCls:'tp-masuk',
           asalTujuan:asalTujuanLabel(m.dari_lokasi), basketCode:m.baskets?.basket_code||'—',
@@ -696,13 +709,13 @@ async function fetchAllEvents(productId, lokasi, dateTo){
   //    sama seperti perbaikan di Laporan Rincian Transaksi Chiller 2026-08-03)
   queries.push(
     fetchAllRows(()=>db.from('basket_movements')
-      .select('id,qty_pindah,kg_pindah,confirmed_at,ke_lokasi,status,baskets!inner(basket_code,product_id)')
+      .select('id,qty_pindah,kg_pindah,confirmed_at,ke_lokasi,status,baskets!inner(basket_code,product_id,status,qty_sisa,qty_awal,kg_sisa,kg_awal)')
       .eq('baskets.product_id',productId)
       .eq('dari_lokasi',lokasi)
       .eq('status','CONFIRMED')
       .lte('confirmed_at',toBound)
     ).then(data=>{
-      (data||[]).forEach(m=>{
+      (data||[]).filter(m=>!isVoidGhost(m.baskets)).forEach(m=>{
         events.push({
           date:new Date(m.confirmed_at), tipe:'Transfer Keluar', tipeCls:'tp-keluar',
           asalTujuan:asalTujuanLabel(m.ke_lokasi), basketCode:m.baskets?.basket_code||'—',
@@ -717,12 +730,12 @@ async function fetchAllEvents(productId, lokasi, dateTo){
   // D) Konsumsi ke Work Order (processing_inputs) — keluar, lokasi = processing_orders.tipe
   queries.push(
     fetchAllRows(()=>db.from('processing_inputs')
-      .select('id,qty_input,kg_input,created_at,baskets!inner(basket_code),processing_orders!inner(order_code,tipe)')
+      .select('id,qty_input,kg_input,created_at,baskets!inner(basket_code,status,qty_sisa,qty_awal,kg_sisa,kg_awal),processing_orders!inner(order_code,tipe)')
       .eq('product_id',productId)
       .eq('processing_orders.tipe',lokasi)
       .lte('created_at',toBound)
     ).then(data=>{
-      (data||[]).forEach(pi=>{
+      (data||[]).filter(pi=>!isVoidGhost(pi.baskets)).forEach(pi=>{
         events.push({
           date:new Date(pi.created_at), tipe:'Konsumsi Produksi', tipeCls:'tp-konsumsi',
           asalTujuan:asalTujuanLabel(pi.processing_orders?.tipe), basketCode:pi.baskets?.basket_code||'—',
@@ -740,12 +753,12 @@ async function fetchAllEvents(productId, lokasi, dateTo){
   // di kartu stok, !inner akan diam-diam membuangnya.
   queries.push(
     fetchAllRows(()=>db.from('processing_outputs')
-      .select('id,qty_output,kg_output,created_at,order_id,baskets!inner(basket_code),processing_orders(order_code)')
+      .select('id,qty_output,kg_output,created_at,order_id,baskets!inner(basket_code,status,qty_sisa,qty_awal,kg_sisa,kg_awal),processing_orders(order_code)')
       .eq('product_id',productId)
       .eq('tujuan_lokasi',lokasi)
       .lte('created_at',toBound)
     ).then(data=>{
-      (data||[]).forEach(po=>{
+      (data||[]).filter(po=>!isVoidGhost(po.baskets)).forEach(po=>{
         events.push({
           date:new Date(po.created_at), tipe:'Hasil Produksi', tipeCls:'tp-output',
           asalTujuan:asalTujuanLabel(lokasi), basketCode:po.baskets?.basket_code||'—',

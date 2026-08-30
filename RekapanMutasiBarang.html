@@ -537,6 +537,19 @@ async function fetchAllRows(buildQuery){
 // Model: hanya event yang benar-benar MENCIPTAKAN atau MENGHILANGKAN barang dari sistem
 // yang dihitung — perpindahan murni antar lokasi (basket_movements internal) TIDAK
 // mempengaruhi total perusahaan sehingga sengaja tidak diikutkan.
+// Migration 107b (opsi B, 2026-08-30): keranjang VOID yang qty/kg-nya masih
+// UTUH (qty_sisa==qty_awal, kg_sisa==kg_awal) dianggap tidak pernah ada sama
+// sekali -- jejaknya di basket_movements/processing_inputs/processing_outputs
+// dikecualikan dari laporan ini. Basket VOID yang SUDAH sempat berkurang/split
+// TETAP dihitung apa adanya (childnya nyata, tidak aman dihilangkan begitu saja).
+// Lihat project_void_keranjang_stock_report_gap_2026_08_29.md.
+function isVoidGhost(b){
+  if(!b || b.status!=='VOID') return false;
+  const qtyMatch = Number(b.qty_sisa)===Number(b.qty_awal);
+  const kgMatch = Math.abs(Number(b.kg_sisa)-Number(b.kg_awal))<0.001;
+  return qtyMatch && kgMatch;
+}
+
 async function computeSaldoKumulatif(cutoffDate){
   const toBound = boundEnd(cutoffDate);
   const masuk = {}, keluar = {};
@@ -557,10 +570,10 @@ async function computeSaldoKumulatif(cutoffDate){
   // 2) Hasil produksi (semua WO — Parting/Boneless/Marinasi/MULTI, product baru lahir)
   tasks.push(
     fetchAllRows(()=>db.from('processing_outputs')
-      .select('product_id,qty_output,kg_output,created_at')
+      .select('product_id,qty_output,kg_output,created_at,baskets!inner(status,qty_sisa,qty_awal,kg_sisa,kg_awal)')
       .lte('created_at', toBound)
     ).then(data=>{
-      (data||[]).forEach(po=>bump(masuk,po.product_id,po.qty_output,po.kg_output));
+      (data||[]).filter(po=>!isVoidGhost(po.baskets)).forEach(po=>bump(masuk,po.product_id,po.qty_output,po.kg_output));
     })
   );
 
@@ -603,21 +616,21 @@ async function computeSaldoKumulatif(cutoffDate){
   // "masuk" tersendiri di rekap ini.
   tasks.push(
     fetchAllRows(()=>db.from('basket_movements')
-      .select('qty_pindah,kg_pindah,confirmed_at,baskets!inner(product_id)')
+      .select('qty_pindah,kg_pindah,confirmed_at,baskets!inner(product_id,status,qty_sisa,qty_awal,kg_sisa,kg_awal)')
       .eq('dari_lokasi','RETUR').eq('ke_lokasi','CHILLER').eq('status','CONFIRMED')
       .lte('confirmed_at', toBound)
     ).then(data=>{
-      (data||[]).forEach(m=>bump(masuk, m.baskets?.product_id, m.qty_pindah, m.kg_pindah));
+      (data||[]).filter(m=>!isVoidGhost(m.baskets)).forEach(m=>bump(masuk, m.baskets?.product_id, m.qty_pindah, m.kg_pindah));
     })
   );
 
   // 5) Konsumsi ke Work Order (semua tipe — Parting/Boneless/Marinasi/MULTI)
   tasks.push(
     fetchAllRows(()=>db.from('processing_inputs')
-      .select('product_id,qty_input,kg_input,created_at')
+      .select('product_id,qty_input,kg_input,created_at,baskets!inner(status,qty_sisa,qty_awal,kg_sisa,kg_awal)')
       .lte('created_at', toBound)
     ).then(data=>{
-      (data||[]).forEach(pi=>bump(keluar,pi.product_id,pi.qty_input,pi.kg_input));
+      (data||[]).filter(pi=>!isVoidGhost(pi.baskets)).forEach(pi=>bump(keluar,pi.product_id,pi.qty_input,pi.kg_input));
     })
   );
 
@@ -626,12 +639,12 @@ async function computeSaldoKumulatif(cutoffDate){
   // begitu dikonfirmasi diterima barang dianggap keluar dari perusahaan sama seperti Jual)
   tasks.push(
     fetchAllRows(()=>db.from('basket_movements')
-      .select('qty_pindah,kg_pindah,confirmed_at,baskets!inner(product_id)')
+      .select('qty_pindah,kg_pindah,confirmed_at,baskets!inner(product_id,status,qty_sisa,qty_awal,kg_sisa,kg_awal)')
       .in('ke_lokasi',['SOLD','SELISIH','MUSNAH','BYPRODUCT_DIRECT','CS'])
       .eq('status','CONFIRMED')
       .lte('confirmed_at', toBound)
     ).then(data=>{
-      (data||[]).forEach(m=>bump(keluar, m.baskets?.product_id, m.qty_pindah, m.kg_pindah));
+      (data||[]).filter(m=>!isVoidGhost(m.baskets)).forEach(m=>bump(keluar, m.baskets?.product_id, m.qty_pindah, m.kg_pindah));
     })
   );
 
@@ -671,11 +684,11 @@ async function computePeriodBreakdown(fromDate, toDate){
   [['PARTING','parting_in'],['BONELESS','boneless_in'],['MARINASI','marinasi_in']].forEach(([tujuan,key])=>{
     tasks.push(
       fetchAllRows(()=>db.from('processing_outputs')
-        .select('product_id,qty_output,kg_output,created_at')
+        .select('product_id,qty_output,kg_output,created_at,baskets!inner(status,qty_sisa,qty_awal,kg_sisa,kg_awal)')
         .eq('tujuan_lokasi', tujuan)
         .gte('created_at', fromBound).lte('created_at', toBound)
       ).then(data=>{
-        (data||[]).forEach(po=>bump(buckets[key],po.product_id,po.qty_output,po.kg_output));
+        (data||[]).filter(po=>!isVoidGhost(po.baskets)).forEach(po=>bump(buckets[key],po.product_id,po.qty_output,po.kg_output));
       })
     );
   });
@@ -697,11 +710,11 @@ async function computePeriodBreakdown(fromDate, toDate){
   [['PARTING','parting_out'],['BONELESS','boneless_out'],['MARINASI','marinasi_out']].forEach(([tipe,key])=>{
     tasks.push(
       fetchAllRows(()=>db.from('processing_inputs')
-        .select('product_id,qty_input,kg_input,created_at,workstations!inner(tipe)')
+        .select('product_id,qty_input,kg_input,created_at,baskets!inner(status,qty_sisa,qty_awal,kg_sisa,kg_awal),workstations!inner(tipe)')
         .eq('workstations.tipe', tipe)
         .gte('created_at', fromBound).lte('created_at', toBound)
       ).then(data=>{
-        (data||[]).forEach(pi=>bump(buckets[key],pi.product_id,pi.qty_input,pi.kg_input));
+        (data||[]).filter(pi=>!isVoidGhost(pi.baskets)).forEach(pi=>bump(buckets[key],pi.product_id,pi.qty_input,pi.kg_input));
       })
     );
   });
@@ -712,11 +725,11 @@ async function computePeriodBreakdown(fromDate, toDate){
   // barang belum keluar dari perusahaan — lihat catatan di footer laporan.)
   tasks.push(
     fetchAllRows(()=>db.from('basket_movements')
-      .select('qty_pindah,kg_pindah,confirmed_at,baskets!inner(product_id)')
+      .select('qty_pindah,kg_pindah,confirmed_at,baskets!inner(product_id,status,qty_sisa,qty_awal,kg_sisa,kg_awal)')
       .eq('ke_lokasi','BLASTING').eq('status','CONFIRMED')
       .gte('confirmed_at', fromBound).lte('confirmed_at', toBound)
     ).then(data=>{
-      (data||[]).forEach(m=>bump(buckets.blasting_out, m.baskets?.product_id, m.qty_pindah, m.kg_pindah));
+      (data||[]).filter(m=>!isVoidGhost(m.baskets)).forEach(m=>bump(buckets.blasting_out, m.baskets?.product_id, m.qty_pindah, m.kg_pindah));
     })
   );
 
@@ -725,11 +738,11 @@ async function computePeriodBreakdown(fromDate, toDate){
   // computeSaldoKumulatif().
   tasks.push(
     fetchAllRows(()=>db.from('basket_movements')
-      .select('qty_pindah,kg_pindah,confirmed_at,baskets!inner(product_id)')
+      .select('qty_pindah,kg_pindah,confirmed_at,baskets!inner(product_id,status,qty_sisa,qty_awal,kg_sisa,kg_awal)')
       .eq('dari_lokasi','RETUR').eq('ke_lokasi','CHILLER').eq('status','CONFIRMED')
       .gte('confirmed_at', fromBound).lte('confirmed_at', toBound)
     ).then(data=>{
-      (data||[]).forEach(m=>bump(buckets.retur_in, m.baskets?.product_id, m.qty_pindah, m.kg_pindah));
+      (data||[]).filter(m=>!isVoidGhost(m.baskets)).forEach(m=>bump(buckets.retur_in, m.baskets?.product_id, m.qty_pindah, m.kg_pindah));
     })
   );
 
@@ -759,22 +772,22 @@ async function computePeriodBreakdown(fromDate, toDate){
   // Keluar: Jual (Loading -> Sold, sudah net dari retur/selisih dock)
   tasks.push(
     fetchAllRows(()=>db.from('basket_movements')
-      .select('qty_pindah,kg_pindah,confirmed_at,baskets!inner(product_id)')
+      .select('qty_pindah,kg_pindah,confirmed_at,baskets!inner(product_id,status,qty_sisa,qty_awal,kg_sisa,kg_awal)')
       .eq('dari_lokasi','LOADING').eq('ke_lokasi','SOLD').eq('status','CONFIRMED')
       .gte('confirmed_at', fromBound).lte('confirmed_at', toBound)
     ).then(data=>{
-      (data||[]).forEach(m=>bump(buckets.jual_out, m.baskets?.product_id, m.qty_pindah, m.kg_pindah));
+      (data||[]).filter(m=>!isVoidGhost(m.baskets)).forEach(m=>bump(buckets.jual_out, m.baskets?.product_id, m.qty_pindah, m.kg_pindah));
     })
   );
 
   // Keluar: Selisih (Chiller -> Selisih, write-off yang sudah disetujui Supervisor)
   tasks.push(
     fetchAllRows(()=>db.from('basket_movements')
-      .select('qty_pindah,kg_pindah,confirmed_at,baskets!inner(product_id)')
+      .select('qty_pindah,kg_pindah,confirmed_at,baskets!inner(product_id,status,qty_sisa,qty_awal,kg_sisa,kg_awal)')
       .eq('dari_lokasi','CHILLER').eq('ke_lokasi','SELISIH').eq('status','CONFIRMED')
       .gte('confirmed_at', fromBound).lte('confirmed_at', toBound)
     ).then(data=>{
-      (data||[]).forEach(m=>bump(buckets.selisih_out, m.baskets?.product_id, m.qty_pindah, m.kg_pindah));
+      (data||[]).filter(m=>!isVoidGhost(m.baskets)).forEach(m=>bump(buckets.selisih_out, m.baskets?.product_id, m.qty_pindah, m.kg_pindah));
     })
   );
 
@@ -783,11 +796,11 @@ async function computePeriodBreakdown(fromDate, toDate){
   // dari perusahaan sama seperti Jual/Selisih — TIDAK info-only seperti Blasting.)
   tasks.push(
     fetchAllRows(()=>db.from('basket_movements')
-      .select('qty_pindah,kg_pindah,confirmed_at,baskets!inner(product_id)')
+      .select('qty_pindah,kg_pindah,confirmed_at,baskets!inner(product_id,status,qty_sisa,qty_awal,kg_sisa,kg_awal)')
       .eq('ke_lokasi','CS').eq('status','CONFIRMED')
       .gte('confirmed_at', fromBound).lte('confirmed_at', toBound)
     ).then(data=>{
-      (data||[]).forEach(m=>bump(buckets.cs_out, m.baskets?.product_id, m.qty_pindah, m.kg_pindah));
+      (data||[]).filter(m=>!isVoidGhost(m.baskets)).forEach(m=>bump(buckets.cs_out, m.baskets?.product_id, m.qty_pindah, m.kg_pindah));
     })
   );
 
@@ -829,11 +842,11 @@ async function computeSaldoChiller(cutoffDate){
   // Masuk: SEMUA transfer CONFIRMED ke CHILLER, dari lokasi APA PUN.
   tasks.push(
     fetchAllRows(()=>db.from('basket_movements')
-      .select('qty_pindah,kg_pindah,confirmed_at,baskets!inner(product_id)')
+      .select('qty_pindah,kg_pindah,confirmed_at,baskets!inner(product_id,status,qty_sisa,qty_awal,kg_sisa,kg_awal)')
       .eq('ke_lokasi','CHILLER').eq('status','CONFIRMED')
       .lte('confirmed_at',toBound)
     ).then(data=>{
-      (data||[]).forEach(m=>bump(masuk,m.baskets?.product_id,m.qty_pindah,m.kg_pindah));
+      (data||[]).filter(m=>!isVoidGhost(m.baskets)).forEach(m=>bump(masuk,m.baskets?.product_id,m.qty_pindah,m.kg_pindah));
     })
   );
 
@@ -851,11 +864,11 @@ async function computeSaldoChiller(cutoffDate){
   // Keluar: SEMUA transfer CONFIRMED dari CHILLER, ke lokasi APA PUN.
   tasks.push(
     fetchAllRows(()=>db.from('basket_movements')
-      .select('qty_pindah,kg_pindah,confirmed_at,baskets!inner(product_id)')
+      .select('qty_pindah,kg_pindah,confirmed_at,baskets!inner(product_id,status,qty_sisa,qty_awal,kg_sisa,kg_awal)')
       .eq('dari_lokasi','CHILLER').eq('status','CONFIRMED')
       .lte('confirmed_at',toBound)
     ).then(data=>{
-      (data||[]).forEach(m=>bump(keluar,m.baskets?.product_id,m.qty_pindah,m.kg_pindah));
+      (data||[]).filter(m=>!isVoidGhost(m.baskets)).forEach(m=>bump(keluar,m.baskets?.product_id,m.qty_pindah,m.kg_pindah));
     })
   );
 
@@ -912,11 +925,11 @@ async function computePeriodChiller(fromDate, toDate){
   // ini murni soal kategori tampilan. Lokasi lain tetap lewat MASUK_KEY_MAP seperti biasa.
   tasks.push(
     fetchAllRows(()=>db.from('basket_movements')
-      .select('qty_pindah,kg_pindah,dari_lokasi,confirmed_at,baskets!inner(product_id)')
+      .select('qty_pindah,kg_pindah,dari_lokasi,confirmed_at,baskets!inner(product_id,status,qty_sisa,qty_awal,kg_sisa,kg_awal)')
       .eq('ke_lokasi','CHILLER').eq('status','CONFIRMED')
       .gte('confirmed_at',fromBound).lte('confirmed_at',toBound)
     ).then(data=>{
-      (data||[]).forEach(m=>{
+      (data||[]).filter(m=>!isVoidGhost(m.baskets)).forEach(m=>{
         const pid = m.baskets?.product_id;
         if(m.dari_lokasi === 'LOADING'){
           bump(keluar.jual, pid, -m.qty_pindah, -m.kg_pindah);
@@ -944,11 +957,11 @@ async function computePeriodChiller(fromDate, toDate){
 
   tasks.push(
     fetchAllRows(()=>db.from('basket_movements')
-      .select('qty_pindah,kg_pindah,ke_lokasi,confirmed_at,baskets!inner(product_id)')
+      .select('qty_pindah,kg_pindah,ke_lokasi,confirmed_at,baskets!inner(product_id,status,qty_sisa,qty_awal,kg_sisa,kg_awal)')
       .eq('dari_lokasi','CHILLER').eq('status','CONFIRMED')
       .gte('confirmed_at',fromBound).lte('confirmed_at',toBound)
     ).then(data=>{
-      (data||[]).forEach(m=>{
+      (data||[]).filter(m=>!isVoidGhost(m.baskets)).forEach(m=>{
         const key = KELUAR_KEY_MAP[m.ke_lokasi] || 'lainnya';
         bump(keluar[key], m.baskets?.product_id, m.qty_pindah, m.kg_pindah);
       });
