@@ -376,7 +376,7 @@ a{text-decoration:none}
         </div>
 
         <div class="rpt-note">
-          Catatan: baris bertipe <b>Terjual</b>, <b>Pindah Lokasi</b> (perpindahan fisik biasa, bukan write-off), <b>Menunggu Konfirmasi</b>, dan <b>Ditolak</b> bersifat informasi saja (kolom Masuk/Keluar dikosongkan) karena tidak mengubah Qty Sisa keranjang ini secara langsung di sistem saat ini — beda dengan <b>Konsumsi Produksi</b>, <b>Transfer Keluar (Sebagian)</b>, <b>Alokasi Blasting</b>, <b>Selisih / Musnah</b> (write-off ke lokasi virtual Selisih/Musnah), <b>Stok Awal</b>, dan <b>Koreksi</b> yang benar-benar menambah/mengurangi saldo.
+          Catatan: baris bertipe <b>Terjual</b>, <b>Pindah Lokasi</b> (perpindahan fisik biasa, bukan write-off), <b>Menunggu Konfirmasi</b>, dan <b>Ditolak</b> bersifat informasi saja (kolom Masuk/Keluar dikosongkan) karena tidak mengubah Qty Sisa keranjang ini secara langsung di sistem saat ini — beda dengan <b>Konsumsi Produksi</b>, <b>Transfer Keluar (Sebagian)</b>, <b>Alokasi Blasting</b>, <b>Selisih / Musnah</b> (write-off ke lokasi virtual Selisih/Musnah, dua arah — keluar maupun masuk), <b>Stok Awal</b>, dan <b>Koreksi</b> yang benar-benar menambah/mengurangi saldo.
           Deteksi asal "Split Transfer Masuk" (keranjang hasil kirim sebagian, kode berakhiran "-N") memerlukan Migration 60 sudah dijalankan di Supabase — jika belum, keranjang split akan tampil sebagai "Asal tidak diketahui".
         </div>
       </div>
@@ -730,6 +730,18 @@ async function tampilkanLedger(basket){
       events.push({date:new Date(m.confirmed_at||m.created_at),tipe:'Selisih / Musnah',tipeCls:'tp-keluar',
         ket:`Ditulis-off sebagai ${esc(asalTujuanLabel(m.ke_lokasi))} dari ${esc(asalTujuanLabel(m.dari_lokasi))}${m.catatan?' — '+esc(m.catatan):''}`,
         masuk_qty:0,masuk_kg:0,keluar_qty:Number(m.qty_pindah)||0,keluar_kg:Number(m.kg_pindah)||0,isInfo:false});
+    }else if(m.status==='CONFIRMED'&&WRITE_OFF_LOKASI.has(m.dari_lokasi)){
+      // [FIX 2026-08-30] Kebalikan dari cabang di atas -- kasus "lebih" pada
+      // Selisih Terima Blasting (migration 74, 2-hop: SELISIH->lokasi_sumber
+      // lalu lokasi_sumber->lokasi_tujuan) datang MASUK dari lokasi virtual
+      // Selisih, bukan keluar ke sana. Sebelumnya baris ini lolos ke cabang
+      // "Pindah Lokasi" generik di bawah (dianggap informasi, tidak menambah
+      // saldo) sehingga saldo ledger laporan ini selalu terpaut minus sebesar
+      // selisih-lebihnya dari Qty Sisa database yang sebenarnya sudah benar.
+      // Ditemukan dari kasus BL-260815-0045/BL-260815-0042 (BLP J Chick/Spicy).
+      events.push({date:new Date(m.confirmed_at||m.created_at),tipe:'Selisih / Musnah (Tambah)',tipeCls:'tp-masuk',
+        ket:`Ditambah dari ${esc(asalTujuanLabel(m.dari_lokasi))} sebagai selisih lebih, diteruskan ke ${esc(asalTujuanLabel(m.ke_lokasi))}${m.catatan?' — '+esc(m.catatan):''}`,
+        masuk_qty:Number(m.qty_pindah)||0,masuk_kg:Number(m.kg_pindah)||0,keluar_qty:0,keluar_kg:0,isInfo:false});
     }else if(m.is_partial&&m.status==='CONFIRMED'){
       events.push({date:new Date(m.confirmed_at||m.created_at),tipe:'Transfer Keluar (Sebagian)',tipeCls:'tp-keluar',
         ket:`Kirim sebagian ke ${esc(asalTujuanLabel(m.ke_lokasi))} — dikonfirmasi, menjadi keranjang baru di tujuan`,
