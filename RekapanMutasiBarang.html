@@ -896,6 +896,46 @@ async function computeSaldoChiller(cutoffDate){
     })
   );
 
+  // Koreksi (Koreksi & Approval) pada qty_sisa/kg_sisa basket yang SAAT INI ada di
+  // Chiller — 2026-08-30 FIX: laporan ini dulu murni dari basket_movements, jadi
+  // basket yang qty_sisa/kg_sisa-nya dikoreksi manual/lewat modul Koreksi (mis.
+  // BK-260808-0043, bug konfirmasi_movement() CASE B stale resurrect, migration 95)
+  // tetap kehitung "masuk" dari movement basi yang tidak pernah dibatalkan —
+  // sedangkan Laporan Kartu Stok sudah lebih dulu ikut baca tabel `corrections`,
+  // bikin saldo dua laporan beda (lihat percakapan 2026-08-30). Fix: ikutkan
+  // corrections di sini juga (delta positif -> masuk, delta negatif -> keluar),
+  // pakai record_id basket yg lokasi-nya CHILLER saat ini (sama pendekatan dgn
+  // LaporanKartuStok.html event F).
+  tasks.push(
+    (async()=>{
+      const chillerBaskets = await fetchAllRows(()=>db.from('baskets')
+        .select('id,product_id')
+        .eq('lokasi','CHILLER')
+        .neq('status','VOID'));
+      const basketIds = chillerBaskets.map(b=>b.id);
+      if(!basketIds.length) return;
+      const productByBasket = {};
+      chillerBaskets.forEach(b=>{productByBasket[b.id]=b.product_id});
+      const corr = await fetchAllRows(()=>db.from('corrections')
+        .select('record_id,field_salah,nilai_lama,nilai_baru,reviewed_at')
+        .eq('tabel_terkait','baskets')
+        .eq('status','APPROVED')
+        .in('record_id',basketIds)
+        .in('field_salah',['qty_sisa','kg_sisa'])
+        .lte('reviewed_at',toBound));
+      (corr||[]).forEach(c=>{
+        const lama=parseFloat(c.nilai_lama), baru=parseFloat(c.nilai_baru);
+        const delta=(isNaN(baru)?0:baru)-(isNaN(lama)?0:lama);
+        if(!delta) return;
+        const pid = productByBasket[c.record_id];
+        const isKg = c.field_salah.startsWith('kg');
+        const q = isKg?0:delta, k = isKg?delta:0;
+        if(delta>0) bump(masuk, pid, q, k);
+        else bump(keluar, pid, -q, -k);
+      });
+    })()
+  );
+
   await Promise.all(tasks);
   const saldo = {};
   new Set([...Object.keys(masuk),...Object.keys(keluar)]).forEach(pid=>{
@@ -983,6 +1023,40 @@ async function computePeriodChiller(fromDate, toDate){
     ).then(data=>{
       (data||[]).filter(b=>/^SA-[0-9]{6}-[0-9]{4}$/.test(b.basket_code)).forEach(b=>bump(masuk.saldo_awal,b.product_id,b.qty_awal,b.kg_awal));
     })
+  );
+
+  // Koreksi (Koreksi & Approval) qty_sisa/kg_sisa pada basket yang SAAT INI ada
+  // di Chiller, reviewed_at jatuh di periode ini — 2026-08-30 FIX, lihat catatan
+  // panjang di computeSaldoChiller(). Di-bucket ke Masuk/Keluar:Lainnya (bukan
+  // kolom baru) supaya tidak perlu ubah struktur tabel/export.
+  tasks.push(
+    (async()=>{
+      const chillerBaskets = await fetchAllRows(()=>db.from('baskets')
+        .select('id,product_id')
+        .eq('lokasi','CHILLER')
+        .neq('status','VOID'));
+      const basketIds = chillerBaskets.map(b=>b.id);
+      if(!basketIds.length) return;
+      const productByBasket = {};
+      chillerBaskets.forEach(b=>{productByBasket[b.id]=b.product_id});
+      const corr = await fetchAllRows(()=>db.from('corrections')
+        .select('record_id,field_salah,nilai_lama,nilai_baru,reviewed_at')
+        .eq('tabel_terkait','baskets')
+        .eq('status','APPROVED')
+        .in('record_id',basketIds)
+        .in('field_salah',['qty_sisa','kg_sisa'])
+        .gte('reviewed_at',fromBound).lte('reviewed_at',toBound));
+      (corr||[]).forEach(c=>{
+        const lama=parseFloat(c.nilai_lama), baru=parseFloat(c.nilai_baru);
+        const delta=(isNaN(baru)?0:baru)-(isNaN(lama)?0:lama);
+        if(!delta) return;
+        const pid = productByBasket[c.record_id];
+        const isKg = c.field_salah.startsWith('kg');
+        const q = isKg?0:delta, k = isKg?delta:0;
+        if(delta>0) bump(masuk.lainnya, pid, q, k);
+        else bump(keluar.lainnya, pid, -q, -k);
+      });
+    })()
   );
 
   await Promise.all(tasks);
@@ -1101,7 +1175,7 @@ async function tampilkanRekapChiller(dari, sampai){
   const hint = document.getElementById('filter-hint');
   if(hint)hint.textContent = 'Menampilkan mutasi lantai Chiller saja. Masuk/Keluar dihitung dari SEMUA transfer nyata ke/dari Chiller (termasuk Blasting, dan kolom "Lainnya" utk lokasi asal/tujuan lain) — tidak dikecualikan seperti mode "Semua Lokasi".';
   const noteEl = document.getElementById('rpt-note-text');
-  if(noteEl)noteEl.innerHTML = 'Catatan: mode ini khusus stok Chiller. <b>Jual*</b> = dikirim ke Loading Dock untuk dijual (transfer nyata keluar dari Chiller), <u>sudah net</u> dari barang yang diminta kembali dari Loading Dock ke Chiller (fitur "Minta Kembali ke Chiller" di Chiller.html) pada periode yang sama — mis. kirim 3 lalu kembali 1 tampil sbg 2, bukan konfirmasi sudah laku (beda dari mode "Semua Lokasi" yang baru menghitung Jual saat benar-benar terjual, Loading → Sold). <b>Selisih</b> = sama, sudah dikurangi kalau ada pembatalan/reversal dari Selisih kembali ke Chiller. Kalau retur/pembatalan terjadi di periode BERBEDA dari pengiriman aslinya, kolom Jual/Selisih pada periode retur bisa tampil minus — itu wajar, bukan bug. <b>Blasting</b> di sini IKUT dihitung ke Total Keluar/Saldo Akhir (beda dari mode "Semua Lokasi" yang mengecualikannya) karena barang itu benar-benar keluar dari stok Chiller. <b>CS</b> = dikirim ke CS (Cold Storage eksternal, modul CS.html) dan sudah dikonfirmasi diterima — IKUT dihitung ke Total Keluar/Saldo Akhir karena stok CS tidak dilacak sistem ini. <b>Lainnya</b> = transfer ke/dari lokasi di luar kategori bernama (di luar Loading Dock &amp; Selisih yang sudah di-net-kan ke atas) — kalau kolom ini sering terisi, beri tahu supaya kategorinya bisa ditambah namanya. Koreksi yang sudah disetujui (Koreksi &amp; Approval) belum tercermin di rekap ini.';
+  if(noteEl)noteEl.innerHTML = 'Catatan: mode ini khusus stok Chiller. <b>Jual*</b> = dikirim ke Loading Dock untuk dijual (transfer nyata keluar dari Chiller), <u>sudah net</u> dari barang yang diminta kembali dari Loading Dock ke Chiller (fitur "Minta Kembali ke Chiller" di Chiller.html) pada periode yang sama — mis. kirim 3 lalu kembali 1 tampil sbg 2, bukan konfirmasi sudah laku (beda dari mode "Semua Lokasi" yang baru menghitung Jual saat benar-benar terjual, Loading → Sold). <b>Selisih</b> = sama, sudah dikurangi kalau ada pembatalan/reversal dari Selisih kembali ke Chiller. Kalau retur/pembatalan terjadi di periode BERBEDA dari pengiriman aslinya, kolom Jual/Selisih pada periode retur bisa tampil minus — itu wajar, bukan bug. <b>Blasting</b> di sini IKUT dihitung ke Total Keluar/Saldo Akhir (beda dari mode "Semua Lokasi" yang mengecualikannya) karena barang itu benar-benar keluar dari stok Chiller. <b>CS</b> = dikirim ke CS (Cold Storage eksternal, modul CS.html) dan sudah dikonfirmasi diterima — IKUT dihitung ke Total Keluar/Saldo Akhir karena stok CS tidak dilacak sistem ini. <b>Lainnya</b> = transfer ke/dari lokasi di luar kategori bernama (di luar Loading Dock &amp; Selisih yang sudah di-net-kan ke atas) — kalau kolom ini sering terisi, beri tahu supaya kategorinya bisa ditambah namanya. Koreksi qty_sisa/kg_sisa yang sudah disetujui (Koreksi &amp; Approval) pada basket yang saat ini ada di Chiller ikut dihitung di sini sejak 2026-08-30, dilipat ke kolom Masuk/Keluar: Lainnya (bukan kolom terpisah) — supaya saldo Chiller di laporan ini konsisten dgn Laporan Kartu Stok. Koreksi qty_awal/kg_awal masih belum tercakup.';
 
   const cutoffDate = addDaysISO(dari,-1);
   const [saldoAwalMap, periode] = await Promise.all([

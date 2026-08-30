@@ -79,6 +79,12 @@ a{text-decoration:none}
 .panel-pill{font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;background:#f3f4f6;color:#374151}
 .panel-pill.alert{background:#fee2e2;color:#dc2626}
 .panel-pill.ok{background:#d1fae5;color:#065f46}
+.status-badge{display:inline-block;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:10px;white-space:nowrap}
+.status-badge.st-processed{background:#d1fae5;color:#065f46}
+.status-badge.st-transit{background:#dbeafe;color:#1d4ed8}
+.status-badge.st-mixed{background:#fef3c7;color:#92400e}
+.status-badge.st-gap{background:#fee2e2;color:#dc2626}
+.status-badge.st-wait{background:#f3f4f6;color:#6b7280}
 .panel-body{padding:16px}
 
 .form-row{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
@@ -272,8 +278,8 @@ a{text-decoration:none}
             </div>
           </div>
           <div class="tbl-wrap"><table class="tbl">
-            <thead><tr><th>Barang</th><th>No. Keranjang</th><th class="num">Ek</th><th class="num">Kg</th><th>Sumber</th><th>Tgl Produksi</th><th>Keterangan</th></tr></thead>
-            <tbody id="tbody-pengambilan"><tr><td colspan="7"><div class="empty">Pilih modul, tanggal &amp; klik Tampilkan.</div></td></tr></tbody>
+            <thead><tr><th>Barang</th><th>No. Keranjang</th><th class="num">Ek</th><th class="num">Kg</th><th>Sumber</th><th>Tgl Produksi</th><th>Keterangan</th><th>Status Lanjutan</th></tr></thead>
+            <tbody id="tbody-pengambilan"><tr><td colspan="8"><div class="empty">Pilih modul, tanggal &amp; klik Tampilkan.</div></td></tr></tbody>
           </table></div>
         </div>
 
@@ -332,7 +338,7 @@ a{text-decoration:none}
         </div>
 
         <div class="hint" style="padding:0 4px 12px">
-          Catatan: Pengambilan Produk = keranjang yang benar-benar MASUK ke lantai ini pada tanggal ini (transfer antar-lantai yang sudah dikonfirmasi, ditambah basket baru dari Thawing yang lahir langsung di lantai ini). Sumber = lokasi asal keranjang itu sebelum masuk ke sini (langsung dari produksi karkas ditampilkan sebagai "Karkas"), bukan kategori produksi asal jauhnya. Keterangan = catatan yang ditulis pengirim saat transfer. Baris berwarna merah dengan Ek/Kg negatif = keranjang bahan baku dari Chiller yang sisa tidak terpakai dan dikembalikan ke Chiller pada tanggal yang sama — sudah otomatis dikurangkan dari TOTAL Pengambilan Produk maupun dari kolom "Dari Chiller" di Rekap Barang Masuk. Ini hanya berlaku untuk keranjang yang asalnya memang dari Chiller; keranjang hasil produksi (lahir di lantai ini sendiri) yang dikirim ke Chiller TIDAK dihitung di sini — itu tercatat di Hasil Produk/Rekap Hasil Produksi (kolom "Ke Chiller"). Rekap hanya menampilkan barang yang punya aktivitas pada tanggal ini (bukan daftar tetap semua ukuran). Summary/% Rendemen belum tersedia di laporan ini.
+          Catatan: Pengambilan Produk = keranjang yang benar-benar MASUK ke lantai ini pada tanggal ini (transfer antar-lantai yang sudah dikonfirmasi, ditambah basket baru dari Thawing yang lahir langsung di lantai ini). Sumber = lokasi asal keranjang itu sebelum masuk ke sini (langsung dari produksi karkas ditampilkan sebagai "Karkas"), bukan kategori produksi asal jauhnya. Keterangan = catatan yang ditulis pengirim saat transfer. Baris berwarna merah dengan Ek/Kg negatif = keranjang bahan baku dari Chiller yang sisa tidak terpakai dan dikembalikan ke Chiller pada tanggal yang sama — sudah otomatis dikurangkan dari TOTAL Pengambilan Produk maupun dari kolom "Dari Chiller" di Rekap Barang Masuk. Ini hanya berlaku untuk keranjang yang asalnya memang dari Chiller; keranjang hasil produksi (lahir di lantai ini sendiri) yang dikirim ke Chiller TIDAK dihitung di sini — itu tercatat di Hasil Produk/Rekap Hasil Produksi (kolom "Ke Chiller"). Rekap hanya menampilkan barang yang punya aktivitas pada tanggal ini (bukan daftar tetap semua ukuran). Summary/% Rendemen belum tersedia di laporan ini. Status Lanjutan (kolom baru di Pengambilan Produk) menandai apa yang terjadi pada keranjang itu setelah masuk ke lantai ini: "Diproses di sini" (jadi bahan WO di lantai ini), "Diteruskan → ..." (dipindah lagi ke lantai lain tanpa pernah diproses di sini), "Sebagian diproses, sebagian diteruskan" (dipecah dua-duanya), atau "selisih ... belum jelas ⚠️" (sebagian tidak ketemu jejaknya di mana pun dan basketnya sudah tidak ada yang aktif — perlu ditelusuri manual, ini indikasi kemungkinan salah catat).
         </div>
 
       </div>
@@ -557,7 +563,8 @@ async function fetchPengambilan(fromBound,toBound){
       basketId: r.basket_id,
       basketCode: r.baskets?.basket_code || '—',
       tglProduksi: r.baskets?.tanggal_produksi || null,
-      keterangan: r.catatan || ''
+      keterangan: r.catatan || '',
+      confirmedAt: r.confirmed_at
     };
   });
 
@@ -569,7 +576,8 @@ async function fetchPengambilan(fromBound,toBound){
     basketId: r.basket_id,
     basketCode: r.baskets?.basket_code || '—',
     tglProduksi: r.baskets?.tanggal_produksi || null,
-    keterangan: ''
+    keterangan: '',
+    confirmedAt: r.created_at
   }));
 
   // Peta basket_id -> kategori Sumber asalnya, dipakai supaya baris pengembalian
@@ -627,10 +635,121 @@ async function fetchPengambilan(fromBound,toBound){
       basketId: r.basket_id,
       basketCode: r.baskets?.basket_code || '—',
       tglProduksi: r.baskets?.tanggal_produksi || null,
-      keterangan: '↩️ Balik ke Chiller' + (r.catatan ? ' — '+r.catatan : '')
+      keterangan: '↩️ Balik ke Chiller' + (r.catatan ? ' — '+r.catatan : ''),
+      statusLabel: 'Balik ke Chiller (sisa tidak terpakai)',
+      statusClass: 'st-transit'
     }));
 
+  // Status Lanjutan: setelah keranjang ini tiba di lantai ini, apa yang terjadi
+  // berikutnya — diproses di sini, diteruskan lagi ke lantai lain tanpa
+  // diproses, atau belum ada aktivitas. Gagal diam-diam (tidak melempar error)
+  // supaya laporan tetap tampil normal walau kolom ini gagal dihitung.
+  await annotateStatusLanjutan([...fromMov, ...fromThaw], fromBound, toBound);
+
   return [...fromMov, ...fromThaw, ...fromReturn];
+}
+
+// ── STATUS LANJUTAN (Pengambilan Produk) ──
+// Setelah keranjang ini dikonfirmasi masuk ke lantai ini, apa yang terjadi
+// berikutnya secara fisik: diproses di sini (ada baris processing_inputs di
+// WO lantai ini — termasuk WO MULTI-tahap yang salah satu tahapnya di lantai
+// ini, dicek lewat work_order_stages.process_type), diteruskan lagi ke lantai
+// lain TANPA pernah diproses (ada basket_movements dari_lokasi=lantai ini),
+// atau belum ada aktivitas sama sekali. Dicocokkan lewat KODE keranjang, bukan
+// basket_id — karena basket_id di baris movement "masuk" untuk pengiriman
+// SEBAGIAN (is_partial=true) tetap basket_id ASAL sebelum split (lihat
+// migration 60), sedangkan basket fisik yang benar-benar duduk di lantai ini
+// adalah basket baru berkode "<asal>-N". codeInFamily() mencocokkan kode itu
+// sendiri ATAU kode turunannya (boleh berlapis, mis. "-2-1").
+//
+// Kalau total yang ketemu (diproses + diteruskan) kurang dari qty yang masuk,
+// itu artinya ada bagian yang belum jelas kemana perginya. Selama basket
+// (atau turunannya) masih AKTIF & bersisa di lantai ini, itu wajar (masih
+// menunggu) — tapi kalau tidak ada lagi yang AKTIF, berarti ada bagian yang
+// hilang dari pencatatan (kasus nyata: sisa keranjang sayap 15 Agustus 2026
+// yang salah tercatat sebagai bahan WO lain, ketahuan dari selisih laporan
+// Blasting) — baris itu ditandai "selisih belum jelas" supaya admin langsung
+// lihat tanpa harus telusuri manual seperti kejadian itu.
+function codeInFamily(rootCode, code){
+  if(!rootCode || !code) return false;
+  return code === rootCode || code.startsWith(rootCode + '-');
+}
+
+async function annotateStatusLanjutan(rows, fromBound, toBound){
+  const tipe = currentTipe;
+  const targets = rows.filter(r => r.basketCode && r.basketCode !== '—');
+  if(!targets.length) return;
+
+  try{
+    // Jendela pencarian aktivitas lanjutan dibatasi 14 hari setelah tanggal
+    // laporan — cukup luas untuk kasus normal, tapi tidak menyisir seluruh
+    // riwayat sejak awal sistem.
+    const windowEnd = new Date(new Date(toBound).getTime() + 14*24*3600*1000).toISOString();
+
+    const [stagesRes, inputsRes, movRes, openRes] = await Promise.all([
+      db.from('work_order_stages').select('wo_id').eq('process_type', tipe),
+      db.from('processing_inputs')
+        .select('qty_input,created_at,order_id,processing_orders!inner(tipe),baskets!inner(basket_code)')
+        .gte('created_at', fromBound).lte('created_at', windowEnd),
+      db.from('basket_movements')
+        .select('qty_pindah,ke_lokasi,confirmed_at,baskets!inner(basket_code)')
+        .eq('dari_lokasi', tipe).eq('status','CONFIRMED')
+        .gte('confirmed_at', fromBound).lte('confirmed_at', windowEnd),
+      db.from('baskets').select('basket_code,qty_sisa,status').eq('lokasi', tipe).eq('status','AKTIF').gt('qty_sisa', 0)
+    ]);
+    if(stagesRes.error||inputsRes.error||movRes.error||openRes.error){
+      console.error('annotateStatusLanjutan: query gagal, kolom Status Lanjutan dilewati', stagesRes.error||inputsRes.error||movRes.error||openRes.error);
+      return;
+    }
+
+    const multiWoIds = new Set((stagesRes.data||[]).map(w=>w.wo_id));
+    const diprosesRows = (inputsRes.data||[]).filter(pi =>
+      pi.processing_orders?.tipe === tipe ||
+      (pi.processing_orders?.tipe === 'MULTI' && multiWoIds.has(pi.order_id))
+    );
+    const keluarRows = movRes.data||[];
+    const openBaskets = openRes.data||[];
+
+    targets.forEach(r=>{
+      const arrivedAt = r.confirmedAt ? new Date(r.confirmedAt) : null;
+      const diproses = diprosesRows.filter(pi =>
+        codeInFamily(r.basketCode, pi.baskets?.basket_code) &&
+        (!arrivedAt || new Date(pi.created_at) >= arrivedAt)
+      );
+      const diteruskan = keluarRows.filter(bm =>
+        codeInFamily(r.basketCode, bm.baskets?.basket_code) &&
+        (!arrivedAt || new Date(bm.confirmed_at) >= arrivedAt)
+      );
+      const qtyDiproses = diproses.reduce((s,x)=>s+(Number(x.qty_input)||0),0);
+      const qtyDiteruskan = diteruskan.reduce((s,x)=>s+(Number(x.qty_pindah)||0),0);
+      const gap = Math.round((r.ek - qtyDiproses - qtyDiteruskan)*100)/100;
+      const stillOpen = gap>0.01 && openBaskets.some(b=>codeInFamily(r.basketCode, b.basket_code));
+      const tujuanUtama = diteruskan[0] ? sourceLabel(normalizeCat(diteruskan[0].ke_lokasi)) : null;
+      const bagian = [diproses.length?'diproses':null, diteruskan.length?('diteruskan → '+tujuanUtama):null].filter(Boolean).join(', ');
+
+      if(!diproses.length && !diteruskan.length){
+        r.statusLabel = 'Belum ada aktivitas lanjutan';
+        r.statusClass = 'st-wait';
+      } else if(gap>0.01 && stillOpen){
+        r.statusLabel = (bagian?'Sebagian '+bagian+', ':'')+'sisa '+fmtKgNum(gap)+' masih di lantai ini';
+        r.statusClass = 'st-mixed';
+      } else if(gap>0.01 && !stillOpen){
+        r.statusLabel = (bagian?bagian+' — ':'')+'selisih '+fmtKgNum(gap)+' belum jelas ⚠️';
+        r.statusClass = 'st-gap';
+      } else if(diproses.length && diteruskan.length){
+        r.statusLabel = 'Sebagian diproses, sebagian diteruskan → '+tujuanUtama;
+        r.statusClass = 'st-mixed';
+      } else if(diteruskan.length){
+        r.statusLabel = 'Diteruskan → '+tujuanUtama+' (tanpa diproses di sini)';
+        r.statusClass = 'st-transit';
+      } else {
+        r.statusLabel = 'Diproses di sini';
+        r.statusClass = 'st-processed';
+      }
+    });
+  }catch(e){
+    console.error('annotateStatusLanjutan error, kolom Status Lanjutan dilewati:', e);
+  }
 }
 
 // processing_outputs.tujuan_lokasi selalu diisi nama lantai ini sendiri saat basket
@@ -757,7 +876,7 @@ async function fetchReject(fromBound,toBound){
 function renderPengambilan(rows){
   const tb = document.getElementById('tbody-pengambilan');
   document.getElementById('pill-pengambilan').textContent = rows.length + ' baris';
-  if(!rows.length){ tb.innerHTML='<tr><td colspan="7"><div class="empty">Belum ada keranjang masuk pada tanggal ini.</div></td></tr>'; return; }
+  if(!rows.length){ tb.innerHTML='<tr><td colspan="8"><div class="empty">Belum ada keranjang masuk pada tanggal ini.</div></td></tr>'; return; }
   let totEk=0, totKg=0;
   tb.innerHTML = rows.map(r=>{
     totEk+=r.ek; totKg+=r.kg;
@@ -774,8 +893,9 @@ function renderPengambilan(rows){
       '<td>'+esc(sourceLabel(r.cat))+'</td>'+
       '<td>'+(r.tglProduksi?fmtDate(r.tglProduksi):'—')+'</td>'+
       '<td>'+(r.keterangan?esc(r.keterangan):'<span style="color:#9ca3af;font-style:italic">—</span>')+'</td>'+
+      '<td>'+(r.statusLabel?('<span class="status-badge '+(r.statusClass||'st-wait')+'">'+esc(r.statusLabel)+'</span>'):'—')+'</td>'+
     '</tr>';
-  }).join('') + '<tr class="tot-row"><td>TOTAL</td><td></td><td class="num">'+fmt(totEk)+'</td><td class="num">'+fmtKgNum(totKg)+'</td><td colspan="3"></td></tr>';
+  }).join('') + '<tr class="tot-row"><td>TOTAL</td><td></td><td class="num">'+fmt(totEk)+'</td><td class="num">'+fmtKgNum(totKg)+'</td><td colspan="4"></td></tr>';
 }
 
 function renderHasil(rows){
@@ -933,8 +1053,8 @@ function exportXLSX(headers, rows, sheetName, filename){
 function exportPengambilanExcel(){
   if(!lastData){ showToast('Tampilkan laporan dulu.'); return; }
   const label = MODULES[lastData.tipe].label;
-  const rows = lastData.pengambilan.map(r=>[r.barang, r.basketCode, r.ek, r.kg, sourceLabel(r.cat), r.tglProduksi?fmtDate(r.tglProduksi):'', r.keterangan||'']);
-  exportXLSX(['Barang','No. Keranjang','Ek','Kg','Sumber','Tgl Produksi','Keterangan'], rows, 'Pengambilan Produk', `${label}_PengambilanProduk_${lastData.tanggal}.xlsx`);
+  const rows = lastData.pengambilan.map(r=>[r.barang, r.basketCode, r.ek, r.kg, sourceLabel(r.cat), r.tglProduksi?fmtDate(r.tglProduksi):'', r.keterangan||'', r.statusLabel||'']);
+  exportXLSX(['Barang','No. Keranjang','Ek','Kg','Sumber','Tgl Produksi','Keterangan','Status Lanjutan'], rows, 'Pengambilan Produk', `${label}_PengambilanProduk_${lastData.tanggal}.xlsx`);
 }
 
 function exportHasilExcel(){
