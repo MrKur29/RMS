@@ -338,7 +338,7 @@ a{text-decoration:none}
         </div>
 
         <div class="hint" style="padding:0 4px 12px">
-          Catatan: Pengambilan Produk = keranjang yang benar-benar MASUK ke lantai ini pada tanggal ini (transfer antar-lantai yang sudah dikonfirmasi, ditambah basket baru dari Thawing yang lahir langsung di lantai ini). Sumber = lokasi asal keranjang itu sebelum masuk ke sini (langsung dari produksi karkas ditampilkan sebagai "Karkas"), bukan kategori produksi asal jauhnya. Keterangan = catatan yang ditulis pengirim saat transfer. Baris berwarna merah dengan Ek/Kg negatif = keranjang bahan baku dari Chiller yang sisa tidak terpakai dan dikembalikan ke Chiller pada tanggal yang sama — sudah otomatis dikurangkan dari TOTAL Pengambilan Produk maupun dari kolom "Dari Chiller" di Rekap Barang Masuk. Ini hanya berlaku untuk keranjang yang asalnya memang dari Chiller; keranjang hasil produksi (lahir di lantai ini sendiri) yang dikirim ke Chiller TIDAK dihitung di sini — itu tercatat di Hasil Produk/Rekap Hasil Produksi (kolom "Ke Chiller"). Rekap hanya menampilkan barang yang punya aktivitas pada tanggal ini (bukan daftar tetap semua ukuran). Summary/% Rendemen belum tersedia di laporan ini. Status Lanjutan (kolom baru di Pengambilan Produk) menandai apa yang terjadi pada keranjang itu setelah masuk ke lantai ini: "Diproses di sini" (jadi bahan WO di lantai ini), "Diteruskan → ..." (dipindah lagi ke lantai lain tanpa pernah diproses di sini), "Sebagian diproses, sebagian diteruskan" (dipecah dua-duanya), atau "selisih ... belum jelas ⚠️" (sebagian tidak ketemu jejaknya di mana pun dan basketnya sudah tidak ada yang aktif — perlu ditelusuri manual, ini indikasi kemungkinan salah catat).
+          Catatan: Pengambilan Produk = keranjang yang benar-benar MASUK ke lantai ini pada tanggal ini (transfer antar-lantai yang sudah dikonfirmasi, ditambah basket baru dari Thawing yang lahir langsung di lantai ini). Sumber = lokasi asal keranjang itu sebelum masuk ke sini (langsung dari produksi karkas ditampilkan sebagai "Karkas"), bukan kategori produksi asal jauhnya. Keterangan = catatan yang ditulis pengirim saat transfer. Baris berwarna merah dengan Ek/Kg negatif = keranjang bahan baku dari Chiller yang sisa tidak terpakai dan dikembalikan ke Chiller pada tanggal yang sama — sudah otomatis dikurangkan dari TOTAL Pengambilan Produk maupun dari kolom "Dari Chiller" di Rekap Barang Masuk. Ini hanya berlaku untuk keranjang yang asalnya memang dari Chiller dan dikembalikan lagi ke Chiller; keranjang hasil produksi (lahir di lantai ini sendiri) yang dikirim ke lantai lain TIDAK dihitung di sini — itu tercatat di Hasil Produk/Rekap Hasil Produksi (kolom "Ke ..."). Keranjang yang asalnya BUKAN dari Chiller (mis. dari Karkas/Boneless/Thawing) tapi keluar lagi hari yang sama TANPA pernah diproses di sini (numpang lewat) TETAP dihitung penuh di Pengambilan Produk (tidak dikurangkan) — tapi juga otomatis muncul di Hasil Produk/Rekap Hasil Produksi sebagai baris "Ke <tujuan>" berwarna amber berlabel "↪️ Passthrough", supaya kelihatan bahwa barang itu sebenarnya tidak diproses di sini meski sempat tercatat masuk. Rekap hanya menampilkan barang yang punya aktivitas pada tanggal ini (bukan daftar tetap semua ukuran). Summary/% Rendemen belum tersedia di laporan ini. Status Lanjutan (kolom baru di Pengambilan Produk) menandai apa yang terjadi pada keranjang itu setelah masuk ke lantai ini: "Diproses di sini" (jadi bahan WO di lantai ini), "Diteruskan → ..." (dipindah lagi ke lantai lain tanpa pernah diproses di sini), "Sebagian diproses, sebagian diteruskan" (dipecah dua-duanya), atau "selisih ... belum jelas ⚠️" (sebagian tidak ketemu jejaknya di mana pun dan basketnya sudah tidak ada yang aktif — perlu ditelusuri manual, ini indikasi kemungkinan salah catat).
         </div>
 
       </div>
@@ -476,11 +476,17 @@ async function tampilkanLaporan(){
   });
 
   try{
-    const [pengambilan, hasil, reject] = await Promise.all([
+    const [pengambilanRes, hasilProduksi, reject] = await Promise.all([
       fetchPengambilan(fromBound,toBound),
       fetchHasil(fromBound,toBound,tanggal),
       fetchReject(fromBound,toBound)
     ]);
+
+    const pengambilan = pengambilanRes.rows;
+    // Gabungkan hasil produksi asli (WO/byproduct) dengan keranjang "passthrough"
+    // (masuk hari ini, keluar lagi tanpa diproses — lihat fetchPengambilan()) supaya
+    // Hasil Produk & Rekap Hasil Produksi ikut menghitung "Ke <tujuan>"-nya juga.
+    const hasil = [...hasilProduksi, ...pengambilanRes.passthrough];
 
     lastData = { tanggal, tipe: currentTipe, pengambilan, hasil, reject };
 
@@ -524,34 +530,49 @@ async function fetchPengambilan(fromBound,toBound){
     .lte('created_at', toBound)
     .order('created_at');
 
-  // C) Keranjang sisa yang DIKEMBALIKAN ke Chiller (basket_movements.dari_lokasi =
-  //    lantai ini, ke_lokasi = CHILLER, CONFIRMED) — alur "return sebagian" di
-  //    Migration 12 (basket dikirim penuh ke lantai ini, lalu sisa yang tidak
-  //    terpakai dikirim balik). Menurut aturan operasional, keranjang sisa selalu
-  //    dikembalikan di HARI YANG SAMA (tidak pernah menginap semalam), jadi cukup
-  //    dicocokkan dalam rentang tanggal yang sama dengan A) lewat basket_id.
-  const returnQ = db.from('basket_movements')
+  // C) Keranjang yang KELUAR LAGI dari lantai ini (basket_movements.dari_lokasi =
+  //    lantai ini, status CONFIRMED) — mencakup DUA kejadian berbeda yang harus
+  //    dibedakan di bawah:
+  //      (i)  Sisa yang DIKEMBALIKAN ke Chiller, dari basket yang asalnya memang
+  //           dari Chiller — alur "return sebagian" Migration 12. Tetap dinetkan
+  //           langsung dari Pengambilan Produk (baris merah), seperti sebelumnya.
+  //      (ii) Keranjang yang DITERUSKAN ke lokasi manapun (termasuk Chiller)
+  //           TANPA pernah diproses di sini, padahal asalnya BUKAN Chiller (mis.
+  //           dari Karkas/Boneless/Thawing) — lihat 2026-09-03, kasus AU 0.9
+  //           BK-260824-0052 (lahir di Karkas → transit lewat Parting → balik ke
+  //           Chiller → dialihkan ke Loading → terjual, tanpa pernah masuk
+  //           processing_inputs). Dulu kejadian ini SAMA SEKALI tidak tercatat
+  //           di manapun (tidak dinetkan di Pengambilan karena sumbernya bukan
+  //           Chiller, dan tidak muncul di Hasil Produk karena tidak lewat
+  //           processing_outputs) — sekarang ditangani sebagai "passthrough":
+  //           tetap dihitung penuh sebagai Pengambilan Produk (Dari Karkas dst,
+  //           TIDAK dinetkan di sini), TAPI juga dimunculkan di Hasil Produk /
+  //           Rekap Hasil Produksi sebagai baris "Ke <tujuan>" bertanda khusus,
+  //           supaya hitungan keluar tetap merefleksikan realita fisiknya.
+  //    Menurut aturan operasional, keranjang sisa/transit selalu keluar lagi di
+  //    HARI YANG SAMA (tidak pernah menginap semalam), jadi cukup dicocokkan
+  //    dalam rentang tanggal yang sama dengan A) lewat basket_id/kode.
+  const keluarQ = db.from('basket_movements')
     .select(`
-      id, basket_id, qty_pindah, kg_pindah, catatan, confirmed_at,
+      id, basket_id, qty_pindah, kg_pindah, ke_lokasi, catatan, confirmed_at,
       baskets ( basket_code, basket_type, tanggal_produksi, status, product_master ( nama_produk, product_code ) )
     `)
     .eq('dari_lokasi', dest)
-    .eq('ke_lokasi', 'CHILLER')
     .eq('status', 'CONFIRMED')
     .gte('confirmed_at', fromBound)
     .lte('confirmed_at', toBound)
     .order('confirmed_at');
 
-  const [movRes, thawRes, returnRes] = await Promise.all([movQ, thawQ, returnQ]);
+  const [movRes, thawRes, keluarRes] = await Promise.all([movQ, thawQ, keluarQ]);
   if(movRes.error) throw movRes.error;
   if(thawRes.error) throw thawRes.error;
-  if(returnRes.error) throw returnRes.error;
+  if(keluarRes.error) throw keluarRes.error;
 
   // Keranjang VOID (baskets.status = 'VOID', sumber kebenaran — Migration 67)
   // dikeluarkan sepenuhnya, konsisten dengan fetchHasil() di bawah.
   const movData    = (movRes.data   ||[]).filter(r => r.baskets?.status !== 'VOID');
   const thawData   = (thawRes.data  ||[]).filter(r => r.baskets?.status !== 'VOID');
-  const returnData = (returnRes.data||[]).filter(r => r.baskets?.status !== 'VOID');
+  const keluarData = (keluarRes.data||[]).filter(r => r.baskets?.status !== 'VOID');
 
   const fromMov = movData.map(r=>{
     const rawCat = r.dari_lokasi || r.baskets?.basket_type || 'LAINNYA';
@@ -580,17 +601,19 @@ async function fetchPengambilan(fromBound,toBound){
     confirmedAt: r.created_at
   }));
 
-  // Peta basket_id -> kategori Sumber asalnya, dipakai supaya baris pengembalian
-  // (di bawah) HANYA dianggap "sisa balik" kalau basket itu memang tercatat masuk
-  // dari CHILLER (raw material asli). Kalau basket_id-nya tidak match ke manapun
-  // di daftar Pengambilan (fromMov/fromThaw), berarti itu keranjang HASIL PRODUKSI
-  // yang baru lahir di modul ini sendiri (via processing_outputs / byproduct
-  // session) lalu dikirim ke Chiller sebagai tujuan biasa — itu domainnya Hasil
-  // Produk/Rekap Hasil Produksi (kolom "Ke Chiller" di sana), BUKAN pengurang
-  // Pengambilan Produk. Begitu juga kalau basket itu match tapi sumber aslinya
-  // BUKAN Chiller (mis. masuk dari Parting/Boneless) — tetap tidak dinetkan di
-  // sini, sesuai keputusan user: hanya barang yang benar dari Chiller yang boleh
-  // dianggap minus.
+  // Peta basket_id -> kategori Sumber asalnya, dipakai di bawah untuk membedakan
+  // TIGA kemungkinan buat tiap baris keluar (keluarData): (1) basket_id tidak
+  // match ke manapun di daftar Pengambilan (fromMov/fromThaw) → berarti itu
+  // keranjang HASIL PRODUKSI yang baru lahir di modul ini sendiri (via
+  // processing_outputs/byproduct session) yang dikirim keluar sebagai tujuan
+  // biasa — domainnya Hasil Produk/Rekap Hasil Produksi (sudah ditangani
+  // fetchHasil()), dilewati di sini; (2) match, asalnya CHILLER, dan baliknya
+  // juga ke CHILLER → dinetkan sebagai "sisa balik" langsung di Pengambilan
+  // Produk (fromReturn, tidak berubah dari sebelumnya); (3) match tapi bukan
+  // kombinasi CHILLER↔CHILLER (asal Karkas/Boneless/Thawing, atau baliknya ke
+  // lokasi selain Chiller) → "passthrough": TIDAK dinetkan di Pengambilan,
+  // tapi dimunculkan di Hasil Produk/Rekap Hasil Produksi (kolom "Ke <tujuan>")
+  // bertanda khusus — lihat blok passthroughOut di bawah.
   //
   // FIX 2026-08-27 (BK-260811-0264-1 hilang dari Rekap Barang Masuk): untuk
   // pengiriman SEBAGIAN (is_partial=true), basket_movements.basket_id baris
@@ -622,23 +645,54 @@ async function fetchPengambilan(fromBound,toBound){
     return undefined;
   }
 
-  const fromReturn = returnData
-    .filter(r => r.basket_id && rootCat(r.basket_id, r.baskets?.basket_code) === 'CHILLER')
-    .map(r=>({
-      barang: r.baskets?.product_master?.nama_produk || '—',
-      // "|| 0" kedua di sini bukan redundan: -(0) di JS menghasilkan -0, yang kalau
-      // langsung dilempar ke toLocaleString() akan tercetak sebagai "-0" (kosmetik
-      // jelek). -0 falsy, jadi "-0 || 0" menormalkannya balik ke 0 biasa.
-      ek: (-(Number(r.qty_pindah)||0)) || 0,
-      kg: (-(Number(r.kg_pindah)||0)) || 0,
-      cat: 'CHILLER',
-      basketId: r.basket_id,
-      basketCode: r.baskets?.basket_code || '—',
-      tglProduksi: r.baskets?.tanggal_produksi || null,
-      keterangan: '↩️ Balik ke Chiller' + (r.catatan ? ' — '+r.catatan : ''),
-      statusLabel: 'Balik ke Chiller (sisa tidak terpakai)',
-      statusClass: 'st-transit'
-    }));
+  // Pisahkan setiap keranjang KELUAR jadi salah satu dari dua kasus (lihat komentar
+  // di query C di atas): (i) balik ke Chiller dari basket yang memang asalnya Chiller
+  // → fromReturn (dinetkan di Pengambilan, seperti sebelumnya); (ii) selain itu, kalau
+  // basket-nya memang tercatat masuk hari ini (rootCat ketemu) → passthroughOut
+  // (ditampilkan sebagai "Ke <tujuan>" di Hasil Produk, bertanda khusus). Kalau rootCat
+  // tidak ketemu sama sekali, berarti ini keranjang HASIL PRODUKSI asli (lahir di sini
+  // sendiri via processing_outputs/byproduct session) yang dikirim keluar sebagai
+  // tujuan biasa — sudah ditangani fetchHasil(), dilewati di sini.
+  const fromReturn = [];
+  const passthroughOut = [];
+  keluarData.forEach(r => {
+    if(!r.basket_id) return;
+    const origCat = rootCat(r.basket_id, r.baskets?.basket_code);
+    if(origCat === undefined) return;
+    const qty = Number(r.qty_pindah)||0;
+    const kg  = Number(r.kg_pindah)||0;
+    if(origCat === 'CHILLER' && r.ke_lokasi === 'CHILLER'){
+      fromReturn.push({
+        barang: r.baskets?.product_master?.nama_produk || '—',
+        // "|| 0" kedua di sini bukan redundan: -(0) di JS menghasilkan -0, yang kalau
+        // langsung dilempar ke toLocaleString() akan tercetak sebagai "-0" (kosmetik
+        // jelek). -0 falsy, jadi "-0 || 0" menormalkannya balik ke 0 biasa.
+        ek: (-qty) || 0,
+        kg: (-kg) || 0,
+        cat: 'CHILLER',
+        basketId: r.basket_id,
+        basketCode: r.baskets?.basket_code || '—',
+        tglProduksi: r.baskets?.tanggal_produksi || null,
+        keterangan: '↩️ Balik ke Chiller' + (r.catatan ? ' — '+r.catatan : ''),
+        statusLabel: 'Balik ke Chiller (sisa tidak terpakai)',
+        statusClass: 'st-transit'
+      });
+    } else {
+      // Passthrough (lihat 2026-09-03, kasus AU 0.9 BK-260824-0052): keranjang yang
+      // tiba hari ini (dari sumber apapun) lalu keluar lagi hari ini ke lokasi
+      // manapun tanpa pernah diproses di sini. TIDAK dinetkan dari Pengambilan
+      // (tetap tampil penuh sebagai "Dari <sumber>") — malah dimunculkan di Hasil
+      // Produk / Rekap Hasil Produksi sebagai baris "Ke <tujuan>" bertanda khusus,
+      // supaya hitungan keluar tidak diam-diam kehilangan kejadian ini.
+      passthroughOut.push({
+        barang: r.baskets?.product_master?.nama_produk || '—',
+        qty, kg,
+        tujuan: r.ke_lokasi,
+        keterangan: `↪️ Diteruskan tanpa diproses (asal: ${sourceLabel(origCat)})` + (r.catatan ? ' — '+r.catatan : ''),
+        isPassthrough: true
+      });
+    }
+  });
 
   // Status Lanjutan: setelah keranjang ini tiba di lantai ini, apa yang terjadi
   // berikutnya — diproses di sini, diteruskan lagi ke lantai lain tanpa
@@ -646,7 +700,7 @@ async function fetchPengambilan(fromBound,toBound){
   // supaya laporan tetap tampil normal walau kolom ini gagal dihitung.
   await annotateStatusLanjutan([...fromMov, ...fromThaw], fromBound, toBound);
 
-  return [...fromMov, ...fromThaw, ...fromReturn];
+  return { rows: [...fromMov, ...fromThaw, ...fromReturn], passthrough: passthroughOut };
 }
 
 // ── STATUS LANJUTAN (Pengambilan Produk) ──
@@ -905,10 +959,17 @@ function renderHasil(rows){
   let totQty=0, totKg=0;
   tb.innerHTML = rows.map(r=>{
     totQty+=r.qty; totKg+=r.kg;
+    // Baris "passthrough" (lihat fetchPengambilan()) BUKAN hasil produksi WO
+    // sungguhan — keranjang cuma numpang lewat lantai ini tanpa pernah diproses.
+    // Ditonjolkan warna amber + label "↪️ Passthrough" supaya tidak salah dibaca
+    // sebagai rendemen/hasil produksi asli, meski TOTAL & Rekap Hasil Produksi
+    // sudah otomatis ikut menghitungnya.
+    const ptStyle = r.isPassthrough ? ' style="color:#b45309;font-weight:600"' : '';
+    const ptBadge = r.isPassthrough ? ' <span class="status-badge st-transit" style="margin-left:6px">↪️ Passthrough</span>' : '';
     return '<tr>'+
-      '<td>'+esc(r.barang)+'</td>'+
-      '<td class="num">'+fmt(r.qty)+'</td>'+
-      '<td class="num">'+fmtKgNum(r.kg)+'</td>'+
+      '<td>'+esc(r.barang)+ptBadge+'</td>'+
+      '<td class="num"'+ptStyle+'>'+fmt(r.qty)+'</td>'+
+      '<td class="num"'+ptStyle+'>'+fmtKgNum(r.kg)+'</td>'+
       '<td>'+(r.tujuan?esc(sourceLabel(r.tujuan)):'<span style="color:#9ca3af;font-style:italic">Belum Pindah</span>')+'</td>'+
       '<td>'+(r.keterangan?esc(r.keterangan):'<span style="color:#9ca3af;font-style:italic">—</span>')+'</td>'+
     '</tr>';
