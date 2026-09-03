@@ -256,6 +256,20 @@ const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 // Tambah laporan baru cukup dengan menambah satu object ke array ini.
 const REPORTS = [
   {
+    icon: '🍗',
+    title: 'Laporan Hasil By-Product Karkas',
+    desc: 'Rekap harian hasil by-product karkas dalam rentang tanggal: satu baris per tanggal, kolom otomatis mengikuti jenis by-product (Kg). Hanya entri Confirmed / Draft-Jual Langsung yang dihitung. Export Excel.',
+    url: 'LaporanHasilByProductKarkas.html',
+    enabled: true
+  },
+  {
+    icon: '🧾',
+    title: 'Laporan Rekapan Produksi Karkas',
+    desc: 'Satu baris per batch dalam rentang tanggal: data kandang, timbang ulang (nett), karkas, Yield Kandang/Produksi, Kg Grade A/B/C, dan Uniformity. Export Excel.',
+    url: 'LaporanRekapanProduksiKarkas.html',
+    enabled: true
+  },
+  {
     icon: '🐔',
     title: 'Laporan Produksi Karkas',
     desc: 'Rekap produksi karkas per batch: rendeman, susut jalan, grade A/B/C, uniformity, dan produk transfer.',

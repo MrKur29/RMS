@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Laporan Rekapan Produksi Karkas — Kurnia's Food</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="permissions.js"></script>
+<script src="viewstate.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f2f5;color:#111827;font-size:14px}
+button{cursor:pointer;font-family:inherit}
+a{text-decoration:none}
+
+/* LOGIN */
+#login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(135deg,#0f172a 0%,#134e4a 60%,#0d9488 100%)}
+.login-card{background:white;border-radius:16px;padding:44px 40px;width:400px;box-shadow:0 25px 60px rgba(0,0,0,.4)}
+.login-logo{text-align:center;margin-bottom:36px}
+.login-logo .icon{font-size:48px;display:block;margin-bottom:12px}
+.login-logo h1{font-size:22px;font-weight:800;color:#111827}
+.login-logo p{font-size:13px;color:#6b7280;margin-top:4px}
+.form-group{margin-bottom:20px}
+.form-group label{display:block;font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
+.form-group input,.form-group select,.form-group textarea{width:100%;padding:11px 14px;border:1.5px solid #d1d5db;border-radius:8px;font-size:15px;transition:border-color .2s,box-shadow .2s;color:#111827;background:white;font-family:inherit}
+.form-group input:focus,.form-group select:focus{outline:none;border-color:#0d9488;box-shadow:0 0 0 3px rgba(13,148,136,.12)}
+.btn-login{width:100%;padding:13px;background:#0d9488;color:white;border:none;border-radius:8px;font-size:15px;font-weight:700;transition:background .2s}
+.btn-login:hover{background:#0f766e}
+.btn-login:disabled{background:#5eead4;cursor:not-allowed}
+.login-error{background:#fee2e2;color:#dc2626;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:18px;border:1px solid #fecaca;display:none}
+.login-version{text-align:center;margin-top:20px;font-size:11px;color:#9ca3af}
+
+/* APP LAYOUT */
+#app-screen{display:none;height:100vh;overflow:hidden}
+.app-layout{display:flex;height:100%}
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:90}
+.sidebar-overlay.visible{display:block}
+
+/* SIDEBAR */
+.sidebar{width:230px;flex-shrink:0;background:#0f172a;color:white;display:flex;flex-direction:column;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.1) transparent;transition:transform .28s cubic-bezier(.4,0,.2,1);z-index:100}
+.sidebar-brand{padding:20px 18px 16px;border-bottom:1px solid rgba(255,255,255,.08)}
+.sidebar-nav{flex:1;padding:10px 0}
+.nav-section-label{font-size:10px;font-weight:700;color:rgba(255,255,255,.3);text-transform:uppercase;letter-spacing:1px;padding:12px 18px 4px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 18px;font-size:13px;color:rgba(255,255,255,.65);cursor:pointer;transition:all .15s;border-left:3px solid transparent}
+.nav-item:hover:not(.disabled){background:rgba(255,255,255,.07);color:white}
+.nav-item.active{background:rgba(13,148,136,.2);color:#5eead4;border-left-color:#0d9488}
+.nav-item.disabled{opacity:.3;cursor:not-allowed}
+.nav-icon{font-size:15px;width:22px;text-align:center;flex-shrink:0}
+.nav-label-text{flex:1}
+.nav-tag{font-size:9px;font-weight:700;padding:2px 5px;border-radius:4px;background:rgba(13,148,136,.3);color:#5eead4}
+.sidebar-footer{padding:14px 18px;border-top:1px solid rgba(255,255,255,.08)}
+.user-card{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.user-avatar{width:34px;height:34px;border-radius:50%;background:#0d9488;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:white;flex-shrink:0}
+.user-info-text .user-name{font-size:13px;font-weight:700;color:#f8fafc}
+.user-info-text .user-role{font-size:11px;color:rgba(255,255,255,.45);margin-top:1px}
+.btn-logout{width:100%;padding:8px 12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.6);border-radius:6px;font-size:12px;font-weight:600;transition:all .15s}
+.btn-logout:hover{background:rgba(220,38,38,.25);border-color:rgba(220,38,38,.5);color:#fca5a5}
+
+/* MAIN */
+.main-area{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.topbar{background:white;height:58px;padding:0 20px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e5e7eb;box-shadow:0 1px 4px rgba(0,0,0,.05);gap:12px}
+.topbar-left{display:flex;align-items:center;gap:12px;min-width:0}
+.topbar-left h1{font-size:17px;font-weight:800;color:#111827;white-space:nowrap}
+.topbar-left p{font-size:12px;color:#9ca3af;margin-top:1px}
+.topbar-left-text{min-width:0}
+.topbar-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.btn-hamburger{display:none;align-items:center;justify-content:center;width:40px;height:40px;border-radius:8px;background:#f3f4f6;border:1.5px solid #e5e7eb;font-size:18px;color:#374151;flex-shrink:0}
+.btn-hamburger:hover{background:#e5e7eb}
+.clock-display{font-size:14px;font-weight:700;color:#374151;background:#f9fafb;padding:6px 10px;border-radius:6px;border:1px solid #e5e7eb;white-space:nowrap}
+
+/* CONTENT */
+.content-area{flex:1;overflow-y:auto;padding:20px 24px 32px}
+
+/* PANEL */
+.panel{background:white;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden;margin-bottom:14px}
+.panel:last-child{margin-bottom:0}
+.panel-head{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:1px solid #f3f4f6;gap:8px;flex-wrap:wrap}
+.panel-title{font-size:14px;font-weight:800;color:#111827}
+.panel-body{padding:16px}
+
+.form-row{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
+.form-row .form-group{flex:1;margin-bottom:0}
+.hint{font-size:11px;color:#9ca3af;margin-top:4px}
+.empty{text-align:center;padding:28px 16px;color:#9ca3af;font-size:13px}
+
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 12px;border-radius:6px;border:none;font-size:12px;font-weight:700;transition:all .15s;min-height:34px;touch-action:manipulation;white-space:nowrap}
+.btn-primary{background:#0d9488;color:white}
+.btn-primary:hover{background:#0f766e}
+.btn-ghost{background:#f3f4f6;color:#374151}
+.btn-ghost:hover{background:#e5e7eb}
+.btn-sm{padding:5px 9px;font-size:11px;min-height:28px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-excel{background:#15803d;color:white}
+.btn-excel:hover{background:#166534}
+
+/* REPORT SHEET / TABLE */
+.print-sheet{background:white;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);padding:20px 22px;margin-top:0}
+.rpt-header{border-bottom:2px solid #111827;padding-bottom:14px;margin-bottom:16px}
+.rpt-title{font-size:19px;font-weight:900;letter-spacing:.5px;color:#111827;margin-bottom:10px;text-align:center}
+.rpt-info-table{width:100%;border-collapse:collapse;font-size:13px}
+.rpt-info-table td{padding:3px 6px;vertical-align:top}
+.rpt-info-table td:nth-child(1){color:#6b7280;font-weight:700;width:130px}
+.rpt-info-table td:nth-child(2){font-weight:700}
+
+.rpt-section-title{font-size:13px;font-weight:800;color:#111827;text-transform:uppercase;letter-spacing:.5px;margin:0 0 8px;padding-bottom:5px;border-bottom:1.5px solid #e5e7eb;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.rpt-section-title .btn-excel{text-transform:none;letter-spacing:normal}
+
+.table-scroll{overflow-x:auto}
+.rpt-table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:6px;white-space:nowrap}
+.rpt-table th{text-align:left;padding:7px 8px;background:#f3f4f6;font-size:10px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:.3px;border:1px solid #e5e7eb}
+.rpt-table td{padding:6px 8px;border:1px solid #e5e7eb}
+.rpt-table tbody tr:nth-child(even){background:#fafafa}
+.rpt-table tbody tr:hover{background:#f0fdfa}
+.rpt-table tfoot td{font-weight:800;background:#f3f4f6}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+.rpt-table .grp-batch{border-left:2px solid #d1d5db}
+.rpt-table .grp-kandang{border-left:2px solid #d1d5db}
+.rpt-table .grp-timbang{border-left:2px solid #d1d5db}
+.rpt-table .grp-karkas{border-left:2px solid #d1d5db}
+.rpt-table .grp-yield{border-left:2px solid #d1d5db}
+.rpt-table .grp-grade{border-left:2px solid #d1d5db}
+.rpt-table .grp-uniformity{border-left:2px solid #d1d5db}
+
+.no-print{}
+@media print {
+  body{background:white}
+  .no-print{display:none !important}
+  .sidebar,.sidebar-overlay,.topbar{display:none !important}
+  #app-screen{display:block !important;height:auto !important}
+  .app-layout{display:block !important;height:auto !important}
+  .main-area{display:block !important;overflow:visible !important}
+  .content-area{padding:0;overflow:visible;height:auto !important}
+  .print-sheet{box-shadow:none;border-radius:0;padding:0}
+  .rpt-table{font-size:10px}
+}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <span class="icon">📊</span>
+      <h1>RPA Management System</h1>
+      <p>Laporan Rekapan Produksi Karkas — Login</p>
+    </div>
+    <div class="login-error" id="login-error"></div>
+    <div class="form-group">
+      <label>Username</label>
+      <input type="text" id="inp-username" placeholder="Masukkan username" autocomplete="username"
+             onkeydown="if(event.key==='Enter')document.getElementById('inp-password').focus()">
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input type="password" id="inp-password" placeholder="Masukkan password" autocomplete="current-password"
+             onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button class="btn-login" id="btn-login" onclick="doLogin()">Masuk →</button>
+    <p class="login-version">v1.0 — RPA System</p>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app-screen">
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+<div class="app-layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <img src="logo.png" style="height:36px;width:auto;object-fit:contain;">
+        <span style="font-size:15px;font-weight:800;color:#f8fafc;">Kurnia's Food</span>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section-label">Utama</div>
+      <div class="nav-item" onclick="navTo('Dashboard.html')">
+        <span class="nav-icon">🏠</span><span class="nav-label-text">Dashboard</span>
+      </div>
+      <div class="nav-section-label">Produksi</div>
+      <div class="nav-item" onclick="navTo('BatchAyamHidup.html')">
+        <span class="nav-icon">🐔</span><span class="nav-label-text">Batch Ayam Hidup</span>
+      </div>
+      <div class="nav-item" onclick="navTo('ProduksiKarkas.html')">
+        <span class="nav-icon">⚙️</span><span class="nav-label-text">Produksi Karkas</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Thawing.html')">
+        <span class="nav-icon">🌡️</span><span class="nav-label-text">Thawing</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Chiller.html')">
+        <span class="nav-icon">❄️</span><span class="nav-label-text">Chiller</span>
+      </div>
+      <div class="nav-item" onclick="navTo('WorkOrder.html')">
+        <span class="nav-icon">📋</span><span class="nav-label-text">Work Order</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Parting.html')">
+        <span class="nav-icon">✂️</span><span class="nav-label-text">Parting</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Boneless.html')">
+        <span class="nav-icon">🥩</span><span class="nav-label-text">Boneless</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Marinasi.html')">
+        <span class="nav-icon">🌶️</span><span class="nav-label-text">Marinasi</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Blasting.html')">
+        <span class="nav-icon">🧊</span><span class="nav-label-text">Blasting</span>
+      </div>
+      <div class="nav-item" onclick="navTo('ByProductKarkas.html')">
+        <span class="nav-icon">📦</span><span class="nav-label-text">By-product Karkas</span>
+      </div>
+      <div class="nav-section-label">Penjualan</div>
+      <div class="nav-item" onclick="navTo('Penjualan.html')"><span class="nav-icon">🛒</span><span class="nav-label-text">Penjualan</span></div>
+      <div class="nav-item" id="nav-cs" style="display:none" onclick="navTo('CS.html')"><span class="nav-icon">🏬</span><span class="nav-label-text">CS (Cold Storage)</span></div>
+      <div class="nav-section-label">Manajemen</div>
+      <div class="nav-item" onclick="navTo('Koreksi.html')">
+        <span class="nav-icon">✅</span><span class="nav-label-text">Koreksi & Approval</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Laporan.html')">
+        <span class="nav-icon">📊</span><span class="nav-label-text">Laporan</span>
+      </div>
+      <div class="nav-item" onclick="navTo('Tracing.html')"><span class="nav-icon">🔍</span><span class="nav-label-text">Tracing Produk</span></div>
+      <div class="nav-item" id="nav-saldo-awal" style="display:none" onclick="navTo('SaldoAwal.html')"><span class="nav-icon">📋</span><span class="nav-label-text">Saldo Awal Barang</span></div>
+      <div class="nav-item" id="nav-stok-opname-chiller" style="display:none" onclick="navTo('StokOpnameChiller.html')"><span class="nav-icon">🧮</span><span class="nav-label-text">Stok Opname Chiller</span></div>
+      <div class="nav-item" onclick="navTo('MasterData.html')">
+        <span class="nav-icon">🗂️</span><span class="nav-label-text">Master Data</span>
+      </div>
+      <div class="nav-item" id="nav-pelanggan" style="display:none" onclick="navTo('KelolaPelanggan.html')"><span class="nav-icon">📇</span><span class="nav-label-text">Kelola Pelanggan</span></div>
+      <div class="nav-item" id="nav-revisi-batch" style="display:none" onclick="navTo('RevisiBatch.html')">
+          <span class="nav-icon">🔀</span><span class="nav-label-text">Revisi Batch Keranjang</span>
+      </div>
+      <div class="nav-item" id="nav-void-keranjang" style="display:none" onclick="navTo('VoidKeranjang.html')">
+          <span class="nav-icon">🗑️</span><span class="nav-label-text">Void Keranjang</span>
+      </div>
+      <div class="nav-item" id="nav-lapor-hilang" style="display:none" onclick="navTo('LaporKehilangan.html')">
+          <span class="nav-icon">🚨</span><span class="nav-label-text">Lapor Kehilangan</span>
+      </div>
+      <div class="nav-item" id="nav-reprint-label" style="display:none" onclick="navTo('ReprintLabel.html')">
+          <span class="nav-icon">🖨️</span><span class="nav-label-text">Reprint Label</span>
+      </div>
+      <div class="nav-item" id="nav-user-mgmt" style="display:none" onclick="navTo('UserManagement.html')">
+        <span class="nav-icon">👥</span><span class="nav-label-text">Manajemen User</span>
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-card">
+        <div class="user-avatar" id="user-avatar">?</div>
+        <div class="user-info-text">
+          <div class="user-name" id="sidebar-name">—</div>
+          <div class="user-role" id="sidebar-role">—</div>
+        </div>
+      </div>
+      <button class="btn-logout" onclick="doLogout()">⬅ Keluar</button>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="main-area">
+    <div class="topbar no-print">
+      <div class="topbar-left">
+        <button class="btn-hamburger" onclick="toggleSidebar()">☰</button>
+        <div class="topbar-left-text">
+          <h1>Laporan Rekapan Produksi Karkas</h1>
+          <p id="topbar-date">—</p>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <div class="clock-display" id="clock">—</div>
+      </div>
+    </div>
+
+    <div class="content-area">
+
+      <!-- FILTER PANEL -->
+      <div class="panel no-print" id="panel-filter">
+        <div class="panel-head">
+          <span class="panel-title">🔎 Filter Periode</span>
+        </div>
+        <div class="panel-body">
+          <div class="form-row">
+            <div class="form-group" style="flex:0 0 180px">
+              <label>Dari Tanggal</label>
+              <input type="date" id="filter-dari">
+            </div>
+            <div class="form-group" style="flex:0 0 180px">
+              <label>Sampai Tanggal</label>
+              <input type="date" id="filter-sampai">
+            </div>
+            <div class="form-group" style="flex:0">
+              <button class="btn btn-primary" onclick="loadReport()">🔁 Tampilkan</button>
+            </div>
+          </div>
+          <div class="hint">Satu baris = satu batch produksi karkas (No Batch). Ek/Kg Timbang Ulang sudah NETT (dikurangi Ekor/Kg Mati). Grade &amp; Uniformity dihitung dari data timbang karkas per batch, sama persis dengan Laporan Produksi Karkas per-batch.</div>
+        </div>
+      </div>
+
+      <!-- REPORT -->
+      <div id="report-area">
+        <div class="panel no-print" style="padding:12px 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+          <div><strong id="report-period-label">—</strong> <span class="hint" id="report-batch-count"></span></div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-excel" id="btn-excel" onclick="downloadExcel()" disabled>⬇️ Excel</button>
+            <button class="btn btn-primary" onclick="window.print()">🖨️ Print / Simpan PDF</button>
+          </div>
+        </div>
+
+        <div class="print-sheet" id="print-sheet">
+          <div class="rpt-header">
+            <div class="rpt-title">LAPORAN REKAPAN PRODUKSI KARKAS</div>
+            <table class="rpt-info-table">
+              <tr><td>Periode</td><td id="ri-periode">—</td></tr>
+              <tr><td>Jumlah Batch</td><td id="ri-jumlah-batch">—</td></tr>
+            </table>
+          </div>
+
+          <div class="rpt-section-title"><span>Rekapan per Batch</span></div>
+          <div class="table-scroll">
+          <table class="rpt-table" id="tbl-rekap">
+            <thead>
+              <tr>
+                <th>Tanggal</th>
+                <th>No Batch</th>
+                <th>Sumber (Kandang)</th>
+                <th>Ekspedisi</th>
+                <th>No Polisi (No BK)</th>
+                <th>Supir</th>
+                <th class="num grp-kandang">Ek Kandang</th>
+                <th class="num">Kg Kandang</th>
+                <th class="num grp-timbang">Ek Timbang Ulang (Nett)</th>
+                <th class="num">Kg Timbang Ulang (Nett)</th>
+                <th class="num grp-karkas">Ek Karkas</th>
+                <th class="num">Kg Karkas</th>
+                <th class="num grp-yield">Yield Kandang</th>
+                <th class="num">Yield Produksi</th>
+                <th class="num grp-grade">Kg Grade A</th>
+                <th class="num">Kg Grade B</th>
+                <th class="num">Kg Grade C</th>
+                <th class="num grp-uniformity">Uniformity</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-rekap">
+              <tr><td colspan="18"><div class="empty">Pilih periode lalu klik Tampilkan.</div></td></tr>
+            </tbody>
+          </table>
+          </div>
+
+          <div class="hint no-print" style="margin-top:14px">Catatan: Ek/Kg Karkas dan Kg Grade A/B/C/Uniformity hanya menghitung keranjang timbang karkas yang keranjangnya TIDAK di-Void. Yield Kandang = Kg Karkas / Kg Kandang. Yield Produksi = Kg Karkas / Kg Timbang Ulang (Nett). Baris TOTAL untuk Yield &amp; Uniformity dihitung dari total Kg (bukan rata-rata sederhana antar batch).</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<script>
+const SUPABASE_URL = 'https://dxixqyokuqrdprupsvic.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR4aXhxeW9rdXFyZHBydXBzdmljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5NjM3ODcsImV4cCI6MjA5MjUzOTc4N30.D_yaPwNbe4FFg_hmDeJ9cuxzbNvXZT8l1_TyZuq1t1M';
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ── STATE ──
+let currentUser = null;
+let currentRows = [];   // baris per-batch yang sedang ditampilkan, dipakai export Excel
+let currentTotal = null;
+
+// ── UTILS ──
+async function sha256(str) {
+  const buf = new TextEncoder().encode(str);
+  const hash = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+function fmtDateID(s){if(!s)return'—';return new Date(s+'T00:00:00').toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'})}
+function showToast(msg,type='success'){const t=document.getElementById('toast');t.textContent=msg;t.className=`show ${type}`;setTimeout(()=>{t.className=''},3800)}
+function navTo(url){closeSidebar();if(currentUser){localStorage.setItem('rpa_user',JSON.stringify(currentUser));sessionStorage.setItem('rpa_user',JSON.stringify(currentUser))}window.location.href=url}
+function esc(s){return (s==null?'':String(s)).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function num(n,dec=2){if(n==null||isNaN(n))return'—';return Number(n).toLocaleString('id-ID',{minimumFractionDigits:dec,maximumFractionDigits:dec})}
+function int(n){if(n==null||isNaN(n))return'—';return Math.round(n).toLocaleString('id-ID')}
+function pct(n,dec=2){if(n==null||isNaN(n))return'—';return num(n,dec)+'%'}
+function todayISO(){return new Date().toISOString().split('T')[0]}
+function addDaysISO(dateStr, delta){
+  const d = new Date(dateStr+'T12:00:00Z'); // noon UTC menghindari isu DST/timezone
+  d.setUTCDate(d.getUTCDate()+delta);
+  return d.toISOString().split('T')[0];
+}
+
+// ── SIDEBAR ──
+function toggleSidebar(){const s=document.getElementById('sidebar'),o=document.getElementById('sidebar-overlay');s.classList.toggle('open');o.classList.toggle('visible')}
+function closeSidebar(){document.getElementById('sidebar')?.classList.remove('open');document.getElementById('sidebar-overlay')?.classList.remove('visible')}
+
+// ── AUTH ──
+async function doLogin(){
+  const username=document.getElementById('inp-username').value.trim();
+  const password=document.getElementById('inp-password').value;
+  const errEl=document.getElementById('login-error');
+  errEl.style.display='none';
+  if(!username||!password){errEl.textContent='Username dan password wajib diisi.';errEl.style.display='block';return}
+  const btn=document.getElementById('btn-login');
+  btn.disabled=true;btn.textContent='Memproses…';
+  try{
+    const hash=await sha256(password);
+    const{data,error}=await db.from('users').select('id,nama,username,role,aktif,pin,is_system_admin').eq('username',username).eq('password_hash',hash).eq('aktif',true).maybeSingle();
+    if(error)throw error;
+    if(!data){errEl.textContent='Username atau password salah.';errEl.style.display='block';return}
+    data.permissions=await RPA_PERM.fetchPermissions(db,data.id);
+    currentUser=data;localStorage.setItem('rpa_user',JSON.stringify(data));startApp();
+  }catch(e){errEl.textContent='Gagal terhubung ke server.';errEl.style.display='block';}
+  finally{btn.disabled=false;btn.textContent='Masuk →'}
+}
+function doLogout(){localStorage.removeItem('rpa_user');sessionStorage.removeItem('rpa_user');currentUser=null;document.getElementById('app-screen').style.display='none';document.getElementById('login-screen').style.display='flex'}
+
+function startApp(){
+  const moduleRole=RPA_PERM.enforceModuleAccess(currentUser,'laporan');
+  if(!moduleRole)return;
+  currentUser.moduleRole=moduleRole;
+
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('app-screen').style.display='block';
+  const av=document.getElementById('user-avatar');
+  if(av)av.textContent=(currentUser.nama||'?')[0].toUpperCase();
+  document.getElementById('sidebar-name').textContent=currentUser.nama;
+  document.getElementById('sidebar-role').textContent=currentUser.role+(currentUser.is_system_admin?' (Admin)':'');
+  if(currentUser.is_system_admin){const el=document.getElementById('nav-user-mgmt');if(el)el.style.display='flex'}
+  if (RPA_PERM.getModuleRole(currentUser, 'revisi_batch') !== null) { const rbEl = document.getElementById('nav-revisi-batch'); if (rbEl) rbEl.style.display = 'flex'; }
+  if (RPA_PERM.getModuleRole(currentUser, 'void_keranjang') !== null) { const vkEl = document.getElementById('nav-void-keranjang'); if (vkEl) vkEl.style.display = 'flex'; }
+  if (RPA_PERM.getModuleRole(currentUser, 'lapor_kehilangan') !== null) { const lhEl = document.getElementById('nav-lapor-hilang'); if (lhEl) lhEl.style.display = 'flex'; }
+  if (RPA_PERM.getModuleRole(currentUser, 'reprint_label') !== null) { const rlEl = document.getElementById('nav-reprint-label'); if (rlEl) rlEl.style.display = 'flex'; }
+  if (RPA_PERM.getModuleRole(currentUser, 'cs') !== null) { const csEl = document.getElementById('nav-cs'); if (csEl) csEl.style.display = 'flex'; }
+  if (RPA_PERM.getModuleRole(currentUser,'pelanggan')!==null){const el=document.getElementById('nav-pelanggan');if(el)el.style.display='flex'}
+  if (RPA_PERM.getModuleRole(currentUser, 'saldo_awal') !== null) { const saEl = document.getElementById('nav-saldo-awal'); if (saEl) saEl.style.display = 'flex'; }
+  if (RPA_PERM.getModuleRole(currentUser, 'stok_opname_chiller') !== null) { const saEl = document.getElementById('nav-stok-opname-chiller'); if (saEl) saEl.style.display = 'flex'; }
+
+  const restoredFilters=RPA_STATE.bindFilters('LaporanRekapanProduksiKarkas', ['#panel-filter']);
+  if(!restoredFilters){
+    const today=todayISO();
+    document.getElementById('filter-sampai').value=today;
+    document.getElementById('filter-dari').value=addDaysISO(today,-6);
+  }
+  RPA_STATE.bindScroll('LaporanRekapanProduksiKarkas');
+  startClock();
+  loadReport();
+}
+
+function startClock(){
+  function tick(){
+    const now=new Date();
+    document.getElementById('clock').textContent=now.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    document.getElementById('topbar-date').textContent=now.toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  }
+  tick();setInterval(tick,1000);
+}
+
+// ── AUTO LOGIN ──
+window.addEventListener('DOMContentLoaded',async ()=>{
+  const saved=localStorage.getItem('rpa_user')||sessionStorage.getItem('rpa_user');
+  if(saved){try{currentUser=await RPA_PERM.restoreSession(db);if(currentUser)startApp();}catch{}}
+});
+
+// ══════════════════════════════════════════════════════════════
+// REPORT
+// ══════════════════════════════════════════════════════════════
+
+// Proaktif dipaginasi (lihat feedback_supabase_1000_row_cap) — tanpa ini query bisa
+// diam-diam terpotong di 1000 baris begitu volume batch/keranjang dalam periode besar.
+const PAGE_SIZE = 1000;
+async function fetchAllRows(buildQuery){
+  let all = [];
+  let from = 0;
+  while(true){
+    const { data, error } = await buildQuery().order('id',{ascending:true}).range(from, from+PAGE_SIZE-1);
+    if(error){ console.error('fetchAllRows', error); return all; }
+    all = all.concat(data||[]);
+    if(!data || data.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+  return all;
+}
+
+// Ukuran (kelas berat) untuk kategori KARKAS disimpan di product_master.sub_kategori
+// (mis. "0.8", "0.9", "0.9K", "1.0"...). Ambil angka di depannya sebagai dasar
+// pengelompokan uniformity. kg_min dipakai sebagai fallback kalau sub_kategori kosong.
+// (Pola identik dengan LaporanProduksiKarkas.html / LaporanProduksiKarkasHarian.html.)
+function parseUkuran(p){
+  if(p.sub_kategori){
+    const m=String(p.sub_kategori).match(/[\d.]+/);
+    if(m){ const v=parseFloat(m[0]); if(!isNaN(v)) return v; }
+  }
+  return p.kg_min!=null ? Number(p.kg_min) : null;
+}
+
+// Hitung semua metrik satu batch dari baris carcass_baskets miliknya (keranjang VOID
+// sudah difilter sebelum dipanggil). Formula identik dengan renderRekap() di
+// LaporanProduksiKarkas.html (per-batch) — lihat memory project_laporan_produksi_karkas_2026_07_04.
+function computeBatchRow(batch, cbasketRows){
+  const ekKandang = Number(batch.ekor_kandang)||0;
+  const kgKandang = Number(batch.kg_kandang)||0;
+  const ekTimbang = Number(batch.ekor_timbang_ulang)||0;
+  const kgTimbang = Number(batch.kg_timbang_ulang)||0;
+  const ekMati    = Number(batch.ekor_mati)||0;
+  const kgMati    = Number(batch.kg_mati)||0;
+
+  // Timbang NETT: timbang dulu, baru ayam mati dibuang sebelum motong.
+  const ekTimbangNetto = ekTimbang - ekMati;
+  const kgTimbangNetto = kgTimbang - kgMati;
+
+  // Group per produk (grade + ukuran) untuk Grade A/B/C dan band Uniformity.
+  const prodMap = {};
+  let ekKarkas = 0, kgKarkas = 0;
+  cbasketRows.forEach(r=>{
+    const p = r.product;
+    if(!p) return;
+    ekKarkas += Number(r.qty_timbang)||0;
+    kgKarkas += Number(r.kg_timbang)||0;
+    const key = p.product_code || (p.grade+'|'+p.sub_kategori);
+    if(!prodMap[key]) prodMap[key] = { grade:p.grade, ukuran:parseUkuran(p), kg:0 };
+    prodMap[key].kg += Number(r.kg_timbang)||0;
+  });
+  const groups = Object.values(prodMap);
+
+  const kgA = groups.filter(g=>g.grade==='A').reduce((s,g)=>s+g.kg,0);
+  const kgB = groups.filter(g=>g.grade==='B').reduce((s,g)=>s+g.kg,0);
+  const kgC = groups.filter(g=>g.grade==='C').reduce((s,g)=>s+g.kg,0);
+
+  // Uniformity: floor(ABW karkas,1) ± 0.1, sum kg item2 dgn ukuran di band itu / total kg karkas.
+  const abwKarkas = ekKarkas ? kgKarkas/ekKarkas : null;
+  let uniformity = null, kgBand = 0;
+  if(abwKarkas!=null && kgKarkas>0){
+    const center = Math.floor(abwKarkas*10 + 1e-9)/10;
+    const batasBawah = Math.round((center-0.1)*100)/100;
+    const batasAtas  = Math.round((center+0.1)*100)/100;
+    kgBand = groups.reduce((s,g)=>{
+      if(g.ukuran==null) return s;
+      const w = Math.round(g.ukuran*100)/100;
+      return s + ((w>=batasBawah-0.001 && w<=batasAtas+0.001) ? g.kg : 0);
+    },0);
+    uniformity = kgBand/kgKarkas*100;
+  }
+
+  const yieldKandang  = kgKandang ? kgKarkas/kgKandang*100 : null;
+  const yieldProduksi = kgTimbangNetto ? kgKarkas/kgTimbangNetto*100 : null;
+
+  return {
+    tanggal: batch.tanggal,
+    batch_code: batch.batch_code,
+    nama_kandang: batch.nama_kandang,
+    nama_ekspedisi: batch.nama_ekspedisi,
+    no_polisi: batch.no_polisi,
+    nama_supir: batch.nama_supir,
+    ekKandang, kgKandang,
+    ekTimbangNetto, kgTimbangNetto,
+    ekKarkas, kgKarkas,
+    yieldKandang, yieldProduksi,
+    kgA, kgB, kgC,
+    uniformity, kgBand
+  };
+}
+
+async function loadReport(){
+  const dari=document.getElementById('filter-dari').value;
+  const sampai=document.getElementById('filter-sampai').value;
+  if(!dari||!sampai){showToast('Pilih tanggal Dari & Sampai terlebih dahulu','error');return}
+  if(dari>sampai){showToast('Tanggal "Dari" harus sebelum atau sama dengan "Sampai".','error');return}
+
+  document.getElementById('report-period-label').textContent = `${fmtDateID(dari)} s/d ${fmtDateID(sampai)}`;
+  document.getElementById('report-batch-count').textContent = 'Memuat data…';
+  document.getElementById('tbody-rekap').innerHTML = '<tr><td colspan="18"><div class="empty">Memuat…</div></td></tr>';
+  document.getElementById('btn-excel').disabled = true;
+
+  try{
+    const batches = await fetchAllRows(()=>db.from('live_chicken_batches')
+      .select('id,batch_code,tanggal,nama_kandang,nama_ekspedisi,no_polisi,nama_supir,ekor_kandang,kg_kandang,ekor_timbang_ulang,kg_timbang_ulang,ekor_mati,kg_mati')
+      .gte('tanggal',dari).lte('tanggal',sampai));
+
+    // Urutkan tanggal lalu no batch untuk tampilan yang enak dibaca.
+    batches.sort((a,b)=> (a.tanggal||'').localeCompare(b.tanggal||'') || (a.batch_code||'').localeCompare(b.batch_code||''));
+
+    const batchIds = batches.map(b=>b.id);
+    let cbasketsByBatch = {};
+    if(batchIds.length){
+      const cbData = await fetchAllRows(()=>db.from('carcass_baskets')
+        .select('batch_id,qty_timbang,kg_timbang,tipe_kerusakan,product:product_id(product_code,grade,sub_kategori,kg_min),basket:basket_id(status)')
+        .in('batch_id',batchIds));
+      // Keranjang yang sudah di-VOID tidak boleh ikut dihitung (sama seperti
+      // LaporanProduksiKarkas.html / Harian) — kalau tidak, laporan lebih besar dari yang seharusnya.
+      cbData.filter(r=>r.product && r.basket?.status!=='VOID').forEach(r=>{
+        (cbasketsByBatch[r.batch_id] = cbasketsByBatch[r.batch_id]||[]).push(r);
+      });
+    }
+
+    const rows = batches.map(b=>computeBatchRow(b, cbasketsByBatch[b.id]||[]));
+
+    document.getElementById('report-batch-count').textContent =
+      rows.length ? `${rows.length} batch produksi` : 'Belum ada batch produksi pada periode ini';
+    document.getElementById('ri-periode').textContent = `${fmtDateID(dari)} s/d ${fmtDateID(sampai)}`;
+    document.getElementById('ri-jumlah-batch').textContent = rows.length ? `${rows.length} batch` : '—';
+
+    renderTable(rows);
+
+  }catch(e){
+    console.error(e);
+    showToast('Gagal memuat data laporan','error');
+  }
+}
+
+function sumTotal(rows){
+  const t={ekKandang:0,kgKandang:0,ekTimbangNetto:0,kgTimbangNetto:0,ekKarkas:0,kgKarkas:0,kgA:0,kgB:0,kgC:0,kgBand:0};
+  rows.forEach(r=>{
+    t.ekKandang+=r.ekKandang; t.kgKandang+=r.kgKandang;
+    t.ekTimbangNetto+=r.ekTimbangNetto; t.kgTimbangNetto+=r.kgTimbangNetto;
+    t.ekKarkas+=r.ekKarkas; t.kgKarkas+=r.kgKarkas;
+    t.kgA+=r.kgA; t.kgB+=r.kgB; t.kgC+=r.kgC;
+    t.kgBand+=r.kgBand;
+  });
+  t.yieldKandang  = t.kgKandang ? t.kgKarkas/t.kgKandang*100 : null;
+  t.yieldProduksi = t.kgTimbangNetto ? t.kgKarkas/t.kgTimbangNetto*100 : null;
+  t.uniformity    = t.kgKarkas ? t.kgBand/t.kgKarkas*100 : null;
+  return t;
+}
+
+function renderTable(rows){
+  currentRows = rows;
+  const btnExcel = document.getElementById('btn-excel');
+  const tbody = document.getElementById('tbody-rekap');
+  if(!rows.length){
+    currentTotal = null;
+    tbody.innerHTML = '<tr><td colspan="18"><div class="empty">Belum ada batch produksi karkas pada periode ini.</div></td></tr>';
+    btnExcel.disabled = true;
+    return;
+  }
+  btnExcel.disabled = false;
+
+  let out = rows.map(r=>`
+    <tr>
+      <td>${fmtDateID(r.tanggal)}</td>
+      <td>${esc(r.batch_code)||'—'}</td>
+      <td>${esc(r.nama_kandang)||'—'}</td>
+      <td>${esc(r.nama_ekspedisi)||'—'}</td>
+      <td>${esc(r.no_polisi)||'—'}</td>
+      <td>${esc(r.nama_supir)||'—'}</td>
+      <td class="num grp-kandang">${int(r.ekKandang)}</td>
+      <td class="num">${num(r.kgKandang)}</td>
+      <td class="num grp-timbang">${int(r.ekTimbangNetto)}</td>
+      <td class="num">${num(r.kgTimbangNetto)}</td>
+      <td class="num grp-karkas">${int(r.ekKarkas)}</td>
+      <td class="num">${num(r.kgKarkas)}</td>
+      <td class="num grp-yield">${pct(r.yieldKandang)}</td>
+      <td class="num">${pct(r.yieldProduksi)}</td>
+      <td class="num grp-grade">${num(r.kgA)}</td>
+      <td class="num">${num(r.kgB)}</td>
+      <td class="num">${num(r.kgC)}</td>
+      <td class="num grp-uniformity">${pct(r.uniformity)}</td>
+    </tr>`).join('');
+
+  const t = sumTotal(rows);
+  currentTotal = t;
+  out += `<tfoot><tr>
+    <td colspan="6">TOTAL (${rows.length} batch)</td>
+    <td class="num grp-kandang">${int(t.ekKandang)}</td>
+    <td class="num">${num(t.kgKandang)}</td>
+    <td class="num grp-timbang">${int(t.ekTimbangNetto)}</td>
+    <td class="num">${num(t.kgTimbangNetto)}</td>
+    <td class="num grp-karkas">${int(t.ekKarkas)}</td>
+    <td class="num">${num(t.kgKarkas)}</td>
+    <td class="num grp-yield">${pct(t.yieldKandang)}</td>
+    <td class="num">${pct(t.yieldProduksi)}</td>
+    <td class="num grp-grade">${num(t.kgA)}</td>
+    <td class="num">${num(t.kgB)}</td>
+    <td class="num">${num(t.kgC)}</td>
+    <td class="num grp-uniformity">${pct(t.uniformity)}</td>
+  </tr></tfoot>`;
+
+  tbody.innerHTML = out;
+}
+
+// ══════════════════════════════════════════════════════════════
+// EXPORT EXCEL
+// ══════════════════════════════════════════════════════════════
+function downloadExcel(){
+  if(!currentRows.length){ showToast('Tidak ada data untuk diunduh','error'); return; }
+  if(typeof XLSX === 'undefined'){ showToast('Modul Excel gagal dimuat, coba refresh halaman','error'); return; }
+
+  const rows = currentRows.map(r=>({
+    'Tanggal': fmtDateID(r.tanggal),
+    'No Batch': r.batch_code||'',
+    'Sumber (Kandang)': r.nama_kandang||'',
+    'Ekspedisi': r.nama_ekspedisi||'',
+    'No Polisi (No BK)': r.no_polisi||'',
+    'Supir': r.nama_supir||'',
+    'Ek Kandang': Number(r.ekKandang)||0,
+    'Kg Kandang': Number(r.kgKandang)||0,
+    'Ek Timbang Ulang (Nett)': Number(r.ekTimbangNetto)||0,
+    'Kg Timbang Ulang (Nett)': Number(r.kgTimbangNetto)||0,
+    'Ek Karkas': Number(r.ekKarkas)||0,
+    'Kg Karkas': Number(r.kgKarkas)||0,
+    'Yield Kandang (%)': r.yieldKandang!=null ? Number(r.yieldKandang.toFixed(2)) : '',
+    'Yield Produksi (%)': r.yieldProduksi!=null ? Number(r.yieldProduksi.toFixed(2)) : '',
+    'Kg Grade A': Number(r.kgA)||0,
+    'Kg Grade B': Number(r.kgB)||0,
+    'Kg Grade C': Number(r.kgC)||0,
+    'Uniformity (%)': r.uniformity!=null ? Number(r.uniformity.toFixed(2)) : ''
+  }));
+
+  if(currentTotal){
+    const t = currentTotal;
+    rows.push({
+      'Tanggal': 'TOTAL', 'No Batch': '', 'Sumber (Kandang)': '', 'Ekspedisi': '', 'No Polisi (No BK)': '', 'Supir': '',
+      'Ek Kandang': Number(t.ekKandang)||0,
+      'Kg Kandang': Number(t.kgKandang)||0,
+      'Ek Timbang Ulang (Nett)': Number(t.ekTimbangNetto)||0,
+      'Kg Timbang Ulang (Nett)': Number(t.kgTimbangNetto)||0,
+      'Ek Karkas': Number(t.ekKarkas)||0,
+      'Kg Karkas': Number(t.kgKarkas)||0,
+      'Yield Kandang (%)': t.yieldKandang!=null ? Number(t.yieldKandang.toFixed(2)) : '',
+      'Yield Produksi (%)': t.yieldProduksi!=null ? Number(t.yieldProduksi.toFixed(2)) : '',
+      'Kg Grade A': Number(t.kgA)||0,
+      'Kg Grade B': Number(t.kgB)||0,
+      'Kg Grade C': Number(t.kgC)||0,
+      'Uniformity (%)': t.uniformity!=null ? Number(t.uniformity.toFixed(2)) : ''
+    });
+  }
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [
+    {wch:12},{wch:16},{wch:18},{wch:16},{wch:16},{wch:16},
+    {wch:11},{wch:11},{wch:14},{wch:14},{wch:11},{wch:11},
+    {wch:13},{wch:14},{wch:11},{wch:11},{wch:11},{wch:12}
+  ];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Rekapan Produksi Karkas');
+  const dari=document.getElementById('filter-dari').value;
+  const sampai=document.getElementById('filter-sampai').value;
+  XLSX.writeFile(wb, `Rekapan_Produksi_Karkas_${dari}_${sampai}.xlsx`);
+}
+</script>
+</body>
+</html>
