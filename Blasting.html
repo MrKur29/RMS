@@ -897,6 +897,7 @@ const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 // ── STATE ──
 let currentUser       = null;
 let pendingMovements  = [];
+let outboundPendingSet= new Set(); // basket_id yg SUDAH punya movement keluar (BLASTING->*) PENDING — migration 105
 let blastingStock     = [];   // baskets lokasi=BLASTING
 let racks             = [];   // blasting_racks
 let rackAllocations   = [];   // blasting_rack_allocations (ALLOCATED)
@@ -1040,7 +1041,7 @@ window.addEventListener('DOMContentLoaded',async ()=>{
 
 // ── LOAD ALL ──
 async function loadAll(){
-  await Promise.all([loadPendingMovements(),loadSelisihPending(),loadBlastingStock(),loadRacks(),loadRackAllocations(),loadBatches()]);
+  await Promise.all([loadPendingMovements(),loadOutboundPending(),loadSelisihPending(),loadBlastingStock(),loadRacks(),loadRackAllocations(),loadBatches()]);
   renderSummaryCards();
   renderPendingList();
   renderStok();
@@ -1051,6 +1052,16 @@ async function loadAll(){
 async function loadPendingMovements(){
   const{data,error}=await db.from('basket_movements').select(`id,basket_id,qty_pindah,kg_pindah,dari_lokasi,is_partial,created_at,baskets(basket_code,qty_sisa,kg_sisa,lokasi,product_master(nama_produk,product_code))`).eq('ke_lokasi','BLASTING').eq('status','PENDING').order('created_at');
   if(!error)pendingMovements=data||[];
+}
+
+// Keranjang yg SUDAH punya movement keluar dari Blasting yang masih PENDING
+// (menunggu konfirmasi Chiller/dst) — dipakai utk cegah dobel-submit Return/
+// Batalkan pada basket yang sama sebelum movement pertamanya beres. Lihat
+// migration 105 utk guard server-side yang sepadan (kasus BL-260821-0022-2-1).
+async function loadOutboundPending(){
+  const{data,error}=await db.from('basket_movements').select('basket_id').eq('dari_lokasi','BLASTING').eq('status','PENDING');
+  outboundPendingSet=new Set((data||[]).map(r=>r.basket_id));
+  if(error)console.error('loadOutboundPending:',error);
 }
 
 // Movement yang sudah diajukan selisihnya (menunggu Supervisor di Koreksi.html)
@@ -1275,16 +1286,22 @@ function renderStok(){
         const allocEkor=rackAllocations.filter(a=>a.basket_id===b.id&&a.status==='ALLOCATED').reduce((s,a)=>s+(a.ekor||0),0);
         const frozenEkor=basketFrozenEkor(b.id);
         const availEkor=b.qty_sisa||0;
+        // Sudah ada movement KELUAR dari keranjang ini yg masih PENDING —
+        // jangan biarkan submit Return/Batalkan lagi sampai itu beres, atau
+        // bisa kejadian kayak BL-260821-0022-2-1 (2026-08-22): dikirim dobel,
+        // movement pertama jadi tidak bisa dikonfirmasi ("sudah berubah").
+        const isOutPending=outboundPendingSet.has(b.id);
         html+=`<tr class="sub-row${i===g.baskets.length-1?' last-sub':''}">
           <td style="font-family:monospace;font-weight:700">${b.basket_code}</td>
           <td><span style="color:#111827">${fmt(b.qty_sisa)} ek / ${fmtKg(b.kg_sisa)}</span>
             ${allocEkor?`<span class="badge b-allocated" style="margin-left:4px">${fmt(allocEkor)} ek di rak</span>`:''}
             ${frozenEkor?`<span class="badge b-frozen" style="margin-left:4px">${fmt(frozenEkor)} ek beku</span>`:''}
+            ${isOutPending?`<span class="badge b-pending" style="margin-left:4px">⏳ Menunggu Konfirmasi</span>`:''}
             ${availEkor>0?`<div class="tbl-sub">Tersedia: ${fmt(availEkor)} ek</div>`:'<div class="tbl-sub" style="color:#dc2626">Semua sudah dialokasikan</div>'}</td>
           <td style="display:flex;flex-wrap:wrap;gap:4px;padding:8px 14px">
-            <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();goToRakTab('${b.id}')">🗂️ Alokasi ke Rak</button>
-            <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openReturn('${b.id}')" ${availEkor<=0?'disabled':''}>↩️ Return</button>
-            ${(Number(b.qty_sisa)===Number(b.qty_awal)&&!allocEkor&&!frozenEkor)?`<button class="btn btn-ghost btn-sm" style="color:#dc2626" onclick="event.stopPropagation();openBatalkan('${b.id}')">🚫 Batalkan</button>`:''}
+            <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();goToRakTab('${b.id}')" ${isOutPending?'disabled':''}>🗂️ Alokasi ke Rak</button>
+            <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openReturn('${b.id}')" ${(availEkor<=0||isOutPending)?'disabled':''}>↩️ Return</button>
+            ${(Number(b.qty_sisa)===Number(b.qty_awal)&&!allocEkor&&!frozenEkor&&!isOutPending)?`<button class="btn btn-ghost btn-sm" style="color:#dc2626" onclick="event.stopPropagation();openBatalkan('${b.id}')">🚫 Batalkan</button>`:''}
           </td>
         </tr>`;
       });
@@ -1917,26 +1934,17 @@ async function doAlokasiInline(rackId){
   if(kg>availKg+0.05){showErr('raf-err',`Kg melebihi sisa tersedia (${fmtKg(availKg)}).`);return}
   btn.disabled=true;btn.textContent='Menyimpan…';
   try{
-    const{data:allocRow,error}=await db.from('blasting_rack_allocations').insert({
-      rack_id:rackId,basket_id:basketId,ekor,kg,created_by:currentUser.id
-    }).select('id').single();
-    if(error)throw error;
-    // Kurangi sisa keranjang begitu naik rak -- lewat RPC ber-row-lock
-    // (blasting_apply_qty_delta, migration 77), bukan lagi baca cache lokal
-    // lalu tulis absolut. Ini mencegah race dengan aksi lain (mis. Return)
-    // yang menulis qty_sisa basket yang sama di waktu berdekatan --
-    // penyebab bug BL-260806-0025 (2026-08-06): qty_sisa balik ke 15
-    // padahal seharusnya 0 setelah semua dialokasikan ke rak.
-    const{data:decRes,error:decErr}=await db.rpc('blasting_apply_qty_delta',{
-      p_basket_id:basketId,p_delta_ekor:-ekor,p_delta_kg:-kg
+    // Migration 108: satu RPC atomic (insert alokasi + kurangi qty_sisa +
+    // audit_log dalam satu transaksi Postgres) -- menggantikan pola 2-langkah
+    // lama yang bisa meninggalkan keranjang "zombie" (qty_sisa terkurangi tapi
+    // alokasinya sendiri gagal/hilang) kalau koneksi putus di antara dua
+    // langkah. Lihat investigasi BP-260827-0137 (2026-09-04).
+    const{data:res,error}=await db.rpc('fn_blasting_alokasi_rak',{
+      p_rack_id:rackId,p_basket_id:basketId,p_ekor:ekor,p_kg:kg,p_user_id:currentUser.id
     });
-    const dec=typeof decRes==='string'?JSON.parse(decRes):decRes;
-    if(decErr||!dec?.ok){
-      // Kompensasi: batalkan alokasi rak yang baru dibuat supaya tidak
-      // nyangkut sebagai alokasi tanpa qty_sisa yang valid di baliknya.
-      if(allocRow?.id)await db.from('blasting_rack_allocations').delete().eq('id',allocRow.id);
-      throw new Error(dec?.error||(decErr&&decErr.message)||'Gagal mengurangi sisa keranjang.');
-    }
+    if(error)throw error;
+    const r=typeof res==='string'?JSON.parse(res):res;
+    if(!r?.ok)throw new Error(r?.error||'Gagal mengalokasikan ke rak.');
     const rack=racks.find(r=>r.id===rackId);
     showToast(`${fmt(ekor)} ekor berhasil ditambahkan ke ${rack?.nomor_rak||'rak'}!`,'success');
     clearRakSelection();
@@ -1979,30 +1987,14 @@ async function doEditAlokasi(){
   if(ekor>maxEkor){showErr('ea-err',`Melebihi sisa tersedia (${fmt(maxEkor)} ekor).`);return}
   btn.disabled=true;btn.textContent='Menyimpan…';
   try{
-    const a=rackAllocations.find(x=>x.id===activeAllocId);
-    const oldEkor=a?.ekor||0,oldKg=Number(a?.kg||0);
-    const{error}=await db.from('blasting_rack_allocations')
-      .update({ekor,kg,updated_by:currentUser.id})
-      .eq('id',activeAllocId).eq('status','ALLOCATED');
+    // Migration 108: satu RPC atomic (update alokasi + selisihkan qty_sisa +
+    // audit_log dalam satu transaksi) -- menggantikan pola 2-langkah lama.
+    const{data:res,error}=await db.rpc('fn_blasting_edit_alokasi',{
+      p_alloc_id:activeAllocId,p_ekor:ekor,p_kg:kg,p_user_id:currentUser.id
+    });
     if(error)throw error;
-    // Selisihkan perubahan ke qty_sisa/kg_sisa keranjang (reversible edit)
-    // lewat RPC ber-row-lock (blasting_apply_qty_delta, migration 77),
-    // bukan lagi baca dari a.baskets (cache) lalu tulis absolut.
-    if(a){
-      const deltaEkor=ekor-oldEkor,deltaKg=kg-oldKg;
-      if(deltaEkor!==0||deltaKg!==0){
-        const{data:decRes,error:decErr}=await db.rpc('blasting_apply_qty_delta',{
-          p_basket_id:a.basket_id,p_delta_ekor:-deltaEkor,p_delta_kg:-deltaKg
-        });
-        const dec=typeof decRes==='string'?JSON.parse(decRes):decRes;
-        if(decErr||!dec?.ok){
-          // Kompensasi: kembalikan alokasi rak ke jumlah semula karena
-          // penyesuaian qty_sisa keranjang gagal.
-          await db.from('blasting_rack_allocations').update({ekor:oldEkor,kg:oldKg}).eq('id',activeAllocId);
-          throw new Error(dec?.error||(decErr&&decErr.message)||'Gagal menyesuaikan sisa keranjang.');
-        }
-      }
-    }
+    const r=typeof res==='string'?JSON.parse(res):res;
+    if(!r?.ok)throw new Error(r?.error||'Gagal memperbarui alokasi.');
     showToast('Alokasi berhasil diperbarui.','success');
     closeModal('modal-edit-alokasi');
     activeAllocId=null;
@@ -2019,20 +2011,17 @@ async function doHapusAlokasi(allocId){
   const kode=a.baskets?.basket_code||'—';
   if(!confirm(`Hapus alokasi ${kode} (${fmt(a.ekor)} ekor) dari rak ini?\nKeranjang akan kembali muncul sebagai stok tersedia di lantai Blasting.`))return;
   try{
-    const{error}=await db.from('blasting_rack_allocations').delete().eq('id',allocId).eq('status','ALLOCATED');
-    if(error)throw error;
-    // Kembalikan qty_sisa/kg_sisa ke keranjang (reversible delete) lewat
-    // RPC ber-row-lock (blasting_apply_qty_delta, migration 77).
-    const{data:decRes,error:decErr}=await db.rpc('blasting_apply_qty_delta',{
-      p_basket_id:a.basket_id,p_delta_ekor:(a.ekor||0),p_delta_kg:Number(a.kg||0)
+    // Migration 108: satu RPC atomic (hapus alokasi + kembalikan qty_sisa +
+    // audit_log dalam satu transaksi) -- dulu ini 2 langkah terpisah (DELETE
+    // lalu RPC restore) yang kalau langkah kedua gagal di tengah (mis. koneksi
+    // putus), alokasi sudah kadung terhapus TAPI qty_sisa tidak balik --
+    // keranjang lenyap total dari radar aplikasi. Lihat BP-260827-0137 (2026-09-04).
+    const{data:res,error}=await db.rpc('fn_blasting_hapus_alokasi',{
+      p_alloc_id:allocId,p_user_id:currentUser.id
     });
-    const dec=typeof decRes==='string'?JSON.parse(decRes):decRes;
-    if(decErr||!dec?.ok){
-      showToast('Alokasi dihapus, tapi gagal mengembalikan sisa keranjang: '+(dec?.error||(decErr&&decErr.message)||'')+'. Cek manual.','error');
-      await loadAll();
-      if(selectedRackId)renderRakDetail(selectedRackId);
-      return;
-    }
+    if(error)throw error;
+    const r=typeof res==='string'?JSON.parse(res):res;
+    if(!r?.ok)throw new Error(r?.error||'Gagal menghapus alokasi.');
     showToast('Alokasi dihapus, keranjang kembali tersedia di lantai.','warning');
     await loadAll();
     if(selectedRackId)renderRakDetail(selectedRackId);
