@@ -587,7 +587,7 @@ async function fetchAllEventsSemuaProduk(dateFrom, dateTo){
   //    dan dengan waktu transaksi nyatanya terjadi (saat dikonfirmasi, bukan saat dikirim).
   queries.push(
     fetchAllRows(()=>db.from('basket_movements')
-      .select('id,basket_id,qty_pindah,kg_pindah,confirmed_at,ke_lokasi,status,baskets!inner(basket_code,product_id)')
+      .select('id,basket_id,qty_pindah,kg_pindah,confirmed_at,ke_lokasi,status,is_partial,baskets!inner(basket_code,product_id)')
       .eq('dari_lokasi',LOKASI)
       .eq('status','CONFIRMED')
       .gte('confirmed_at',fromBound)
@@ -602,6 +602,14 @@ async function fetchAllEventsSemuaProduk(dateFrom, dateTo){
           ket:'—',
           // keluar ke Loading (penjualan) — cari PS & customer terkait basket ini
           _psLookupBasketId: m.ke_lokasi==='LOADING' ? m.basket_id : null,
+          // 2026-09-07 FIX: kalau movement ini partial transfer (is_partial=TRUE),
+          // basket_id di atas masih basket SUMBER (sebelum split — lihat migration 60
+          // konfirmasi_movement), padahal basket yang benar-benar terkirim & terjual
+          // ke Loading adalah basket BARU hasil split. Tandai movement ini supaya
+          // _psLookupBasketId-nya dikoreksi lewat audit_log di bawah — kalau tidak,
+          // baris ini bisa ketuker nomor PS dengan baris lain yang basket_id sumbernya
+          // sama (kasus nyata: basket sisa yang terjual lagi belakangan lewat PS lain).
+          _partialSplitMovementId: (m.is_partial && m.ke_lokasi==='LOADING') ? m.id : null,
           masuk_qty:0, masuk_kg:0,
           keluar_qty:Number(m.qty_pindah)||0, keluar_kg:Number(m.kg_pindah)||0
         });
@@ -736,6 +744,36 @@ async function fetchAllEventsSemuaProduk(dateFrom, dateTo){
   );
 
   await Promise.all(queries);
+
+  // B2) Resolusi basket_id yang BENAR untuk baris Transfer Keluar hasil PARTIAL
+  //     transfer (is_partial=TRUE) ke Loading. basket_movements.basket_id tetap
+  //     basket SUMBER (sebelum split, per desain migration 60 konfirmasi_movement)
+  //     — basket BARU hasil split (yang benar-benar dikirim & mungkin terjual ke
+  //     Loading) baru tercatat sebagai basket_id_hasil di audit_log
+  //     (aksi=MOVEMENT_CONFIRMED, tabel_terkait=basket_movements). Tanpa resolusi
+  //     ini, dua baris Transfer Keluar dari basket sumber yang sama (mis. sisa
+  //     basket yang terjual lagi belakangan lewat PS lain) akan salah tertukar
+  //     nomor PS-nya di langkah F, karena psMap di sana cuma bisa cocok ke SATU
+  //     basket_id per baris. Kalau audit_log tidak ketemu (data lama / sebelum
+  //     migration ini ada), biarkan _psLookupBasketId apa adanya (fallback lama).
+  const partialMovementIds = [...new Set(events.map(e=>e._partialSplitMovementId).filter(Boolean))];
+  if(partialMovementIds.length){
+    const auditRows = await fetchAllRows(()=>db.from('audit_log')
+      .select('record_id,data_sesudah')
+      .eq('aksi','MOVEMENT_CONFIRMED')
+      .eq('tabel_terkait','basket_movements')
+      .in('record_id', partialMovementIds));
+    const hasilMap = {};
+    (auditRows||[]).forEach(a=>{
+      const hasil = a.data_sesudah?.basket_id_hasil;
+      if(hasil) hasilMap[a.record_id] = hasil;
+    });
+    events.forEach(e=>{
+      if(!e._partialSplitMovementId) return;
+      const hasil = hasilMap[e._partialSplitMovementId];
+      if(hasil) e._psLookupBasketId = hasil;
+    });
+  }
 
   // F) Lengkapi Keterangan untuk baris yang menyentuh Loading (penjualan) dengan No PS & nama customer,
   //    dicari lewat picking_slip_items berdasarkan basket_id. Kalau satu basket_id pernah dipakai di
