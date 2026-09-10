@@ -1386,7 +1386,7 @@ async function loadMarinasiStock() {
       .from('baskets')
       .select(`
         id, basket_code, basket_type, qty_sisa, kg_sisa, lokasi, status, batch_id, product_id, created_at, updated_at, tanggal_produksi,
-        product_master ( id, nama_produk, product_code, kategori, kg_min, kg_max ),
+        product_master ( id, nama_produk, product_code, kategori, kg_min, kg_max, validation_type ),
         live_chicken_batches ( batch_code )
       `)
       .eq('lokasi', 'MARINASI')
@@ -1642,7 +1642,7 @@ async function loadWorkstations() {
 }
 
 async function loadProducts() {
-  const { data } = await db.from('product_master').select('id, product_code, nama_produk, kategori, kg_min, kg_max').eq('aktif',true).order('nama_produk');
+  const { data } = await db.from('product_master').select('id, product_code, nama_produk, kategori, kg_min, kg_max, validation_type').eq('aktif',true).order('nama_produk');
   allProducts = data || [];
 }
 
@@ -2774,56 +2774,72 @@ async function doAssignInput() {
   if (!b) return;
   if (qty > Number(b.qty_sisa))    { showErr('ai-err',`Qty melebihi sisa keranjang (${fmt(b.qty_sisa)} ekor).`); return; }
   if (kg > Number(b.kg_sisa)+0.05) { showErr('ai-err',`Kg melebihi sisa keranjang (${fmtKg(b.kg_sisa)}).`); return; }
-  // Validasi kg_min / kg_max per ekor dari produk
+  // Validasi kg_min / kg_max per ekor dari produk — HARD butuh approval
+  // Supervisor (PIN+alasan), SOFT lanjut & ditandai needs_review.
   const pmB = b.product_master || {};
-  if (pmB.kg_min && pmB.kg_max) {
-    const expMin = Number((qty * pmB.kg_min).toFixed(1));
-    const expMax = Number((qty * pmB.kg_max).toFixed(1));
-    if (kg < expMin - 0.05 || kg > expMax + 0.05) {
-      showErr('ai-err', `Kg tidak sesuai produk. ${qty} ekor ${pmB.nama_produk} seharusnya ${fmtKg(expMin)} – ${fmtKg(expMax)} (standar ${pmB.kg_min}–${pmB.kg_max} kg/ekor).`);
-      return;
+  const kgCheckAI = evalKgStandar(pmB, qty, kg);
+  const saveAI = async (flags = {}) => {
+    const btn = document.getElementById('ai-btn-ok');
+    btn.disabled=true; btn.textContent='Menyimpan…';
+    try {
+      const { error: inpErr } = await db.from('processing_inputs').insert({
+        order_id:       currentInputWOId,
+        basket_id:      selectedInputBasketId,
+        product_id:     b.product_master?.id||null,
+        workstation_id: wsId,
+        qty_input:      qty,
+        kg_input:       kg,
+        kg_diambil:     kg,
+        needs_review:    !!flags.needsReview,
+        override:        !!flags.override,
+        override_by:     flags.override ? flags.overrideBy : null,
+        override_at:     flags.override ? new Date().toISOString() : null,
+        override_alasan: flags.override ? flags.overrideAlasan : null,
+        created_by:     currentUser.id
+      });
+      if (inpErr) throw inpErr;
+      // Kurangi sisa keranjang
+      const newKg  = Math.max(0, Number(b.kg_sisa)-kg);
+      const newQty = Math.max(0, Number(b.qty_sisa)-qty);
+      await db.from('baskets').update({
+        kg_sisa:  Number(newKg.toFixed(1)),
+        qty_sisa: newQty,
+        status:   newKg<=0.01?'HABIS':'AKTIF'
+      }).eq('id', selectedInputBasketId);
+      // Update WO status ke IN_PROGRESS bila masih OPEN
+      const wo = activeWOs.find(w=>w.id===currentInputWOId);
+      if (wo?.status==='OPEN') {
+        await db.from('processing_orders').update({status:'IN_PROGRESS'}).eq('id',currentInputWOId);
+      }
+      showToast(
+        flags.override ? `Input disimpan (override Supervisor).`
+        : flags.needsReview ? `⚠️ Input disimpan — kg di luar standar (SOFT), ditandai untuk review.`
+        : 'Input berhasil di-assign!',
+        (flags.needsReview && !flags.override) ? 'warning' : 'success'
+      );
+      selectedInputBasketId = null;
+      document.getElementById('ai-selected-basket').style.display='none';
+      document.getElementById('ai-kg-diambil').value='';
+      document.getElementById('ai-qty-input').value='';
+      await loadAll();
+      const updWO = activeWOs.find(w=>w.id===currentInputWOId);
+      if (updWO) { renderAssignedInputs(updWO); renderBasketList(''); }
+    } catch(e) {
+      console.error(e); showErr('ai-err','Gagal: '+(e.message||''));
+    } finally {
+      btn.disabled=false; btn.textContent='💾 Assign Input';
     }
-  }
-  const btn = document.getElementById('ai-btn-ok');
-  btn.disabled=true; btn.textContent='Menyimpan…';
-  try {
-    const { error: inpErr } = await db.from('processing_inputs').insert({
-      order_id:       currentInputWOId,
-      basket_id:      selectedInputBasketId,
-      product_id:     b.product_master?.id||null,
-      workstation_id: wsId,
-      qty_input:      qty,
-      kg_input:       kg,
-      kg_diambil:     kg,
-      created_by:     currentUser.id
+  };
+  if (kgCheckAI.status === 'HARD') {
+    showRevisiPin({
+      title: '🔑 Konfirmasi Supervisor — Kg Di Luar Standar',
+      desc: `${qty} ekor ${pmB.nama_produk||'produk ini'} = ${fmtKg(kg)}, seharusnya ${fmtKg(kgCheckAI.expMin)} – ${fmtKg(kgCheckAI.expMax)} (standar ${pmB.kg_min}–${pmB.kg_max} kg/ekor). Wajib alasan & PIN Supervisor untuk tetap menyimpan.`,
+      requireAlasan: true,
+      onConfirm: (sup, alasan) => saveAI({ override: true, overrideBy: sup.id, overrideAlasan: alasan })
     });
-    if (inpErr) throw inpErr;
-    // Kurangi sisa keranjang
-    const newKg  = Math.max(0, Number(b.kg_sisa)-kg);
-    const newQty = Math.max(0, Number(b.qty_sisa)-qty);
-    await db.from('baskets').update({
-      kg_sisa:  Number(newKg.toFixed(1)),
-      qty_sisa: newQty,
-      status:   newKg<=0.01?'HABIS':'AKTIF'
-    }).eq('id', selectedInputBasketId);
-    // Update WO status ke IN_PROGRESS bila masih OPEN
-    const wo = activeWOs.find(w=>w.id===currentInputWOId);
-    if (wo?.status==='OPEN') {
-      await db.from('processing_orders').update({status:'IN_PROGRESS'}).eq('id',currentInputWOId);
-    }
-    showToast('Input berhasil di-assign!','success');
-    selectedInputBasketId = null;
-    document.getElementById('ai-selected-basket').style.display='none';
-    document.getElementById('ai-kg-diambil').value='';
-    document.getElementById('ai-qty-input').value='';
-    await loadAll();
-    const updWO = activeWOs.find(w=>w.id===currentInputWOId);
-    if (updWO) { renderAssignedInputs(updWO); renderBasketList(''); }
-  } catch(e) {
-    console.error(e); showErr('ai-err','Gagal: '+(e.message||''));
-  } finally {
-    btn.disabled=false; btn.textContent='💾 Assign Input';
+    return;
   }
+  await saveAI({ needsReview: kgCheckAI.status === 'SOFT' });
 }
 
 async function removeInput(inputId) {
@@ -2968,6 +2984,21 @@ async function verifySupervisorPinRevisi(pin) {
     .select('id,nama').eq('pin', pin).eq('aktif', true)
     .or('role.eq.SUPERVISOR,is_system_admin.eq.true').maybeSingle();
   return sup || null;
+}
+
+// ============================================================
+// VALIDASI STANDAR KG PRODUK (kg_min/kg_max + validation_type)
+// HARD (default kalau validation_type kosong) -> block, perlu approval
+// Supervisor (PIN + alasan wajib) lewat showRevisiPin untuk tetap simpan.
+// SOFT -> boleh lanjut tanpa PIN, baris ditandai needs_review=true untuk
+// ditinjau belakangan (mis. di Laporan Kartu Stok Keranjang).
+// ============================================================
+function evalKgStandar(produk, qty, kg) {
+  if (!produk?.kg_min || !produk?.kg_max || !qty || !kg) return { status: 'OK' };
+  const expMin = Number((qty * produk.kg_min).toFixed(1));
+  const expMax = Number((qty * produk.kg_max).toFixed(1));
+  if (kg >= expMin - 0.05 && kg <= expMax + 0.05) return { status: 'OK', expMin, expMax };
+  return { status: produk.validation_type === 'SOFT' ? 'SOFT' : 'HARD', expMin, expMax };
 }
 function showRevisiPin({ title = '🔑 Konfirmasi Supervisor', desc = 'Masukkan PIN Supervisor untuk melanjutkan.', requireAlasan = false, onConfirm }) {
   _rpCallback = onConfirm;
@@ -3441,105 +3472,127 @@ async function doRecordOutput() {
   if (!kg  || kg  <= 0) { showErr('ro-err', 'Kg aktual harus lebih dari 0.');   return; }
   if (!tanggal)         { showErr('ro-err', 'Tanggal produksi wajib diisi.');   return; }
   if (!selectedWSId)    { showErr('ro-err', 'Pilih workstation terlebih dahulu.'); return; }
-  // Validasi kg_min / kg_max per ekor dari produk
+  // Validasi kg_min / kg_max per ekor dari produk — HARD butuh approval
+  // Supervisor (PIN+alasan), SOFT lanjut & ditandai needs_review.
   const produkVal = allProducts.find(p => p.id === produkId);
-  if (produkVal?.kg_min && produkVal?.kg_max) {
-    const expMin = Number((qty * produkVal.kg_min).toFixed(1));
-    const expMax = Number((qty * produkVal.kg_max).toFixed(1));
-    if (kg < expMin - 0.05 || kg > expMax + 0.05) {
-      showErr('ro-err', `Kg tidak sesuai standar produk. ${qty} ekor ${produkVal.nama_produk} seharusnya ${fmtKg(expMin)} – ${fmtKg(expMax)} (standar ${produkVal.kg_min}–${produkVal.kg_max} kg/ekor).`);
-      return;
+  const kgCheckRO = evalKgStandar(produkVal, qty, kg);
+
+  const saveRO = async (flags = {}) => {
+    const btn = document.getElementById('ro-btn-ok');
+    btn.disabled = true; btn.textContent = 'Menyimpan…';
+
+    try {
+      // 1. Generate basket code
+      const basketCode = await generatePRTBasketCode();
+      const nowIsoRO = new Date().toISOString();
+
+      // 2. Get product info for label; auto-derive output_type from kategori
+      const produk = allProducts.find(p => p.id === produkId) || {};
+      const autoOutputType = ['BYPRODUCT_KARKAS','BYPRODUCT_PARTING','BYPRODUCT_BONELESS'].includes(produk.kategori) ? 'BYPRODUCT' : 'PRIMARY';
+
+      // 3. Insert basket baru (lokasi MARINASI, status AKTIF)
+      const { data: newBasket, error: bErr } = await db
+        .from('baskets')
+        .insert({
+          basket_code:      basketCode,
+          basket_type:      'MARINASI',
+          product_id:       produkId,
+          batch_id:         null,
+          tanggal_produksi: tanggal,   // wajib untuk hitung umur di Chiller
+          lokasi:           'MARINASI',
+          status:           'AKTIF',
+          qty_awal:         qty,
+          qty_sisa:         qty,
+          kg_awal:          Number(kg.toFixed(1)),
+          kg_sisa:          Number(kg.toFixed(1)),
+          needs_review:     !!flags.needsReview,
+          override:         !!flags.override,
+          override_by:      flags.override ? flags.overrideBy : null,
+          override_at:      flags.override ? nowIsoRO : null,
+          override_alasan:  flags.override ? flags.overrideAlasan : null,
+          created_by:       currentUser.id
+        })
+        .select('id')
+        .single();
+      if (bErr) throw bErr;
+
+      // 4. Insert processing_output
+      const { error: outErr } = await db
+        .from('processing_outputs')
+        .insert({
+          order_id:         currentOutputWOId,
+          product_id:       produkId,
+          basket_id:        newBasket.id,
+          worker_id:        currentUser.id,
+          workstation_id:   selectedWSId,
+          qty_output:       qty,
+          kg_output:        Number(kg.toFixed(1)),
+          output_type:      autoOutputType,
+          tanggal_produksi: tanggal,
+          tujuan_lokasi:    'MARINASI',
+          needs_review:     !!flags.needsReview,
+          alasan:           flags.override ? flags.overrideAlasan : null,
+          approved_by:      flags.override ? flags.overrideBy : null,
+          approved_at:      flags.override ? nowIsoRO : null,
+          created_by:       currentUser.id
+        });
+      if (outErr) throw outErr;
+
+      // 5. Auto-set WO to IN_PROGRESS if still OPEN
+      const wo = activeWOs.find(w => w.id === currentOutputWOId);
+      if (wo?.status === 'OPEN') {
+        await db.from('processing_orders')
+          .update({ status: 'IN_PROGRESS' })
+          .eq('id', currentOutputWOId);
+      }
+
+      // 6. Prepare print data
+      const ws = allWorkstations.find(w => w.id === selectedWSId);
+      lastPrintBasket = {
+        basket_code:  basketCode,
+        produk_name:  produk.nama_produk || '—',
+        produk_code:  produk.product_code || '—',
+        qty,
+        kg:           Number(kg.toFixed(1)),
+        wo_code:      wo?.order_code || '—',
+        wo_catatan:   wo?.catatan || '',
+        ws_kode:      ws?.kode || '—',
+        tanggal,
+        output_type:  autoOutputType,
+        worker_name:  currentUser.nama
+      };
+
+      showToast(
+        flags.override ? `Keranjang ${basketCode} disimpan (override Supervisor).`
+        : flags.needsReview ? `⚠️ Keranjang ${basketCode} disimpan — kg di luar standar (SOFT), ditandai untuk review.`
+        : `Keranjang ${basketCode} berhasil dicatat!`,
+        (flags.needsReview && !flags.override) ? 'warning' : 'success'
+      );
+      closeModal('modal-record-output');
+
+      // 7. Reload data, then open print modal
+      await loadAll();
+      showPrintModal(lastPrintBasket);
+
+    } catch(e) {
+      console.error(e);
+      showErr('ro-err', 'Gagal: ' + (e.message || ''));
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '💾 Simpan & Generate Keranjang';
     }
+  };
+
+  if (kgCheckRO.status === 'HARD') {
+    showRevisiPin({
+      title: '🔑 Konfirmasi Supervisor — Kg Di Luar Standar',
+      desc: `${qty} ekor ${produkVal?.nama_produk||'produk ini'} = ${fmtKg(kg)}, seharusnya ${fmtKg(kgCheckRO.expMin)} – ${fmtKg(kgCheckRO.expMax)} (standar ${produkVal?.kg_min}–${produkVal?.kg_max} kg/ekor). Wajib alasan & PIN Supervisor untuk tetap menyimpan.`,
+      requireAlasan: true,
+      onConfirm: (sup, alasan) => saveRO({ override: true, overrideBy: sup.id, overrideAlasan: alasan })
+    });
+    return;
   }
-
-  const btn = document.getElementById('ro-btn-ok');
-  btn.disabled = true; btn.textContent = 'Menyimpan…';
-
-  try {
-    // 1. Generate basket code
-    const basketCode = await generatePRTBasketCode();
-
-    // 2. Get product info for label; auto-derive output_type from kategori
-    const produk = allProducts.find(p => p.id === produkId) || {};
-    const autoOutputType = ['BYPRODUCT_KARKAS','BYPRODUCT_PARTING','BYPRODUCT_BONELESS'].includes(produk.kategori) ? 'BYPRODUCT' : 'PRIMARY';
-
-    // 3. Insert basket baru (lokasi MARINASI, status AKTIF)
-    const { data: newBasket, error: bErr } = await db
-      .from('baskets')
-      .insert({
-        basket_code:      basketCode,
-        basket_type:      'MARINASI',
-        product_id:       produkId,
-        batch_id:         null,
-        tanggal_produksi: tanggal,   // wajib untuk hitung umur di Chiller
-        lokasi:           'MARINASI',
-        status:           'AKTIF',
-        qty_awal:         qty,
-        qty_sisa:         qty,
-        kg_awal:          Number(kg.toFixed(1)),
-        kg_sisa:          Number(kg.toFixed(1)),
-        created_by:       currentUser.id
-      })
-      .select('id')
-      .single();
-    if (bErr) throw bErr;
-
-    // 4. Insert processing_output
-    const { error: outErr } = await db
-      .from('processing_outputs')
-      .insert({
-        order_id:         currentOutputWOId,
-        product_id:       produkId,
-        basket_id:        newBasket.id,
-        worker_id:        currentUser.id,
-        workstation_id:   selectedWSId,
-        qty_output:       qty,
-        kg_output:        Number(kg.toFixed(1)),
-        output_type:      autoOutputType,
-        tanggal_produksi: tanggal,
-        tujuan_lokasi:    'MARINASI',
-        created_by:       currentUser.id
-      });
-    if (outErr) throw outErr;
-
-    // 5. Auto-set WO to IN_PROGRESS if still OPEN
-    const wo = activeWOs.find(w => w.id === currentOutputWOId);
-    if (wo?.status === 'OPEN') {
-      await db.from('processing_orders')
-        .update({ status: 'IN_PROGRESS' })
-        .eq('id', currentOutputWOId);
-    }
-
-    // 6. Prepare print data
-    const ws = allWorkstations.find(w => w.id === selectedWSId);
-    lastPrintBasket = {
-      basket_code:  basketCode,
-      produk_name:  produk.nama_produk || '—',
-      produk_code:  produk.product_code || '—',
-      qty,
-      kg:           Number(kg.toFixed(1)),
-      wo_code:      wo?.order_code || '—',
-      wo_catatan:   wo?.catatan || '',
-      ws_kode:      ws?.kode || '—',
-      tanggal,
-      output_type:  autoOutputType,
-      worker_name:  currentUser.nama
-    };
-
-    showToast(`Keranjang ${basketCode} berhasil dicatat!`, 'success');
-    closeModal('modal-record-output');
-
-    // 7. Reload data, then open print modal
-    await loadAll();
-    showPrintModal(lastPrintBasket);
-
-  } catch(e) {
-    console.error(e);
-    showErr('ro-err', 'Gagal: ' + (e.message || ''));
-  } finally {
-    btn.disabled = false;
-    btn.textContent = '💾 Simpan & Generate Keranjang';
-  }
+  await saveRO({ needsReview: kgCheckRO.status === 'SOFT' });
 }
 
 // ============================================================
