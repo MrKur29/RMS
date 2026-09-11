@@ -1619,13 +1619,16 @@ async function bpkKonfirmasi(id) {
   const e = bpkAntrianList.find(x=>x.id===id);
   if(!e) return;
   const namaP = e.product_master?.nama_produk||'By-product';
-  if(!confirm(`Konfirmasi terima ${namaP} — ${e.qty_bungkus} bks / ${parseFloat(e.kg).toFixed(1)} kg?`)) return;
-  const { error } = await db.from('byproduct_karkas_entries')
-    .update({ status:'CONFIRMED', confirmed_at: new Date().toISOString(), confirmed_by: currentUser.id })
-    .eq('id', id);
-  if(error){ showToast('Gagal konfirmasi: '+error.message,'error'); return; }
-  showToast(`${namaP} diterima di Chiller ✅`,'success');
+  if(!confirm(`Konfirmasi terima ${namaP} — ${e.qty_bungkus} bks / ${parseFloat(e.kg).toFixed(1)} kg? Keranjang akan otomatis dibuat di stok Chiller (bisa lanjut ke Blasting / dijual seperti keranjang lain).`)) return;
+  // Migration 109: RPC atomic — bikin baris `baskets` (basket_type BYPRODUCT,
+  // basket_code = label yang sudah dicetak) SEKALIGUS tandai entry CONFIRMED,
+  // supaya by-product karkas ikut ke-tracing lewat Chiller/Blasting/Penjualan
+  // persis seperti keranjang karkas/parting/boneless.
+  const { data, error } = await db.rpc('bpk_konfirmasi_ke_chiller', { p_entry_id: id, p_user_id: currentUser.id });
+  if(error || !data?.ok){ showToast('Gagal konfirmasi: '+(error?.message||data?.error||'unknown error'),'error'); return; }
+  showToast(`${namaP} diterima di Chiller ✅ — Keranjang ${data.basket_code}`,'success');
   loadBpkAntrian();
+  loadChillerStok();
 }
 
 async function bpkTolak(id) {
@@ -1644,15 +1647,14 @@ async function bpkTolak(id) {
 
 async function bpkKonfirmasiSemua() {
   if(!bpkAntrianList.length) return;
-  if(!confirm(`Konfirmasi semua ${bpkAntrianList.length} by-product karkas masuk?`)) return;
+  if(!confirm(`Konfirmasi semua ${bpkAntrianList.length} by-product karkas masuk? Keranjang akan otomatis dibuat di stok Chiller untuk masing-masing.`)) return;
   let ok=0, fail=0;
   for(const e of bpkAntrianList) {
-    const { error } = await db.from('byproduct_karkas_entries')
-      .update({ status:'CONFIRMED', confirmed_at: new Date().toISOString(), confirmed_by: currentUser.id })
-      .eq('id', e.id);
-    if(error) fail++; else ok++;
+    const { data, error } = await db.rpc('bpk_konfirmasi_ke_chiller', { p_entry_id: e.id, p_user_id: currentUser.id });
+    if(error || !data?.ok) fail++; else ok++;
   }
   showToast(`${ok} by-product dikonfirmasi${fail?' ('+fail+' gagal)':''}`, fail?'warning':'success');
+  loadChillerStok();
   loadBpkAntrian();
 }
 
