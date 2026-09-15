@@ -722,6 +722,30 @@ async function buildStokAggregate(lokasi, asOfDate){
     })
   );
 
+
+  // H) By-product Karkas dikonfirmasi langsung ke Chiller (migration 109, RPC
+  //    bpk_konfirmasi_ke_chiller) — basket BYPRODUCT lahir LANGSUNG di CHILLER,
+  //    tidak lewat basket_movements/processing_outputs/SALDO_AWAL manapun.
+  //    Tanpa ini, basket tsb "keluar tanpa pernah masuk" begitu naik ke
+  //    Blasting — bikin Laporan Stok Barang Chiller minus. Ditambahkan
+  //    2026-09-15 (kasus BPK-260911-2A5770 & BPK-260914-E64C79). Lihat juga
+  //    LaporanKartuStok.html dan LaporanRincianTransaksiChiller.html.
+  if(lokasi==='CHILLER'){
+    tasks.push(
+      fetchAllRows(()=>db.from('byproduct_karkas_entries')
+        .select('id,product_id,qty_bungkus,kg,confirmed_at,baskets!inner(status,qty_sisa,qty_awal,kg_sisa,kg_awal)')
+        .eq('tujuan','CHILLER')
+        .eq('status','CONFIRMED')
+        .lte('confirmed_at',toBound)
+      ).then(data=>{
+        (data||[]).filter(e=>!isVoidGhost(e.baskets)).forEach(e=>{
+          add(e.product_id,'masuk_qty',Number(e.qty_bungkus)||0);
+          add(e.product_id,'masuk_kg', Number(e.kg)||0);
+        });
+      })
+    );
+  }
+
   await Promise.all(tasks);
   return agg;
 }

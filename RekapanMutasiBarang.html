@@ -861,6 +861,23 @@ async function computeSaldoChiller(cutoffDate){
     })
   );
 
+  // Masuk: By-product Karkas lahir LANGSUNG di Chiller (RPC bpk_konfirmasi_ke_chiller,
+  // migration 109) — akar masalah SAMA dengan Thawing di atas: basket ini tidak pernah
+  // lewat basket_movements sebagai "masuk", tapi begitu naik ke Blasting/dst TETAP
+  // kehitung Keluar di bawah — tanpa ini saldo Chiller under-counted (bisa minus).
+  // Ditemukan 2026-09-15 (kasus BPK-260911-2A5770 & BPK-260914-E64C79, REMPELO BERSIH
+  // 1KG) — lihat juga LaporanKartuStok.html/LaporanStokBarang.html/
+  // LaporanRincianTransaksiChiller.html (section serupa).
+  tasks.push(
+    fetchAllRows(()=>db.from('byproduct_karkas_entries')
+      .select('product_id,qty_bungkus,kg,confirmed_at')
+      .eq('tujuan','CHILLER').eq('status','CONFIRMED')
+      .lte('confirmed_at',toBound)
+    ).then(data=>{
+      (data||[]).forEach(e=>bump(masuk,e.product_id,e.qty_bungkus,e.kg));
+    })
+  );
+
   // Keluar: SEMUA transfer CONFIRMED dari CHILLER, ke lokasi APA PUN.
   tasks.push(
     fetchAllRows(()=>db.from('basket_movements')
@@ -992,6 +1009,21 @@ async function computePeriodChiller(fromDate, toDate){
       .gte('created_at',fromBound).lte('created_at',toBound)
     ).then(data=>{
       (data||[]).forEach(b=>bump(masuk.thawing,b.product_id,b.qty_awal,b.kg_awal));
+    })
+  );
+
+  // Masuk: By-product Karkas lahir LANGSUNG di Chiller (RPC bpk_konfirmasi_ke_chiller,
+  // migration 109) — akar masalah SAMA dengan Thawing di atas. Belum ada kolom khusus
+  // "Masuk: By-product Karkas" di laporan ini, jadi untuk sekarang di-bucket ke
+  // Masuk:Lainnya (bukan hilang diam-diam) — lihat computeSaldoChiller() di atas dan
+  // LaporanKartuStok.html untuk versi dengan kolom/tipe sendiri. Ditemukan 2026-09-15.
+  tasks.push(
+    fetchAllRows(()=>db.from('byproduct_karkas_entries')
+      .select('product_id,qty_bungkus,kg,confirmed_at')
+      .eq('tujuan','CHILLER').eq('status','CONFIRMED')
+      .gte('confirmed_at',fromBound).lte('confirmed_at',toBound)
+    ).then(data=>{
+      (data||[]).forEach(e=>bump(masuk.lainnya,e.product_id,e.qty_bungkus,e.kg));
     })
   );
 

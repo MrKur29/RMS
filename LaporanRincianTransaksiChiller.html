@@ -743,6 +743,37 @@ async function fetchAllEventsSemuaProduk(dateFrom, dateTo){
     })
   );
 
+  // H) By-product Karkas dikonfirmasi langsung ke Chiller (migration 109, RPC
+  //    bpk_konfirmasi_ke_chiller) — basket BYPRODUCT lahir LANGSUNG di CHILLER,
+  //    tidak lewat basket_movements/processing_outputs/SALDO_AWAL manapun.
+  //    Tanpa ini, basket tsb "keluar tanpa pernah masuk" begitu naik ke
+  //    Blasting — bikin Rincian Transaksi Chiller & Kartu Stok minus.
+  //    Ditambahkan 2026-09-15 (kasus BPK-260911-2A5770 & BPK-260914-E64C79).
+  //    Catatan: file ini tidak punya isVoidGhost() (beda dari LaporanKartuStok/
+  //    LaporanStokBarang) jadi section ini juga tidak memfilternya, konsisten
+  //    dengan section A-G lain di file ini.
+  queries.push(
+    fetchAllRows(()=>db.from('byproduct_karkas_entries')
+      .select('id,product_id,qty_bungkus,kg,confirmed_at,baskets!inner(basket_code)')
+      .eq('tujuan','CHILLER')
+      .eq('status','CONFIRMED')
+      .gte('confirmed_at',fromBound)
+      .lte('confirmed_at',toBound)
+    ).then(data=>{
+      (data||[]).forEach(e=>{
+        events.push({
+          date:new Date(e.confirmed_at), tipe:'By-Product Karkas', tipeCls:'tp-produksi',
+          asalTujuan:'By-Product Karkas',
+          product_id:e.product_id,
+          basketCode:e.baskets?.basket_code||'—',
+          ket:'Konfirmasi By-Product Karkas ke Chiller',
+          masuk_qty:Number(e.qty_bungkus)||0, masuk_kg:Number(e.kg)||0,
+          keluar_qty:0, keluar_kg:0
+        });
+      });
+    })
+  );
+
   await Promise.all(queries);
 
   // B2) Resolusi basket_id yang BENAR untuk baris Transfer Keluar hasil PARTIAL
