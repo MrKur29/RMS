@@ -878,6 +878,34 @@ async function fetchAllEvents(productId, lokasi, dateTo){
     );
   }
 
+  // I) Thawing -> keranjang THAWING lahir LANGSUNG di lokasi tujuan (thawing_outputs.destinasi:
+  //    CHILLER / PARTING / BONELESS / MARINASI) — tidak lewat basket_movements/processing_outputs
+  //    manapun sebagai "masuk", tapi keluarnya (transfer ke Loading, konsumsi WO, dst) TETAP
+  //    tercatat. Tanpa section ini saldo lokasi tujuan under-count. Ketahuan 2026-09-24 saat
+  //    destinasi Thawing->CHILLER mulai dipakai (22 Sep): Laporan Stok Barang Chiller AU 0.9
+  //    kurang 950 ekor & AU 1.0 kurang 640 ekor vs Stok di Chiller (Chiller.html).
+  //    Sumber = thawing_outputs (bukan baskets.lokasi, yang berubah begitu basket pindah/terjual;
+  //    dan bukan basket_type='THAWING', supaya anak split tidak ikut dihitung dobel).
+  //    Qty/kg pakai baskets.qty_awal/kg_awal (sudah termasuk koreksi *_awal yang disetujui).
+  queries.push(
+    fetchAllRows(()=>db.from('thawing_outputs')
+      .select('id,created_at,baskets!inner(basket_code,product_id,status,qty_sisa,qty_awal,kg_sisa,kg_awal),thawing_sessions(session_code)')
+      .eq('destinasi',lokasi)
+      .eq('baskets.product_id',productId)
+      .lte('created_at',toBound)
+    ).then(data=>{
+      (data||[]).filter(t=>!isVoidGhost(t.baskets) && t.baskets.status!=='VOID').forEach(t=>{
+        events.push({
+          date:new Date(t.created_at), tipe:'Hasil Thawing', tipeCls:'tp-produksi',
+          asalTujuan:'Thawing', basketCode:t.baskets?.basket_code||'—',
+          ket: t.thawing_sessions?.session_code ? `Thawing ${t.thawing_sessions.session_code}` : 'Hasil Thawing (keranjang baru)',
+          masuk_qty:Number(t.baskets.qty_awal)||0, masuk_kg:Number(t.baskets.kg_awal)||0,
+          keluar_qty:0, keluar_kg:0
+        });
+      });
+    })
+  );
+
   await Promise.all(queries);
   return events;
 }

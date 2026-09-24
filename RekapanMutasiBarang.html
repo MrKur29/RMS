@@ -852,12 +852,15 @@ async function computeSaldoChiller(cutoffDate){
 
   // Masuk: Thawing lahir LANGSUNG di Chiller (destinasi dipilih operator saat timbang Thawing)
   tasks.push(
-    fetchAllRows(()=>db.from('baskets')
-      .select('product_id,qty_awal,kg_awal,created_at')
-      .eq('basket_type','THAWING').eq('lokasi','CHILLER').neq('status','VOID')
+    // 2026-09-24 FIX: dulu pakai baskets.lokasi='CHILLER' (lokasi TERKINI) — begitu keranjang
+    // Thawing pindah ke Loading/terjual, masuknya hilang padahal keluarnya tetap dihitung
+    // (pola bug sama dgn SALDO_AWAL lokasi_opname 2026-08-08). Sekarang sumber = thawing_outputs.destinasi.
+    fetchAllRows(()=>db.from('thawing_outputs')
+      .select('id,created_at,baskets!inner(product_id,status,qty_sisa,qty_awal,kg_sisa,kg_awal)')
+      .eq('destinasi','CHILLER')
       .lte('created_at',toBound)
     ).then(data=>{
-      (data||[]).forEach(b=>bump(masuk,b.product_id,b.qty_awal,b.kg_awal));
+      (data||[]).filter(t=>!isVoidGhost(t.baskets) && t.baskets.status!=='VOID').forEach(t=>bump(masuk,t.baskets.product_id,t.baskets.qty_awal,t.baskets.kg_awal));
     })
   );
 
@@ -1003,12 +1006,13 @@ async function computePeriodChiller(fromDate, toDate){
   );
 
   tasks.push(
-    fetchAllRows(()=>db.from('baskets')
-      .select('product_id,qty_awal,kg_awal,created_at')
-      .eq('basket_type','THAWING').eq('lokasi','CHILLER').neq('status','VOID')
+    // 2026-09-24 FIX: sumber = thawing_outputs.destinasi, bukan baskets.lokasi terkini (lihat computeSaldoChiller).
+    fetchAllRows(()=>db.from('thawing_outputs')
+      .select('id,created_at,baskets!inner(product_id,status,qty_sisa,qty_awal,kg_sisa,kg_awal)')
+      .eq('destinasi','CHILLER')
       .gte('created_at',fromBound).lte('created_at',toBound)
     ).then(data=>{
-      (data||[]).forEach(b=>bump(masuk.thawing,b.product_id,b.qty_awal,b.kg_awal));
+      (data||[]).filter(t=>!isVoidGhost(t.baskets) && t.baskets.status!=='VOID').forEach(t=>bump(masuk.thawing,t.baskets.product_id,t.baskets.qty_awal,t.baskets.kg_awal));
     })
   );
 
