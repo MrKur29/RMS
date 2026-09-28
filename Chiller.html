@@ -2817,6 +2817,21 @@ async function doPindahKeluar() {
   btn.disabled = true; btn.textContent = 'Memproses…';
   err.style.display = 'none';
   try {
+    // Fix 2026-09-28 (BK-260925-0141): "Kirim Semua" saat ada movement PENDING lain
+    // mengirim sisa efektif (< qty_sisa) tapi dulu tercatat is_partial=false. Kalau
+    // pending lain lalu dibatalkan, konfirmasi/picking slip memperlakukannya sebagai
+    // kirim penuh -> seluruh keranjang ikut HABIS/SOLD. Sekarang: jumlah kirim yang
+    // lebih kecil dari qty_sisa TERKINI di DB selalu dicatat sebagai partial.
+    const { data: fresh, error: freshErr } = await db.from('baskets')
+      .select('qty_sisa,kg_sisa,status').eq('id', activeBasketId).maybeSingle();
+    if (freshErr) throw freshErr;
+    if (!fresh || fresh.status !== 'AKTIF') throw new Error('Keranjang sudah tidak aktif. Muat ulang halaman.');
+    const freshQty = Number(fresh.qty_sisa) || 0;
+    const freshKg  = Number(fresh.kg_sisa)  || 0;
+    if (qtyKirim <= 0) throw new Error('Tidak ada sisa untuk dikirim.');
+    if (qtyKirim > freshQty) throw new Error(`Melebihi sisa keranjang saat ini (${fmt(freshQty)} ekor). Muat ulang halaman.`);
+    const isPartialKirim = isPartialMode || qtyKirim < freshQty || kgKirim < +(freshKg - 0.05).toFixed(2);
+
     const { error } = await db.from('basket_movements').insert({
       basket_id:    activeBasketId,
       batch_id:     basket.batch_id,
@@ -2824,14 +2839,14 @@ async function doPindahKeluar() {
       ke_lokasi:    selectedDest,
       qty_pindah:   qtyKirim,
       kg_pindah:    kgKirim,
-      is_partial:   isPartialMode,
+      is_partial:   isPartialKirim,
       status:       'PENDING',
       catatan:      catatan || null,
       submitted_by: currentUser.id
     });
     if (error) throw error;
     closeModal('modal-pindah');
-    const label = isPartialMode
+    const label = isPartialKirim
       ? `📤 Sebagian dikirim ke ${lokasiLabel(selectedDest)} (${fmt(qtyKirim)} ekor / ${fmtKg(kgKirim)}) — menunggu konfirmasi penerima`
       : `📤 Dikirim ke ${lokasiLabel(selectedDest)} — menunggu konfirmasi penerima`;
     showToast(label, 'success');
