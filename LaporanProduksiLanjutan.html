@@ -826,6 +826,39 @@ async function loadTujuanBerikutnya(basketIds){
   return map;
 }
 
+// Hasil produk yang TIDAK pernah dikirim ke lantai lain (tidak ada basket_movements
+// CONFIRMED) belum tentu "belum pindah" — bisa saja keranjang itu langsung discan
+// sebagai BAHAN (processing_inputs) WO lain di lantai yang sama (mis. DADA PROCESS
+// hasil WO-040 di WS-P2 dipakai jadi input PAKET MBG di WO-036 WS-P7). Tanpa ini
+// barang yang sudah habis terpakai salah tampil sebagai "Belum Pindah".
+const DIPROSES_LAGI_KEY = '__DIPROSES_LAGI__';
+async function loadDipakaiLagi(basketIds){
+  const map = {};
+  if(!basketIds.length) return map;
+  const { data, error } = await db.from('processing_inputs')
+    .select('basket_id, created_at, processing_orders ( order_code ), workstations ( kode, tipe )')
+    .in('basket_id', basketIds)
+    .order('created_at', {ascending:true});
+  if(error){ console.error(error); return map; }
+  (data||[]).forEach(r=>{
+    if(!map[r.basket_id]) map[r.basket_id] = { lantai: r.workstations?.tipe || currentTipe, wo: new Set(), ws: new Set() };
+    if(r.processing_orders?.order_code) map[r.basket_id].wo.add(r.processing_orders.order_code);
+    if(r.workstations?.kode) map[r.basket_id].ws.add(r.workstations.kode);
+  });
+  return map;
+}
+function labelDipakaiLagi(info){
+  if(!info) return 'Diproses lagi di sini';
+  const lantai = sourceLabel(normalizeCat(info.lantai));
+  const wo = [...info.wo].join(', ');
+  const ws = [...info.ws].join(', ');
+  return 'Diproses lagi di '+lantai+(wo?' ('+wo+(ws?' @ '+ws:'')+')':'');
+}
+function tujuanLabel(r){
+  if(r.tujuan===DIPROSES_LAGI_KEY) return r.tujuanLabel || 'Diproses lagi di sini';
+  return r.tujuan ? sourceLabel(r.tujuan) : 'Belum Pindah';
+}
+
 async function fetchHasil(fromBound,toBound,tanggal){
   // NB: dulu filter pakai processing_orders.tipe = currentTipe. Itu salah untuk WO
   // MULTI-stage (mis. Parting→Marinasi) karena processing_orders.tipe = 'MULTI',
@@ -878,12 +911,20 @@ async function fetchHasil(fromBound,toBound,tanggal){
     ...byprodRows.map(r=>r.basket_id)
   ].filter(Boolean))];
   const tujuanMap = await loadTujuanBerikutnya(basketIds);
+  const tanpaTujuan = basketIds.filter(id => !(id in tujuanMap));
+  const dipakaiMap = await loadDipakaiLagi(tanpaTujuan);
+  const resolveTujuan = (basketId)=>{
+    if(!basketId) return { tujuan:null };
+    if(tujuanMap[basketId]) return { tujuan: tujuanMap[basketId] };
+    if(dipakaiMap[basketId]) return { tujuan: DIPROSES_LAGI_KEY, tujuanLabel: labelDipakaiLagi(dipakaiMap[basketId]) };
+    return { tujuan:null };
+  };
 
   const fromOutputs = rows.map(r=>({
     barang: r.product_master?.nama_produk || '—',
     qty: Number(r.qty_output)||0,
     kg: Number(r.kg_output)||0,
-    tujuan: r.basket_id ? (tujuanMap[r.basket_id] || null) : null,
+    ...resolveTujuan(r.basket_id),
     // order_id NULL sejak migration 79 = "Tanpa WO" (mis. produksi lebih dari
     // target WO yang ada) — keterangan pakai alasan yang wajib diisi saat itu.
     keterangan: r.order_id ? (r.processing_orders?.catatan || '') : `🆓 Tanpa WO — ${r.alasan || 'tanpa alasan tercatat'}`
@@ -893,7 +934,7 @@ async function fetchHasil(fromBound,toBound,tanggal){
     barang: r.product_master?.nama_produk || '—',
     qty: Number(r.total_qty)||0,
     kg: Number(r.total_kg)||0,
-    tujuan: tujuanMap[r.basket_id] || null,
+    ...resolveTujuan(r.basket_id),
     keterangan: `📦 By-product — Sesi ${r.session_code}`
   }));
 
@@ -970,7 +1011,7 @@ function renderHasil(rows){
       '<td>'+esc(r.barang)+ptBadge+'</td>'+
       '<td class="num"'+ptStyle+'>'+fmt(r.qty)+'</td>'+
       '<td class="num"'+ptStyle+'>'+fmtKgNum(r.kg)+'</td>'+
-      '<td>'+(r.tujuan?esc(sourceLabel(r.tujuan)):'<span style="color:#9ca3af;font-style:italic">Belum Pindah</span>')+'</td>'+
+      '<td>'+(r.tujuan===DIPROSES_LAGI_KEY?'<span style="color:#1d4ed8;font-weight:600">🔁 '+esc(tujuanLabel(r))+'</span>':(r.tujuan?esc(sourceLabel(r.tujuan)):'<span style="color:#9ca3af;font-style:italic">Belum Pindah</span>'))+'</td>'+
       '<td>'+(r.keterangan?esc(r.keterangan):'<span style="color:#9ca3af;font-style:italic">—</span>')+'</td>'+
     '</tr>';
   }).join('') + '<tr class="tot-row"><td>TOTAL</td><td class="num">'+fmt(totQty)+'</td><td class="num">'+fmtKgNum(totKg)+'</td><td colspan="2"></td></tr>';
@@ -1029,11 +1070,18 @@ function renderRekapMasuk(rows){
 // belum ditransfer hari yang sama) numpuk di cells[null] tapi tidak pernah dijumlah
 // ke mana pun, bikin TOTAL Rekap Hasil Produksi < TOTAL Hasil Produk (rincian).
 const BELUM_PINDAH_KEY = '__BELUM_PINDAH__';
-function rekapHasilCats(){ return [...MODULES[currentTipe].destCats, BELUM_PINDAH_KEY]; }
-function rekapHasilCatLabel(c){ return c===BELUM_PINDAH_KEY ? 'Belum Pindah' : (DEST_LABEL_PREFIX[c]||('Ke '+c)); }
+// Kolom "Diproses Lagi di Sini" hanya muncul kalau ada hasil produk yang dipakai
+// ulang jadi bahan WO lain di lantai yang sama (lihat loadDipakaiLagi).
+function rekapHasilCats(rows){
+  const cats = [...MODULES[currentTipe].destCats];
+  if((rows||[]).some(r=>r.tujuan===DIPROSES_LAGI_KEY)) cats.push(DIPROSES_LAGI_KEY);
+  cats.push(BELUM_PINDAH_KEY);
+  return cats;
+}
+function rekapHasilCatLabel(c){ return c===BELUM_PINDAH_KEY ? 'Belum Pindah' : c===DIPROSES_LAGI_KEY ? 'Diproses Lagi di Sini' : (DEST_LABEL_PREFIX[c]||('Ke '+c)); }
 
-function renderRekapHasilHead(){
-  const cats = rekapHasilCats();
+function renderRekapHasilHead(rows){
+  const cats = rekapHasilCats(rows);
   let h1 = '<th rowspan="2" style="vertical-align:bottom">Barang</th>';
   let h2 = '';
   cats.forEach(c=>{
@@ -1046,7 +1094,8 @@ function renderRekapHasilHead(){
 }
 
 function renderRekapHasil(rows){
-  const cats = rekapHasilCats();
+  renderRekapHasilHead(rows);
+  const cats = rekapHasilCats(rows);
   const map = {};
   rows.forEach(r=>{
     if(!map[r.barang]) map[r.barang] = { barang:r.barang, cells:{} };
@@ -1121,7 +1170,7 @@ function exportPengambilanExcel(){
 function exportHasilExcel(){
   if(!lastData){ showToast('Tampilkan laporan dulu.'); return; }
   const label = MODULES[lastData.tipe].label;
-  const rows = lastData.hasil.map(r=>[r.barang, r.qty, r.kg, r.tujuan?sourceLabel(r.tujuan):'Belum Pindah', r.keterangan]);
+  const rows = lastData.hasil.map(r=>[r.barang, r.qty, r.kg, tujuanLabel(r), r.keterangan]);
   exportXLSX(['Barang','Qty','Kg','Tujuan','Keterangan'], rows, 'Hasil Produk', `${label}_HasilProduk_${lastData.tanggal}.xlsx`);
 }
 
@@ -1156,12 +1205,12 @@ function exportRekapMasukExcel(){
 function exportRekapHasilExcel(){
   if(!lastData){ showToast('Tampilkan laporan dulu.'); return; }
   const label = MODULES[lastData.tipe].label;
-  const cats = rekapHasilCats(); // termasuk BELUM_PINDAH_KEY, lihat renderRekapHasil
+  const cats = rekapHasilCats(lastData.hasil); // termasuk BELUM_PINDAH_KEY (& DIPROSES_LAGI_KEY bila ada), lihat renderRekapHasil
   const map = {};
   lastData.hasil.forEach(r=>{ const cat=r.tujuan||BELUM_PINDAH_KEY; if(!map[r.barang])map[r.barang]={}; if(!map[r.barang][cat])map[r.barang][cat]={qty:0,kg:0}; map[r.barang][cat].qty+=r.qty; map[r.barang][cat].kg+=r.kg; });
   const aoa = [];
   const h1 = ['BARANG']; const h2 = [];
-  cats.forEach(c=>{ h1.push((c===BELUM_PINDAH_KEY?'BELUM PINDAH':'KE '+c), null); h2.push('QTY','KG'); });
+  cats.forEach(c=>{ h1.push((c===BELUM_PINDAH_KEY?'BELUM PINDAH':c===DIPROSES_LAGI_KEY?'DIPROSES LAGI DI SINI':'KE '+c), null); h2.push('QTY','KG'); });
   h1.push('TOTAL', null); h2.push('QTY','KG');
   aoa.push(h1); aoa.push(h2);
   Object.keys(map).sort().forEach(b=>{
