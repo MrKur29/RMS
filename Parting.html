@@ -2384,6 +2384,20 @@ async function doPindahKeluar() {
     // begitu dikirim (status bisa langsung HABIS), padahal belum tentu
     // dikonfirmasi — beda dari Karkas yang tetap menampilkannya sampai ada
     // keputusan penerima.
+    // Migration 112 / kasus BP-260924-0026: ambil angka TERBARU dari database
+    // sebelum kirim. Kalau keranjang baru saja direvisi (qty/kg berubah) sejak
+    // daftar di layar dimuat, jangan kirim pakai angka lama — minta operator
+    // buka ulang supaya angka hasil revisi yang terbawa.
+    const { data: freshB, error: freshErr } = await db.from('baskets')
+      .select('qty_sisa, kg_sisa, status, lokasi').eq('id', activePindahId).maybeSingle();
+    if (freshErr) throw freshErr;
+    if (!freshB || freshB.status === 'HABIS' ||
+        Number(freshB.qty_sisa) !== Number(b.qty_sisa) ||
+        Math.abs(Number(freshB.kg_sisa) - Number(b.kg_sisa)) > 0.05) {
+      showErr('mp-err', `Data keranjang sudah berubah (kemungkinan baru direvisi). Sekarang: ${fmt(freshB?.qty_sisa||0)} ekor / ${fmtKg(freshB?.kg_sisa||0)}. Tutup lalu buka ulang keranjang ini sebelum kirim.`);
+      await loadAll();
+      return;
+    }
     const isPartial = qtyPindah < b.qty_sisa;
     const { error: mvErr } = await db.from('basket_movements').insert({
       basket_id:    activePindahId,
