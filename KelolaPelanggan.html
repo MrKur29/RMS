@@ -108,6 +108,11 @@ a{text-decoration:none}
 .btn-approve:hover{background:#dcfce7}
 .btn-reject{background:#fef2f2;color:#b91c1c;border:1.5px solid #fca5a5}
 .btn-reject:hover{background:#fee2e2}
+.btn-merge{background:#faf5ff;color:#7e22ce;border:1.5px solid #d8b4fe}
+.btn-merge:hover{background:#f3e8ff}
+.b-merged{background:#f3e8ff;color:#6b21a8}
+.merge-preview{background:#faf5ff;border:1.5px solid #e9d5ff;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12.5px;color:#374151;line-height:1.7}
+.merge-preview.warn{background:#fef2f2;border-color:#fecaca;color:#991b1b}
 
 /* BADGES */
 .badge{display:inline-flex;align-items:center;padding:3px 9px;border-radius:12px;font-size:11px;font-weight:700;white-space:nowrap}
@@ -353,7 +358,7 @@ a{text-decoration:none}
 
         <div class="info-banner">
           <span class="ic">ℹ️</span>
-          <div><b>Edit</b>, jangan hapus. Nama pelanggan yang sudah pernah dipakai transaksi tidak bisa dihapus (akan gagal), dan menghapusnya akan menghilangkan riwayat. Klik <b>✏️ Edit</b> untuk mengajukan perubahan (nama/telp/keterangan/status) — perubahan baru berlaku setelah disetujui Supervisor lewat panel "Menunggu Review" di atas.</div>
+          <div><b>Edit</b>, jangan hapus. Nama pelanggan yang sudah pernah dipakai transaksi tidak bisa dihapus (akan gagal), dan menghapusnya akan menghilangkan riwayat. Klik <b>✏️ Edit</b> untuk mengajukan perubahan (nama/telp/keterangan/status) — perubahan baru berlaku setelah disetujui Supervisor lewat panel "Menunggu Review" di atas.<br>Ada pelanggan <b>dobel</b>? Klik <b>🔀 Gabungkan</b> pada nama yang salah, pilih nama yang benar — semua Picking Slip, Retur &amp; By-Product Karkas ikut dipindah, nama lama dinonaktifkan (PIN Supervisor).</div>
         </div>
 
         <div class="panel-body" style="padding-top:0">
@@ -484,6 +489,38 @@ a{text-decoration:none}
   </div>
 </div>
 
+<!-- ===== MODAL: GABUNGKAN (MERGE) PELANGGAN — PIN Supervisor ===== -->
+<div class="modal-overlay" id="modal-merge">
+  <div class="modal-box">
+    <div class="modal-title">🔀 Gabungkan Pelanggan</div>
+    <div class="modal-desc">Untuk pelanggan yang tercatat <b>dobel</b>. Semua riwayat dari nama <b>yang salah</b> dipindah ke nama <b>yang benar</b>, lalu nama yang salah dinonaktifkan. <b>Tidak bisa dibatalkan</b> dari aplikasi.</div>
+    <div class="form-group">
+      <label>Nama yang salah / dobel (akan dinonaktifkan)</label>
+      <input type="text" id="mg-dari" disabled style="background:#f9fafb;font-weight:700">
+    </div>
+    <div class="form-group">
+      <label>Gabungkan ke (nama yang benar) <span style="color:#dc2626">*</span></label>
+      <input type="text" id="mg-cari" placeholder="Ketik untuk menyaring…" oninput="renderMergeTargetOptions()" style="margin-bottom:6px">
+      <select id="mg-ke" size="6" onchange="loadMergePreview()" onclick="loadMergePreview()" style="width:100%"></select>
+    </div>
+    <div class="merge-preview" id="mg-preview" style="display:none"></div>
+    <div class="form-group">
+      <label>Alasan (opsional)</label>
+      <input type="text" id="mg-alasan" placeholder="Mis. nama dobel, salah ketik huruf besar…">
+    </div>
+    <div class="form-group" style="margin-bottom:0">
+      <label>PIN Supervisor <span style="color:#dc2626">*</span></label>
+      <input type="password" class="pin-input" id="mg-pin" placeholder="••••••" maxlength="6"
+             onkeydown="if(event.key==='Enter')doMerge()">
+    </div>
+    <div id="mg-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-top:10px;display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-merge')">Batal</button>
+      <button class="btn btn-danger" id="mg-btn-ok" onclick="doMerge()">🔀 Gabungkan</button>
+    </div>
+  </div>
+</div>
+
 <!-- TOAST -->
 <div id="toast"></div>
 
@@ -594,7 +631,7 @@ async function loadAll(){
 
 async function loadPelanggan(){
   const{data,error}=await db.from('master_pelanggan')
-    .select('id,nama,no_telp,keterangan,aktif,created_at')
+    .select('id,nama,no_telp,keterangan,aktif,created_at,merged_into')
     .order('nama');
   if(error){console.error(error);showToast('Gagal memuat daftar pelanggan.','error');return}
   allPelanggan = data||[];
@@ -643,15 +680,22 @@ function renderPelangganTable(){
 
   tbody.innerHTML = rows.map(p=>{
     const pending = pendingByPelangganId[p.id];
-    const aksiHtml = pending
+    const mergedTo = p.merged_into ? allPelanggan.find(x=>x.id===p.merged_into) : null;
+    const aksiHtml = p.merged_into
+      ? `<span style="font-size:11.5px;color:#6b7280">—</span>`
+      : pending
       ? `<span class="badge b-pending">⏳ Menunggu Review</span>`
-      : `<button class="btn btn-sm btn-edit" onclick="openEditModal('${p.id}')">✏️ Edit</button>`;
+      : `<button class="btn btn-sm btn-edit" onclick="openEditModal('${p.id}')">✏️ Edit</button>`
+        + (p.aktif ? `<button class="btn btn-sm btn-merge" onclick="openMergeModal('${p.id}')">🔀 Gabungkan</button>` : '');
+    const statusHtml = p.merged_into
+      ? `<span class="badge b-merged">🔀 Digabung → ${esc(mergedTo?mergedTo.nama:'?')}</span>`
+      : `<span class="badge ${p.aktif?'b-aktif':'b-nonaktif'}">${p.aktif?'Aktif':'Nonaktif'}</span>`;
     return `
     <tr class="${p.aktif?'':'row-nonaktif'}">
       <td style="font-weight:700">${esc(p.nama)}</td>
       <td>${esc(p.no_telp)||'—'}</td>
       <td>${esc(p.keterangan)||'—'}</td>
-      <td><span class="badge ${p.aktif?'b-aktif':'b-nonaktif'}">${p.aktif?'Aktif':'Nonaktif'}</span></td>
+      <td>${statusHtml}</td>
       <td><div class="aksi-cell">${aksiHtml}</div></td>
     </tr>`;
   }).join('');
@@ -982,6 +1026,116 @@ async function approveOne(r, sup){
     data_sesudah: { nama:r.nama_baru, no_telp:r.no_telp_baru, keterangan:r.keterangan_baru, aktif:r.aktif_baru,
                      oleh_pin: sup.nama, propagate_riwayat: r.propagate_riwayat, riwayat_terupdate: riwayatCount }
   });
+}
+
+// ============================================================
+// GABUNGKAN (MERGE) PELANGGAN — migration 113, fn_merge_pelanggan (atomik di server)
+// ============================================================
+let mergeDariId = null;
+let mergePreviewOk = false;
+let mergePreviewKe = null;   // ke-id yang preview-nya sedang/sudah dimuat
+
+function openMergeModal(id){
+  const p = allPelanggan.find(x=>x.id===id);
+  if(!p) return;
+  if(pendingByPelangganId[id]){
+    showToast('Pelanggan ini masih punya pengajuan edit yang menunggu review — selesaikan dulu.','warning');
+    return;
+  }
+  mergeDariId = id;
+  mergePreviewOk = false;
+  mergePreviewKe = null;
+  document.getElementById('mg-dari').value = p.nama;
+  document.getElementById('mg-cari').value = '';
+  document.getElementById('mg-alasan').value = '';
+  document.getElementById('mg-pin').value = '';
+  document.getElementById('mg-err').style.display='none';
+  document.getElementById('mg-preview').style.display='none';
+  renderMergeTargetOptions();
+  openModal('modal-merge');
+  setTimeout(()=>document.getElementById('mg-cari').focus(),150);
+}
+
+function renderMergeTargetOptions(){
+  const q = (document.getElementById('mg-cari').value||'').trim().toLowerCase();
+  const sel = document.getElementById('mg-ke');
+  const prev = sel.value;
+  const opts = allPelanggan.filter(p=>p.id!==mergeDariId && p.aktif && !p.merged_into
+    && (!q || (p.nama||'').toLowerCase().includes(q)));
+  sel.innerHTML = opts.map(p=>`<option value="${p.id}">${esc(p.nama)}</option>`).join('');
+  if(opts.some(p=>p.id===prev)) sel.value = prev;
+  else if(opts.length===1) sel.value = opts[0].id;   // hasil saring tinggal 1 → otomatis dipilih
+  else sel.value = '';
+  if(sel.value) loadMergePreview();
+  else {
+    mergePreviewOk = false; mergePreviewKe = null;
+    document.getElementById('mg-preview').style.display='none';
+  }
+}
+
+async function loadMergePreview(){
+  const keId = document.getElementById('mg-ke').value;
+  const box = document.getElementById('mg-preview');
+  if(keId && keId===mergePreviewKe && mergePreviewOk) return;   // sudah dimuat
+  mergePreviewOk = false;
+  mergePreviewKe = keId || null;
+  if(!keId){box.style.display='none';return}
+  const dari = allPelanggan.find(x=>x.id===mergeDariId);
+  const ke = allPelanggan.find(x=>x.id===keId);
+  box.className='merge-preview';
+  box.style.display='';
+  box.innerHTML='Menghitung data yang akan dipindah…';
+  const{data,error}=await db.rpc('fn_preview_merge_pelanggan',{p_dari: mergeDariId, p_ke: keId});
+  if(document.getElementById('mg-ke').value!==keId) return; // pilihan sudah berubah
+  if(error){box.className='merge-preview warn';box.innerHTML='Gagal memuat preview: '+esc(error.message);return}
+  if(data.pending_edit){
+    box.className='merge-preview warn';
+    box.innerHTML='Pelanggan sumber masih punya pengajuan edit PENDING — selesaikan dulu sebelum digabung.';
+    return;
+  }
+  box.innerHTML = `<b>${esc(dari.nama)}</b> → <b>${esc(ke.nama)}</b><br>
+    • ${data.picking_slips} Picking Slip dipindah ke pelanggan tujuan<br>
+    • ${data.retur_penjualan} Retur Penjualan diganti namanya<br>
+    • ${data.byproduct_karkas} entri By-Product Karkas diganti namanya<br>
+    • "${esc(dari.nama)}" dinonaktifkan &amp; ditandai digabung`;
+  mergePreviewOk = true;
+}
+
+async function doMerge(){
+  const keId = document.getElementById('mg-ke').value;
+  const pin = document.getElementById('mg-pin').value.trim();
+  const alasan = document.getElementById('mg-alasan').value.trim();
+  const errEl = document.getElementById('mg-err');
+  errEl.style.display='none';
+  if(!keId){errEl.textContent='Pilih pelanggan tujuan (nama yang benar).';errEl.style.display='block';return}
+  if(!mergePreviewOk){
+    mergePreviewKe = null;
+    await loadMergePreview();          // muat ulang preview kalau belum sempat
+    if(!mergePreviewOk){
+      errEl.textContent='Preview belum berhasil dimuat — periksa pesan di kotak ungu/merah di atas, atau klik ulang nama tujuan.';
+      errEl.style.display='block';return;
+    }
+  }
+  if(!pin){errEl.textContent='PIN Supervisor wajib diisi.';errEl.style.display='block';return}
+
+  const btn=document.getElementById('mg-btn-ok');
+  btn.disabled=true;btn.textContent='Memproses…';
+  try{
+    const{data,error}=await db.rpc('fn_merge_pelanggan',{
+      p_dari: mergeDariId, p_ke: keId, p_pin: pin,
+      p_user_id: currentUser?.id||null, p_alasan: alasan||null
+    });
+    if(error) throw error;
+    closeModal('modal-merge');
+    showToast(`"${data.dari}" digabung ke "${data.ke}" — ${data.picking_slips} PS, ${data.retur_penjualan} retur, ${data.byproduct_karkas} by-product dipindah.`,'success');
+    await loadAll();
+  }catch(e){
+    console.error('[KelolaPelanggan] merge gagal', e);
+    errEl.textContent = (e.message||'Gagal menggabungkan.');
+    errEl.style.display='block';
+  }finally{
+    btn.disabled=false;btn.textContent='🔀 Gabungkan';
+  }
 }
 
 async function rejectOne(r, sup, catatan){

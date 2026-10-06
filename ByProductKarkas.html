@@ -766,6 +766,23 @@ function onPelangganChange(){
   if(isNNCash) setTimeout(()=>document.getElementById('inp-nama-pembeli').focus(), 80);
 }
 
+
+/* Cek nama pelanggan sudah ada (tidak peka huruf besar/kecil) — termasuk yang
+   nonaktif / sudah digabung lewat Kelola Pelanggan (migration 113). */
+async function cekPelangganSudahAda(nama){
+  const pola = nama.replace(/[\\%_]/g, m => '\\' + m);
+  const { data, error } = await db.from('master_pelanggan')
+    .select('id,nama,aktif,merged_into').ilike('nama', pola).limit(1);
+  if(error || !data || !data.length) return null;
+  const p = data[0];
+  if(p.merged_into){
+    const { data: t } = await db.from('master_pelanggan').select('nama').eq('id', p.merged_into).maybeSingle();
+    return `"${p.nama}" sudah digabung ke "${t ? t.nama : '?'}" — pilih "${t ? t.nama : 'pelanggan tersebut'}" dari daftar.`;
+  }
+  if(!p.aktif) return `"${p.nama}" sudah ada tapi nonaktif — aktifkan lewat menu Kelola Pelanggan.`;
+  return `Pelanggan "${p.nama}" sudah ada — pilih dari daftar.`;
+}
+
 function openTambahPelanggan(){
   document.getElementById('mt-pelanggan-nama').value = '';
   document.getElementById('mt-pelanggan-telp').value = '';
@@ -781,6 +798,8 @@ async function submitTambahPelanggan(){
   const btn   = document.getElementById('mt-pelanggan-btn');
   errEl.style.display = 'none';
   if(!nama){ errEl.textContent='Nama pelanggan wajib diisi'; errEl.style.display='block'; return; }
+  const sudahAda = await cekPelangganSudahAda(nama);
+  if(sudahAda){ errEl.textContent=sudahAda; errEl.style.display='block'; return; }
   btn.disabled=true; btn.textContent='Menyimpan...';
   try {
     const { data, error } = await db.from('master_pelanggan')

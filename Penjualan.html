@@ -147,6 +147,9 @@ a{text-decoration:none}
 .form-field label{display:block;font-size:12px;font-weight:700;color:#374151;margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px}
 .form-field input,.form-field select,.form-field textarea{width:100%;padding:9px 12px;border:1.5px solid #d1d5db;border-radius:7px;font-size:14px;color:#111827;background:white;font-family:inherit;transition:border-color .2s}
 .form-field input:focus,.form-field select:focus,.form-field textarea:focus{outline:none;border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+.cb-list{display:none;position:absolute;left:0;right:0;top:100%;margin-top:2px;max-height:240px;overflow-y:auto;background:#fff;border:1.5px solid #d1d5db;border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.12);z-index:50}
+.cb-item{padding:8px 12px;font-size:13px;cursor:pointer}
+.cb-item.act{background:#eff6ff;color:#1e40af;font-weight:600}
 .form-field select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M6 8L1 3h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:30px}
 
 /* ===== ITEM LIST IN MODAL ===== */
@@ -660,7 +663,12 @@ a{text-decoration:none}
             <span>Customer *</span>
             <button type="button" onclick="toggleAddPelanggan()" style="font-size:11px;font-weight:700;color:#2563eb;background:none;border:none;cursor:pointer;padding:0">+ Tambah Baru</button>
           </label>
-          <select id="buat-pelanggan" onchange="onPelangganChange()">
+          <div style="position:relative">
+            <input type="text" id="buat-pelanggan-cari" placeholder="Ketik nama customer…" autocomplete="off"
+              oninput="cbFilter('buat-pelanggan')" onfocus="cbFilter('buat-pelanggan',true)" onkeydown="cbKey(event,'buat-pelanggan')" onblur="cbBlur('buat-pelanggan')" style="width:100%">
+            <div id="buat-pelanggan-list" class="cb-list"></div>
+          </div>
+          <select id="buat-pelanggan" onchange="onPelangganChange()" style="display:none">
             <option value="">— Pilih Customer —</option>
           </select>
           <!-- Inline add customer -->
@@ -679,7 +687,12 @@ a{text-decoration:none}
             <span>Driver Loading *</span>
             <button type="button" onclick="toggleAddSupir()" style="font-size:11px;font-weight:700;color:#2563eb;background:none;border:none;cursor:pointer;padding:0">+ Tambah Baru</button>
           </label>
-          <select id="buat-supir" onchange="onSupirChange()">
+          <div style="position:relative">
+            <input type="text" id="buat-supir-cari" placeholder="Ketik nama driver…" autocomplete="off"
+              oninput="cbFilter('buat-supir')" onfocus="cbFilter('buat-supir',true)" onkeydown="cbKey(event,'buat-supir')" onblur="cbBlur('buat-supir')" style="width:100%">
+            <div id="buat-supir-list" class="cb-list"></div>
+          </div>
+          <select id="buat-supir" style="display:none" onchange="onSupirChange()">
             <option value="">— Pilih Driver —</option>
           </select>
           <!-- Inline add driver -->
@@ -867,13 +880,23 @@ a{text-decoration:none}
         </div>
         <div class="form-field">
           <label>Customer *</label>
-          <select id="rv-pelanggan"></select>
+          <div style="position:relative">
+            <input type="text" id="rv-pelanggan-cari" placeholder="Ketik nama customer…" autocomplete="off"
+              oninput="cbFilter('rv-pelanggan')" onfocus="cbFilter('rv-pelanggan',true)" onkeydown="cbKey(event,'rv-pelanggan')" onblur="cbBlur('rv-pelanggan')" style="width:100%">
+            <div id="rv-pelanggan-list" class="cb-list"></div>
+          </div>
+          <select id="rv-pelanggan" style="display:none"></select>
         </div>
       </div>
       <div class="form-row">
         <div class="form-field">
           <label>Driver Loading</label>
-          <select id="rv-supir"><option value="">— Tidak ada —</option></select>
+          <div style="position:relative">
+            <input type="text" id="rv-supir-cari" placeholder="Ketik nama driver… (kosongkan = tidak ada)" autocomplete="off"
+              oninput="cbFilter('rv-supir')" onfocus="cbFilter('rv-supir',true)" onkeydown="cbKey(event,'rv-supir')" onblur="cbBlur('rv-supir')" style="width:100%">
+            <div id="rv-supir-list" class="cb-list"></div>
+          </div>
+          <select id="rv-supir" style="display:none"><option value="">— Tidak ada —</option></select>
         </div>
         <div class="form-field"></div>
       </div>
@@ -1097,6 +1120,66 @@ function populatePelangganSelect(selectId){
   });
   if(selectId) sel.value = selectId;
   else if(prev) sel.value = prev;
+  plComboSync();
+}
+/* ---- Combobox ketik-untuk-filter (Customer & Driver, Buat PS + Revisi PS).
+   <select> asli tetap ada (disembunyikan) & jadi sumber nilai untuk simpan. ---- */
+const CB_SRC = { 'buat-pelanggan':()=>allPelanggan, 'rv-pelanggan':()=>allPelanggan, 'buat-supir':()=>allSupir, 'rv-supir':()=>allSupir };
+const cbState = {};
+function cbEsc(t){ return String(t).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function cbSync(id){
+  const sel = document.getElementById(id), inp = document.getElementById(id+'-cari');
+  if(!sel || !inp) return;
+  const p = CB_SRC[id]().find(x => String(x.id) === sel.value);
+  inp.value = p ? p.nama : '';
+}
+function plComboSync(){ cbSync('buat-pelanggan'); }
+function cbFilter(id, onFocus){
+  const inp = document.getElementById(id+'-cari'), list = document.getElementById(id+'-list'), sel = document.getElementById(id);
+  const src = CB_SRC[id]();
+  const q = inp.value.trim().toLowerCase();
+  const cur = src.find(x => String(x.id) === sel.value);
+  const showAll = !q || (onFocus === true && cur && cur.nama === inp.value);
+  const words = showAll ? [] : q.split(/\s+/).filter(Boolean);
+  let hits = src.filter(p => { const n = p.nama.toLowerCase(); return words.every(w => n.includes(w)); });
+  if(words.length) hits.sort((a,b) => (b.nama.toLowerCase().startsWith(q)) - (a.nama.toLowerCase().startsWith(q)) || a.nama.localeCompare(b.nama));
+  if(onFocus !== true && cur && cur.nama !== inp.value) sel.value = '';
+  cbState[id] = { hits: hits.slice(0,100), idx: hits.length ? 0 : -1 };
+  cbRender(id);
+  list.style.display = 'block';
+}
+function cbRender(id){
+  const list = document.getElementById(id+'-list'), st = cbState[id];
+  if(!st.hits.length){ list.innerHTML = '<div style="padding:9px 12px;font-size:12.5px;color:#9ca3af">Tidak ada nama yang cocok</div>'; return; }
+  list.innerHTML = st.hits.map((p,i) =>
+    `<div class="cb-item${i===st.idx?' act':''}" data-i="${i}" onmousedown="event.preventDefault();cbPick('${id}',${i})">${cbEsc(p.nama)}</div>`).join('');
+  const act = list.querySelector(`[data-i="${st.idx}"]`);
+  if(act) act.scrollIntoView({block:'nearest'});
+}
+function cbPick(id, i){
+  const p = cbState[id] && cbState[id].hits[i]; if(!p) return;
+  const sel = document.getElementById(id);
+  sel.value = p.id;
+  document.getElementById(id+'-cari').value = p.nama;
+  document.getElementById(id+'-list').style.display = 'none';
+  sel.dispatchEvent(new Event('change'));
+}
+function cbKey(e, id){
+  const list = document.getElementById(id+'-list'), open = list.style.display === 'block', st = cbState[id];
+  if(e.key === 'ArrowDown'){ e.preventDefault(); if(!open){ cbFilter(id,true); return; } if(st.idx < st.hits.length-1){ st.idx++; cbRender(id); } }
+  else if(e.key === 'ArrowUp'){ e.preventDefault(); if(open && st.idx > 0){ st.idx--; cbRender(id); } }
+  else if(e.key === 'Enter'){ e.preventDefault(); if(open && st && st.idx >= 0) cbPick(id, st.idx); }
+  else if(e.key === 'Escape'){ if(open){ e.stopPropagation(); list.style.display = 'none'; } }
+}
+function cbBlur(id){
+  setTimeout(() => {
+    document.getElementById(id+'-list').style.display = 'none';
+    const sel = document.getElementById(id), inp = document.getElementById(id+'-cari');
+    if(!sel.value){
+      const exact = CB_SRC[id]().find(p => p.nama.toLowerCase() === inp.value.trim().toLowerCase());
+      if(exact){ sel.value = exact.id; inp.value = exact.nama; } else inp.value = '';
+    } else cbSync(id);
+  }, 120);
 }
 function populateSupirSelect(selectId){
   const sel = document.getElementById('buat-supir');
@@ -1109,9 +1192,27 @@ function populateSupirSelect(selectId){
   });
   if(selectId) sel.value = selectId;
   else if(prev) sel.value = prev;
+  cbSync('buat-supir');
 }
 function onPelangganChange(){}
 function onSupirChange(){}
+
+
+/* Cek nama pelanggan sudah ada (tidak peka huruf besar/kecil) — termasuk yang
+   nonaktif / sudah digabung lewat Kelola Pelanggan (migration 113). */
+async function cekPelangganSudahAda(nama){
+  const pola = nama.replace(/[\\%_]/g, m => '\\' + m);
+  const { data, error } = await db.from('master_pelanggan')
+    .select('id,nama,aktif,merged_into').ilike('nama', pola).limit(1);
+  if(error || !data || !data.length) return null;
+  const p = data[0];
+  if(p.merged_into){
+    const { data: t } = await db.from('master_pelanggan').select('nama').eq('id', p.merged_into).maybeSingle();
+    return `"${p.nama}" sudah digabung ke "${t ? t.nama : '?'}" — pilih "${t ? t.nama : 'pelanggan tersebut'}" dari daftar.`;
+  }
+  if(!p.aktif) return `"${p.nama}" sudah ada tapi nonaktif — aktifkan lewat menu Kelola Pelanggan.`;
+  return `Pelanggan "${p.nama}" sudah ada — pilih dari daftar.`;
+}
 
 /* inline add customer */
 function toggleAddPelanggan(){
@@ -1123,6 +1224,8 @@ async function simpanPelangganBaru(){
   const nama = document.getElementById('new-pelanggan-nama').value.trim();
   const telp = document.getElementById('new-pelanggan-telp').value.trim();
   if(!nama){ toast('Nama customer wajib diisi', 'error'); return; }
+  const sudahAda = await cekPelangganSudahAda(nama);
+  if(sudahAda){ toast(sudahAda, 'error'); return; }
   const { data, error } = await db.from('master_pelanggan')
     .insert({ nama, no_telp: telp || null, aktif: true })
     .select().single();
@@ -1298,6 +1401,7 @@ function populateRvPelangganSelect(selectedId){
     sel.appendChild(o);
   });
   sel.value = selectedId || '';
+  cbSync('rv-pelanggan');
 }
 function populateRvSupirSelect(selectedId){
   const sel = document.getElementById('rv-supir');
@@ -1308,6 +1412,7 @@ function populateRvSupirSelect(selectedId){
     sel.appendChild(o);
   });
   sel.value = selectedId || '';
+  cbSync('rv-supir');
 }
 
 async function openRevisiPs(psId){
@@ -1654,7 +1759,9 @@ async function openModalBuat(){
   document.getElementById('buat-ps-code').value = '';
   document.getElementById('buat-tanggal').value = todayJakarta();
   document.getElementById('buat-pelanggan').value = '';
+  plComboSync();
   document.getElementById('buat-supir').value = '';
+  cbSync('buat-supir');
   document.getElementById('buat-tujuan').value = '';
   document.getElementById('buat-nopol').value = '';
   document.getElementById('buat-catatan').value = '';
