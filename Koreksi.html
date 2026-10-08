@@ -1287,6 +1287,19 @@ async function submitKoreksi(){
     });
   }
 
+  // [migration 114] koreksi qty_sisa/kg_sisa keranjang: hanya boleh bila keranjang belum
+  // terpakai (sisa = awal) -- server akan menerapkannya sebagai koreksi qty_awal/kg_awal
+  // supaya laporan produksi & laporan stok tetap sinkron.
+  if(tabelTerkait==='baskets' && foundRecord){
+    for(const [sisaF,awalF,label] of [['qty_sisa','qty_awal','Qty'],['kg_sisa','kg_awal','Kg']]){
+      if(!seenFields.has(sisaF)) continue;
+      if(seenFields.has(awalF)){showToast(`Pilih salah satu saja: ${sisaF} atau ${awalF}`,'error');return}
+      if(Number(foundRecord[sisaF])!==Number(foundRecord[awalF])){
+        showToast(`${label} sisa tidak bisa dikoreksi: keranjang sudah terpakai sebagian (awal ${foundRecord[awalF]}, sisa ${foundRecord[sisaF]}). Koreksi ${awalF} saja, atau pakai Lapor Kehilangan.`,'error');return
+      }
+    }
+  }
+
   const groupId=crypto.randomUUID();
   payload.forEach(p=>p.group_id=groupId);
 
