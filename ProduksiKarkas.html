@@ -993,7 +993,9 @@ function fmtDT(s) {
   return new Date(s).toLocaleString('id-ID', {day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'});
 }
 function todayISO() {
-  return new Date().toISOString().split('T')[0];
+  // 2026-10-09 FIX: pakai tanggal WIB, bukan UTC (toISOString). Sebelumnya sesi
+  // yang dibuka sebelum 07.00 WIB tercatat tanggal kemarin.
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
 }
 function showToast(msg, type='success') {
   const t = document.getElementById('toast');
