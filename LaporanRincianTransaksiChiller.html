@@ -546,6 +546,19 @@ async function fetchAllRows(buildQuery){
   return all;
 }
 
+// 2026-10-22: filter .in() dengan daftar ID panjang bikin URL kepanjangan -> request
+// gagal diam-diam (fetchAllRows return []). Pecah daftar ID per IN_CHUNK_SIZE dan
+// gabungkan hasilnya. buildQuery(chunk) harus mengembalikan query BARU tiap dipanggil.
+const IN_CHUNK_SIZE = 100;
+async function fetchAllRowsInChunks(ids, buildQuery){
+  let all = [];
+  for(let i=0; i<ids.length; i+=IN_CHUNK_SIZE){
+    const chunk = ids.slice(i, i+IN_CHUNK_SIZE);
+    all = all.concat(await fetchAllRows(()=>buildQuery(chunk)));
+  }
+  return all;
+}
+
 // Ambil semua sumber transaksi lokasi CHILLER, semua produk, dalam rentang tanggal dateFrom..dateTo.
 async function fetchAllEventsSemuaProduk(dateFrom, dateTo){
   const fromBound = dateFrom+'T00:00:00+07:00';
@@ -678,11 +691,11 @@ async function fetchAllEventsSemuaProduk(dateFrom, dateTo){
         .select('id,record_id,field_salah,nilai_lama,nilai_baru,reviewed_at')
         .eq('tabel_terkait','baskets')
         .eq('status','APPROVED')
-        .in('record_id',basketIds)
         .in('field_salah',['qty_sisa','kg_sisa','qty_awal','kg_awal'])
         .gte('reviewed_at',fromBound)
         .lte('reviewed_at',toBound));
-      (data||[]).forEach(c=>{
+      // 2026-10-22 FIX: JANGAN .in('record_id', basketIds) — daftar ID semua keranjang di Chiller (600+) bikin URL kepanjangan, request gagal diam-diam (fetchAllRows return []) dan SEMUA koreksi hilang dari laporan (kasus BK-260808-0043 AU 1.1, 15 Agu, mulai ~17-19 Okt). Tabel corrections kecil -> ambil semua, saring di client.
+      (data||[]).filter(c=>Object.prototype.hasOwnProperty.call(basketMeta,c.record_id)).forEach(c=>{
         const meta = basketMeta[c.record_id] || {};
         const lama=parseFloat(c.nilai_lama); const baru=parseFloat(c.nilai_baru);
         const delta = (isNaN(baru)?0:baru) - (isNaN(lama)?0:lama);
@@ -819,11 +832,11 @@ async function fetchAllEventsSemuaProduk(dateFrom, dateTo){
   //     migration ini ada), biarkan _psLookupBasketId apa adanya (fallback lama).
   const partialMovementIds = [...new Set(events.map(e=>e._partialSplitMovementId).filter(Boolean))];
   if(partialMovementIds.length){
-    const auditRows = await fetchAllRows(()=>db.from('audit_log')
+    const auditRows = await fetchAllRowsInChunks(partialMovementIds, chunk=>db.from('audit_log')
       .select('record_id,data_sesudah')
       .eq('aksi','MOVEMENT_CONFIRMED')
       .eq('tabel_terkait','basket_movements')
-      .in('record_id', partialMovementIds));
+      .in('record_id', chunk));
     const hasilMap = {};
     (auditRows||[]).forEach(a=>{
       const hasil = a.data_sesudah?.basket_id_hasil;
@@ -841,9 +854,9 @@ async function fetchAllEventsSemuaProduk(dateFrom, dateTo){
   //    lebih dari satu picking slip (mis. keranjang balik lagi setelah retur), ambil PS terbaru.
   const psBasketIds = [...new Set(events.map(e=>e._psLookupBasketId).filter(Boolean))];
   if(psBasketIds.length){
-    const psItems = await fetchAllRows(()=>db.from('picking_slip_items')
+    const psItems = await fetchAllRowsInChunks(psBasketIds, chunk=>db.from('picking_slip_items')
       .select('basket_id,picking_slips(ps_code,nama_pelanggan,created_at)')
-      .in('basket_id', psBasketIds));
+      .in('basket_id', chunk));
     {
       const psMap = {};
       (psItems||[]).forEach(pi=>{

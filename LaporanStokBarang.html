@@ -669,10 +669,10 @@ async function buildStokAggregate(lokasi, asOfDate){
         .select('id,record_id,field_salah,nilai_lama,nilai_baru,reviewed_at')
         .eq('tabel_terkait','baskets')
         .eq('status','APPROVED')
-        .in('record_id',basketIds)
         .in('field_salah',['qty_sisa','kg_sisa','qty_awal','kg_awal'])
         .lte('reviewed_at',toBound));
-      (data||[]).forEach(c=>{
+      // 2026-10-22 FIX: JANGAN .in('record_id', basketIds) — daftar ID semua keranjang di Chiller (600+) bikin URL kepanjangan, request gagal diam-diam (fetchAllRows return []) dan SEMUA koreksi hilang dari laporan (kasus BK-260808-0043 AU 1.1, 15 Agu, mulai ~17-19 Okt). Tabel corrections kecil -> ambil semua, saring di client.
+      (data||[]).filter(c=>Object.prototype.hasOwnProperty.call(productByBasket,c.record_id)).forEach(c=>{
         const pid = productByBasket[c.record_id];
         const lama=parseFloat(c.nilai_lama); const baru=parseFloat(c.nilai_baru);
         const delta = (isNaN(baru)?0:baru) - (isNaN(lama)?0:lama);
