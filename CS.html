@@ -329,7 +329,7 @@ tr:last-child td{border-bottom:none}
           </div>
           <div class="panel-body" style="padding:0">
             <table>
-              <thead><tr><th>Tgl Diterima</th><th>Kode Keranjang</th><th>Produk</th><th>Qty / Kg</th><th>Diterima Oleh</th><th>Waktu Diterima</th></tr></thead>
+              <thead><tr><th>Tgl Kirim Chiller</th><th>Kode Keranjang</th><th>Produk</th><th>Qty / Kg</th><th>Diterima Oleh</th><th>Waktu Diterima CS</th></tr></thead>
               <tbody id="riwayat-tbody"><tr><td colspan="6"><div class="empty">Pilih rentang tanggal lalu klik Terapkan.</div></td></tr></tbody>
             </table>
           </div>
@@ -519,7 +519,8 @@ async function loadTodayCount(){
   const{count,error}=await db.from('basket_movements')
     .select('id',{count:'exact',head:true})
     .eq('ke_lokasi','CS').eq('status','CONFIRMED')
-    .gte('confirmed_at',today+'T00:00:00').lte('confirmed_at',today+'T23:59:59');
+    // Migration 116: confirmed_at untuk CS = waktu kirim Chiller; "diterima hari ini" pakai cs_diterima_at
+    .gte('cs_diterima_at',today+'T00:00:00').lte('cs_diterima_at',today+'T23:59:59');
   if(!error)setEl('sc-today',fmt(count||0));
 }
 
@@ -614,6 +615,8 @@ async function doTolak(){
 
 // ============================================================
 // TAB RIWAYAT — perpindahan CONFIRMED Chiller → CS, filter tanggal & produk
+// Migration 116 (2026-10-23): untuk CS, confirmed_at = waktu KIRIM Chiller (tanggal transaksi
+// di semua laporan); waktu CS klik Terima disimpan di cs_diterima_at (NULL utk data lama).
 // ============================================================
 async function loadHistory(){
   const dari=document.getElementById('rw-tgl-dari').value;
@@ -627,7 +630,7 @@ async function loadHistory(){
   const PAGE_SIZE=1000; let data=[]; let from=0;
   while(true){
     let q=db.from('basket_movements')
-      .select(`id,qty_pindah,kg_pindah,confirmed_at,
+      .select(`id,qty_pindah,kg_pindah,confirmed_at,cs_diterima_at,
         baskets(basket_code,product_master(nama_produk,product_code)),
         users!basket_movements_confirmed_by_fkey(nama)`)
       .eq('ke_lokasi','CS').eq('status','CONFIRMED');
@@ -678,7 +681,7 @@ function renderHistory(){
       <td>${esc(pm.nama_produk||'—')}</td>
       <td>${fmt(m.qty_pindah)} ekor<div class="tbl-sub">${fmtKg(m.kg_pindah)}</div></td>
       <td>${esc(m.users?.nama||'—')}</td>
-      <td style="color:#9ca3af;font-size:11px">${formatRelTime(m.confirmed_at)}</td>
+      <td>${fmtDateTime(m.cs_diterima_at||m.confirmed_at)}<div class="tbl-sub">${formatRelTime(m.cs_diterima_at||m.confirmed_at)}</div></td>
     </tr>`;
   }).join('');
 }
