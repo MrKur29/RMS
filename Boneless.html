@@ -3008,11 +3008,11 @@ async function removeInput(inputId) {
     const { data: inp } = await db.from('processing_inputs').select('basket_id,kg_diambil,qty_input').eq('id',inputId).maybeSingle();
     await db.from('processing_inputs').delete().eq('id',inputId);
     if (inp?.basket_id) {
-      const { data: bsk } = await db.from('baskets').select('kg_sisa,qty_sisa').eq('id',inp.basket_id).maybeSingle();
+      const { data: bsk } = await db.from('baskets').select('kg_sisa,qty_sisa,kg_awal,qty_awal').eq('id',inp.basket_id).maybeSingle();
       if (bsk) {
         await db.from('baskets').update({
-          kg_sisa:  Number((Number(bsk.kg_sisa)+Number(inp.kg_diambil||0)).toFixed(1)),
-          qty_sisa: Number(bsk.qty_sisa)+Number(inp.qty_input||0),
+          kg_sisa:  Math.min(Number(bsk.kg_awal), Number((Number(bsk.kg_sisa)+Number(inp.kg_diambil||0)).toFixed(1))), // cap ke kg_awal: cegah stok dobel (BK-261028-0124-1)
+          qty_sisa: Math.min(Number(bsk.qty_awal), Number(bsk.qty_sisa)+Number(inp.qty_input||0)),
           status:   'AKTIF'
         }).eq('id',inp.basket_id);
       }
@@ -4726,10 +4726,10 @@ async function deleteInputFromDetail(inputId, woId) {
     // Restore basket
     if (inp?.basket_id) {
       const { data: bsk } = await db.from('baskets')
-        .select('kg_sisa, qty_sisa').eq('id', inp.basket_id).maybeSingle();
+        .select('kg_sisa, qty_sisa, kg_awal, qty_awal').eq('id', inp.basket_id).maybeSingle();
       if (bsk) {
-        const newKgSisa  = Number((Number(bsk.kg_sisa) + Number(inp.kg_diambil || 0)).toFixed(1));
-        const newQtySisa = Number(bsk.qty_sisa) + Number(inp.qty_input || 0);
+        const newKgSisa  = Math.min(Number(bsk.kg_awal), Number((Number(bsk.kg_sisa) + Number(inp.kg_diambil || 0)).toFixed(1))); // cap ke kg_awal: cegah stok dobel (BK-261028-0124-1)
+        const newQtySisa = Math.min(Number(bsk.qty_awal), Number(bsk.qty_sisa) + Number(inp.qty_input || 0));
         await db.from('baskets').update({
           kg_sisa:  newKgSisa,
           qty_sisa: newQtySisa,
