@@ -2777,7 +2777,7 @@ async function openDetail(psId){
 
   const rekapRows = Object.entries(rekap).map(([nama, r]) => `
     <tr>
-      <td>${nama}</td>
+      <td style="padding-left:16px">${nama}</td>
       <td style="text-align:right">${r.jumlah_karung}</td>
       <td style="text-align:right">${r.total_ekor}</td>
       <td style="text-align:right">${r.total_kg.toFixed(2)}</td>

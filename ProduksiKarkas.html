@@ -1649,6 +1649,28 @@ function clearOverridePinError() {
   document.getElementById('mk-override-pin-error').style.display = 'none';
 }
 
+// Rollback keranjang yatim bila insert carcass_baskets gagal setelah baskets terlanjur dibuat.
+// Coba hapus (baris baru, belum ada referensi apa pun); kalau gagal, tandai VOID.
+async function rollbackOrphanBasket(basket, cause) {
+  const alasan = 'Auto-rollback: simpan Produksi Karkas gagal (carcass_baskets tidak tercipta) — ' + ((cause && cause.message) || cause || '');
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const { error: dErr } = await db.from('baskets').delete().eq('id', basket.id);
+      if (!dErr) return true;
+    } catch (_) {}
+    try {
+      const { error: vErr } = await db.from('baskets').update({
+        status: 'VOID', voided_by: currentUser.id, voided_at: new Date().toISOString(),
+        voided_alasan: alasan, updated_at: new Date().toISOString()
+      }).eq('id', basket.id);
+      if (!vErr) return true;
+    } catch (_) {}
+    await new Promise(r => setTimeout(r, 800));
+  }
+  console.error('Rollback keranjang gagal', basket.basket_code);
+  return false;
+}
+
 async function submitKeranjang() {
   const productId = document.getElementById('mk-product').value;
   const qty = parseFloat(document.getElementById('mk-qty').value);
@@ -1761,7 +1783,24 @@ async function submitKeranjang() {
       override_alasan: isOverride ? overrideAlasan : null,
       created_by: currentUser.id
     });
-    if (cbErr) throw cbErr;
+    if (cbErr) {
+      // Simpan tahap 2 gagal -> jangan biarkan baris `baskets` jadi keranjang hantu
+      // (kasus BK-261029-0085 / 0095). Cek dulu: bisa jadi insert sebenarnya
+      // berhasil tapi respons hilang (timeout) -> kalau barisnya ada, anggap sukses.
+      let cbExists = false;
+      try {
+        const { data: cbCheck } = await db.from('carcass_baskets')
+          .select('id').eq('basket_id', basket.id).limit(1);
+        cbExists = !!(cbCheck && cbCheck.length);
+      } catch (_) { /* abaikan, lanjut rollback */ }
+      if (!cbExists) {
+        const rolledBack = await rollbackOrphanBasket(basket, cbErr);
+        const msg = rolledBack
+          ? `${cbErr.message || cbErr} — keranjang ${basketCode} dibatalkan otomatis, silakan simpan ulang.`
+          : `${cbErr.message || cbErr} — PERHATIAN: keranjang ${basketCode} gagal dibatalkan otomatis. JANGAN dipakai, laporkan ke Supervisor untuk di-VOID, lalu simpan ulang.`;
+        throw new Error(msg);
+      }
+    }
 
     // Update session totals
     await db.from('carcass_sessions').update({
