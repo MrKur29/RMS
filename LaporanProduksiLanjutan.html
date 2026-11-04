@@ -293,8 +293,8 @@ a{text-decoration:none}
             </div>
           </div>
           <div class="tbl-wrap"><table class="tbl">
-            <thead><tr><th>Barang</th><th class="num">Qty</th><th class="num">Kg</th><th>Tujuan</th><th>Keterangan</th></tr></thead>
-            <tbody id="tbody-hasil"><tr><td colspan="5"><div class="empty">—</div></td></tr></tbody>
+            <thead><tr><th>Barang</th><th>No. Keranjang</th><th class="num">Qty</th><th class="num">Kg</th><th>Tujuan</th><th>Keterangan</th></tr></thead>
+            <tbody id="tbody-hasil"><tr><td colspan="6"><div class="empty">—</div></td></tr></tbody>
           </table></div>
         </div>
 
@@ -689,6 +689,7 @@ async function fetchPengambilan(fromBound,toBound){
         qty, kg,
         tujuan: r.ke_lokasi,
         keterangan: `↪️ Diteruskan tanpa diproses (asal: ${sourceLabel(origCat)})` + (r.catatan ? ' — '+r.catatan : ''),
+        basketCode: r.baskets?.basket_code || '—',
         isPassthrough: true
       });
     }
@@ -896,7 +897,7 @@ async function fetchHasil(fromBound,toBound,tanggal){
     const { data: bpData, error: bpError } = await db.from('byproduct_collection_sessions')
       .select(`
         id, session_code, total_qty, total_kg, basket_id,
-        baskets ( status ),
+        baskets ( basket_code, status ),
         product_master ( nama_produk, product_code )
       `)
       .eq('tipe', currentTipe)
@@ -924,6 +925,7 @@ async function fetchHasil(fromBound,toBound,tanggal){
     barang: r.product_master?.nama_produk || '—',
     qty: Number(r.qty_output)||0,
     kg: Number(r.kg_output)||0,
+    basketCode: r.baskets?.basket_code || '—',
     ...resolveTujuan(r.basket_id),
     // order_id NULL sejak migration 79 = "Tanpa WO" (mis. produksi lebih dari
     // target WO yang ada) — keterangan pakai alasan yang wajib diisi saat itu.
@@ -934,6 +936,7 @@ async function fetchHasil(fromBound,toBound,tanggal){
     barang: r.product_master?.nama_produk || '—',
     qty: Number(r.total_qty)||0,
     kg: Number(r.total_kg)||0,
+    basketCode: r.baskets?.basket_code || '—',
     ...resolveTujuan(r.basket_id),
     keterangan: `📦 By-product — Sesi ${r.session_code}`
   }));
@@ -996,7 +999,7 @@ function renderPengambilan(rows){
 function renderHasil(rows){
   const tb = document.getElementById('tbody-hasil');
   document.getElementById('pill-hasil').textContent = rows.length + ' baris';
-  if(!rows.length){ tb.innerHTML='<tr><td colspan="5"><div class="empty">Belum ada hasil produk pada tanggal ini.</div></td></tr>'; return; }
+  if(!rows.length){ tb.innerHTML='<tr><td colspan="6"><div class="empty">Belum ada hasil produk pada tanggal ini.</div></td></tr>'; return; }
   let totQty=0, totKg=0;
   tb.innerHTML = rows.map(r=>{
     totQty+=r.qty; totKg+=r.kg;
@@ -1009,12 +1012,13 @@ function renderHasil(rows){
     const ptBadge = r.isPassthrough ? ' <span class="status-badge st-transit" style="margin-left:6px">↪️ Passthrough</span>' : '';
     return '<tr>'+
       '<td>'+esc(r.barang)+ptBadge+'</td>'+
+      '<td style="font-family:monospace;white-space:nowrap">'+esc(r.basketCode||'—')+'</td>'+
       '<td class="num"'+ptStyle+'>'+fmt(r.qty)+'</td>'+
       '<td class="num"'+ptStyle+'>'+fmtKgNum(r.kg)+'</td>'+
       '<td>'+(r.tujuan===DIPROSES_LAGI_KEY?'<span style="color:#1d4ed8;font-weight:600">🔁 '+esc(tujuanLabel(r))+'</span>':(r.tujuan?esc(sourceLabel(r.tujuan)):'<span style="color:#9ca3af;font-style:italic">Belum Pindah</span>'))+'</td>'+
       '<td>'+(r.keterangan?esc(r.keterangan):'<span style="color:#9ca3af;font-style:italic">—</span>')+'</td>'+
     '</tr>';
-  }).join('') + '<tr class="tot-row"><td>TOTAL</td><td class="num">'+fmt(totQty)+'</td><td class="num">'+fmtKgNum(totKg)+'</td><td colspan="2"></td></tr>';
+  }).join('') + '<tr class="tot-row"><td>TOTAL</td><td></td><td class="num">'+fmt(totQty)+'</td><td class="num">'+fmtKgNum(totKg)+'</td><td colspan="2"></td></tr>';
 }
 
 function pivotBy(rows, catKey, ekKey, kgKey, barangKey){
@@ -1170,8 +1174,8 @@ function exportPengambilanExcel(){
 function exportHasilExcel(){
   if(!lastData){ showToast('Tampilkan laporan dulu.'); return; }
   const label = MODULES[lastData.tipe].label;
-  const rows = lastData.hasil.map(r=>[r.barang, r.qty, r.kg, tujuanLabel(r), r.keterangan]);
-  exportXLSX(['Barang','Qty','Kg','Tujuan','Keterangan'], rows, 'Hasil Produk', `${label}_HasilProduk_${lastData.tanggal}.xlsx`);
+  const rows = lastData.hasil.map(r=>[r.barang, r.basketCode||'', r.qty, r.kg, tujuanLabel(r), r.keterangan]);
+  exportXLSX(['Barang','No. Keranjang','Qty','Kg','Tujuan','Keterangan'], rows, 'Hasil Produk', `${label}_HasilProduk_${lastData.tanggal}.xlsx`);
 }
 
 function exportRejectExcel(){
