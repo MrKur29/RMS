@@ -412,7 +412,7 @@ function navTo(url){closeSidebar();if(currentUser){localStorage.setItem('rpa_use
 const LOKASI_LABEL = {
   LANTAI:'Lantai', CHILLER:'Chiller', PARTING:'Parting', BONELESS:'Boneless',
   MARINASI:'Marinasi', BLASTING:'Blasting', LOADING:'Loading', SOLD:'Terjual (Sold)',
-  BYPRODUCT_DIRECT:'By-product Langsung', MUSNAH:'Musnah', SELISIH:'Selisih'
+  BYPRODUCT_DIRECT:'By-product Langsung', MUSNAH:'Musnah', SELISIH:'Selisih', CS:'CS (Cold Storage)'
 };
 function lokasiLabel(k){return LOKASI_LABEL[k]||k||'—'}
 function statusBadgeCls(s){return s==='AKTIF'?'b-aktif':s==='HABIS'?'b-habis':'b-void'}

@@ -410,7 +410,7 @@ function showToast(msg,type='success'){const t=document.getElementById('toast');
 function navTo(url){closeSidebar();if(currentUser){localStorage.setItem('rpa_user',JSON.stringify(currentUser));sessionStorage.setItem('rpa_user',JSON.stringify(currentUser))}window.location.href=url}
 function openModal(id){document.getElementById(id).classList.add('open')}
 function closeModal(id){document.getElementById(id).classList.remove('open')}
-function lokasiLabel(l){const m={LANTAI:'Lantai Produksi',CHILLER:'Chiller',PARTING:'Parting',BONELESS:'Boneless',MARINASI:'Marinasi',BLASTING:'Blasting',SOLD:'Terjual',BYPRODUCT_DIRECT:'By-product',MUSNAH:'Musnah'};return m[l]||l||'—'}
+function lokasiLabel(l){const m={LANTAI:'Lantai Produksi',CHILLER:'Chiller',PARTING:'Parting',BONELESS:'Boneless',MARINASI:'Marinasi',BLASTING:'Blasting',SOLD:'Terjual',BYPRODUCT_DIRECT:'By-product',MUSNAH:'Musnah',CS:'CS (Cold Storage)'};return m[l]||l||'—'}
 function tipeLabel(t){const m={PARTING:{label:'Parting',icon:'✂️',cls:'b-parting'},BONELESS:{label:'Boneless',icon:'🥩',cls:'b-boneless'},MARINASI:{label:'Marinasi',icon:'🌶️',cls:'b-marinasi'}};return m[t]||{label:t||'—',icon:'⚙️',cls:'b-lokasi'}}
 
 // ── SIDEBAR ──

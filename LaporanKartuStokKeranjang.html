@@ -418,7 +418,7 @@ function todayFilename(prefix){return `${prefix}_${new Date().toISOString().slic
 const LOKASI_LABEL = {
   LANTAI:'Lantai', CHILLER:'Chiller', PARTING:'Parting', BONELESS:'Boneless',
   MARINASI:'Marinasi', BLASTING:'Blasting', LOADING:'Loading', SOLD:'Terjual (Sold)',
-  BYPRODUCT_DIRECT:'By-product Langsung', MUSNAH:'Musnah', SELISIH:'Selisih'
+  BYPRODUCT_DIRECT:'By-product Langsung', MUSNAH:'Musnah', SELISIH:'Selisih', CS:'CS (Cold Storage)'
 };
 function lokasiLabel(k){return LOKASI_LABEL[k]||k||'—'}
 
@@ -429,7 +429,7 @@ function lokasiLabel(k){return LOKASI_LABEL[k]||k||'—'}
 const ASAL_TUJUAN_LABEL = {
   LANTAI:'Lantai', CHILLER:'Chiller', PARTING:'Parting', BONELESS:'Boneless',
   MARINASI:'Marinasi', BLASTING:'Blasting', LOADING:'Jual', SOLD:'Jual',
-  BYPRODUCT_DIRECT:'By-product Langsung', MUSNAH:'Musnah', SELISIH:'Selisih'
+  BYPRODUCT_DIRECT:'By-product Langsung', MUSNAH:'Musnah', SELISIH:'Selisih', CS:'CS (Cold Storage)'
 };
 function asalTujuanLabel(k){return ASAL_TUJUAN_LABEL[k]||k||'—'}
 function tipeLabel(t){const m={PARTING:{label:'Parting',cls:'b-parting'},BONELESS:{label:'Boneless',cls:'b-boneless'},MARINASI:{label:'Marinasi',cls:'b-marinasi'}};return m[t]||{label:t||'—',cls:'b-lokasi'}}
@@ -754,6 +754,13 @@ async function tampilkanLedger(basket){
       events.push({date:new Date(m.rejected_at||m.created_at),tipe:'Ditolak',tipeCls:'tp-rejected',
         ket:`Rencana kirim sebagian ke ${esc(asalTujuanLabel(m.ke_lokasi))} ditolak${m.reject_alasan?': '+esc(m.reject_alasan):''}`,
         masuk_qty:0,masuk_kg:0,keluar_qty:0,keluar_kg:0,isInfo:true});
+    }else if(!m.is_partial&&m.status==='CONFIRMED'&&m.ke_lokasi==='CS'){
+      // [2026-11-05, migration 117] Masuk CS = keluar dari stok RMS (stok CS dicatat
+      // di WMS). Keranjang langsung HABIS/qty_sisa 0 saat CS konfirmasi, jadi di
+      // ledger ini dihitung sbg keluar nyata (bukan "Pindah Lokasi" informasi).
+      events.push({date:new Date(m.confirmed_at||m.created_at),tipe:'Keluar ke CS',tipeCls:'tp-keluar',
+        ket:`${esc(asalTujuanLabel(m.dari_lokasi))} → CS (Cold Storage) — diterima CS, stok selanjutnya dicatat di WMS`,
+        masuk_qty:0,masuk_kg:0,keluar_qty:Number(m.qty_pindah)||0,keluar_kg:Number(m.kg_pindah)||0,isInfo:false});
     }else if(!m.is_partial&&m.status==='CONFIRMED'){
       events.push({date:new Date(m.confirmed_at||m.created_at),tipe:'Pindah Lokasi',tipeCls:'tp-pindah',
         ket:`${esc(asalTujuanLabel(m.dari_lokasi))} → ${esc(asalTujuanLabel(m.ke_lokasi))} — keranjang yang sama berpindah (bukan split), qty tercatat saat pindah: ${fmt(m.qty_pindah)} ${esc(satuan)}`,
@@ -768,6 +775,15 @@ async function tampilkanLedger(basket){
         masuk_qty:0,masuk_kg:0,keluar_qty:0,keluar_kg:0,isInfo:true});
     }
   });
+
+  // 3b) [2026-11-05, migration 117] Keranjang hasil kirim SEBAGIAN ke CS lahir
+  //     langsung di lokasi CS (split child) dan langsung HABIS — tidak punya
+  //     movement CS sendiri, jadi keluarnya dicatat di sini supaya saldo ledger = 0.
+  if(basket.lokasi==='CS'&&!(movRows||[]).some(m=>m.status==='CONFIRMED'&&m.ke_lokasi==='CS')){
+    events.push({date:new Date(new Date(basket.created_at).getTime()+1),tipe:'Keluar ke CS',tipeCls:'tp-keluar',
+      ket:'Diterima CS (Cold Storage) — stok selanjutnya dicatat di WMS',
+      masuk_qty:0,masuk_kg:0,keluar_qty:Number(basket.qty_awal)||0,keluar_kg:Number(basket.kg_awal)||0,isInfo:false});
+  }
 
   // 4) Terjual (picking_slip_items) — informasi. CATATAN (2026-08-03, migrasi 66):
   //    baris LAMA (dibuat sebelum migrasi 66) memang tidak pernah mengurangi
@@ -821,10 +837,22 @@ async function tampilkanLedger(basket){
     const delta=(isNaN(baru)?0:baru)-(isNaN(lama)?0:lama);
     if(!delta)return;
     const isKg=c.field_salah.startsWith('kg');
+    // [FIX 2026-08-30] qty_awal/kg_awal TIDAK boleh dihitung sebagai delta
+    // masuk/keluar lagi di sini -- baris "Stok Awal" (bagian ORIGIN di atas)
+    // sudah membaca basket.qty_awal/kg_awal LANGSUNG dari basket saat ini
+    // (bukan snapshot beku), jadi begitu sebuah koreksi qty_awal/kg_awal
+    // disetujui, baris Stok Awal SUDAH otomatis menampilkan angka barunya.
+    // Menambahkan delta lagi di sini dobel-hitung koreksi itu (ditemukan dari
+    // BL-260815-0045: qty_awal dikoreksi 15->17, Stok Awal langsung baca 17,
+    // tapi baris Koreksi ini menambah +2 lagi -> Total Masuk jadi 19, padahal
+    // fisiknya cuma pernah ada 17). qty_sisa/kg_sisa beda -- itu saldo
+    // berjalan, bukan tercermin di baris lain manapun, jadi TETAP dihitung
+    // sebagai delta masuk/keluar nyata seperti sebelumnya.
+    const isAwal=c.field_salah==='qty_awal'||c.field_salah==='kg_awal';
     events.push({date:new Date(c.reviewed_at),tipe:'Koreksi',tipeCls:'tp-koreksi',
-      ket:`Koreksi ${esc(c.field_salah)}: ${c.nilai_lama??'—'} → ${c.nilai_baru??'—'}`,
-      masuk_qty:(!isKg&&delta>0)?delta:0,masuk_kg:(isKg&&delta>0)?delta:0,
-      keluar_qty:(!isKg&&delta<0)?-delta:0,keluar_kg:(isKg&&delta<0)?-delta:0,isInfo:false});
+      ket:`Koreksi ${esc(c.field_salah)}: ${c.nilai_lama??'—'} → ${c.nilai_baru??'—'}${isAwal?' (sudah tercermin di baris Stok Awal di atas, tidak dihitung ulang di sini)':''}`,
+      masuk_qty:(!isAwal&&!isKg&&delta>0)?delta:0,masuk_kg:(!isAwal&&isKg&&delta>0)?delta:0,
+      keluar_qty:(!isAwal&&!isKg&&delta<0)?-delta:0,keluar_kg:(!isAwal&&isKg&&delta<0)?-delta:0,isInfo:isAwal});
   });
 
   // 7) Void — informasi
